@@ -1,5 +1,7 @@
 # dsh-loom
 
+> **[English](README.md) · [中文](README.zh.md)**
+
 Minimalist long-term memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), distilled from the
 [pi-loom](https://github.com/skepsun/pi-loom) and [pi-esr](https://github.com/skepsun/pi-esr) ideas —
 with one goal: **save tokens**.
@@ -31,7 +33,7 @@ three gaps that matter for token discipline:
 
 1. **No model in the write path** — capture is deterministic pattern matching.
 2. **No raw text in the prompt** — a bounded symbolic index is injected, retrieval
-   stays on demand (`检索到 ≠ 注入`).
+   stays on demand ("retrieved ≠ injected").
 3. **Honest task closure** — STABLE cannot be declared without evidence.
 
 DSH already provides cross-session FTS (`ctx.sessionQuery`), storage
@@ -60,7 +62,7 @@ Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 
 After restart, inside the **native** DSH settings surface:
 
-- **Settings → Loom 记忆** — overview stat cards (counts by workspace/kind,
+- **Settings → Loom Memory** — overview stat cards (counts by workspace/kind,
   auto-capture totals, per-workspace `[LOOM]` index token estimate), a searchable /
   filterable memory table with archive + delete actions, the ESR task board with
   evidence gaps, and the relation list.
