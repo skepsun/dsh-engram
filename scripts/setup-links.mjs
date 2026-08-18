@@ -45,15 +45,23 @@ function findHarness() {
     if (!existsSync(p)) throw new Error(`DSH_HARNESS_DIR 不存在: ${p}`);
     return p;
   }
-  const sibling = resolve(REPO_ROOT, "..", "deepseek-harness");
-  if (looksLikeHarness(sibling)) return sibling;
+  // common layouts:
+  //   harness/  + repo at harness/../deepseek-harness          (sibling of repo)
+  //   E:\deepseek-harness + E:\kototoro_demo\dsh-loom          (sibling of repo's parent)
+  for (const candidate of [
+    resolve(REPO_ROOT, "..", "deepseek-harness"),       // 与仓库平级
+    resolve(REPO_ROOT, "..", "..", "deepseek-harness"), // 与仓库父级平级
+  ]) {
+    if (looksLikeHarness(candidate)) return candidate;
+  }
   let dir = dirname(REPO_ROOT);
   for (let i = 0; i < 5; i++) {
     if (looksLikeHarness(dir)) return dir;
     dir = dirname(dir);
   }
   throw new Error(
-    "找不到 deepseek-harness checkout：请设置 DSH_HARNESS_DIR，或把 dsh-loom 放到 harness 兄弟目录（../deepseek-harness）。",
+    "找不到 deepseek-harness checkout：请设置 DSH_HARNESS_DIR，或把 dsh-loom 放到 " +
+      "harness 兄弟目录（../deepseek-harness / ../../deepseek-harness）。",
   );
 }
 
