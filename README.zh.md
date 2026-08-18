@@ -52,6 +52,23 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 
 > 需要新建会话才能看到注入的 `[LOOM]`/`[ESR]` 块和六个工具——提示词与工具注册表都是按会话装配的。
 
+### `link:` 安装的依赖准备
+
+符号链接安装的插件从**自身 checkout 的 `node_modules`** 解析 import，而这层依赖
+不被 git 跟踪，换机器（尤其 Windows）会报
+`ERR_MODULE_NOT_FOUND: Cannot find package 'zod'`（接着是 `@deepseek-ai/*` peers）。
+一条命令重建依赖层：
+
+```sh
+cd /path/to/dsh-loom
+node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_modules，
+                                 # 并安装 zod（优先复用 harness pnpm store，
+                                 # 找不到则回退 `npm install`）
+```
+
+脚本默认在 `../deepseek-harness` 找 harness（或用 `DSH_HARNESS_DIR` 指定）。
+`node scripts/setup-links.mjs --check` 只打印状态不写入。
+
 ## 在 Web 端能得到什么
 
 重启后，全部落在 **DSH 原生**设置界面里：

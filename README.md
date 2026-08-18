@@ -64,6 +64,26 @@ Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 > A fresh session is required to see the injected `[LOOM]`/`[ESR]` blocks and the
 > six tools; both prompts and the tools registry are assembled per session.
 
+### Dependencies for `link:` installs
+
+A *symlinked* plugin resolves its imports from its own `node_modules`, so the
+host-side dependencies must be present **next to the checkout** — they are not
+tracked by git:
+
+```sh
+cd /path/to/dsh-loom
+node scripts/setup-links.mjs     # one command: links the @deepseek-ai
+                                 # workspace packages into node_modules AND
+                                 # installs zod (reused from the harness
+                                 # pnpm store, or via `npm install`)
+```
+
+The script locates the harness checkout at `../deepseek-harness` (or set
+`DSH_HARNESS_DIR`). Without this step, `dsh web` boot fails with
+`ERR_MODULE_NOT_FOUND: Cannot find package 'zod'` (and would fail on the
+`@deepseek-ai/*` peers next). `node scripts/setup-links.mjs --check` prints the
+state without writing anything.
+
 ## What you get in the GUI
 
 After restart, inside the **native** DSH settings surface:
