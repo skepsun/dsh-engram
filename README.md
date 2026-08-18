@@ -7,8 +7,10 @@ Minimalist long-term memory for [DeepSeek Harness](https://github.com/deepseek-a
 with one goal: **save tokens**.
 
 - **Zero-LLM intake** — auto-captures meaningful events from tool results by pure
-  pattern matching (git operations, edits to key files, repeated errors), plus an
-  explicit `loom_store`. Nothing on the hot path calls a model.
+  pattern matching (git milestones with a written `-m` commit message, edits to
+  key files, repeated errors), plus an explicit `loom_store`. Nothing on the hot
+  path calls a model, and pure plumbing — `git push` / `git stash` / silent
+  commits — is deliberately never recorded (see *Auto-capture policy* below).
 - **Symbolic index + progressive disclosure** — a compact `[LOOM]` block (default
   budget 700 chars ≈ 175 tokens; one line per memory) is injected at prompt
   assembly and **frozen per session**, keeping the request prefix byte-stable for
@@ -62,7 +64,7 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 
 > A fresh session is required to see the injected `[LOOM]`/`[ESR]` blocks and the
-> six tools; both prompts and the tools registry are assembled per session.
+> tools; both prompts and the tools registry are assembled per session.
 
 ### Dependencies for `link:` installs
 
@@ -78,11 +80,12 @@ node scripts/setup-links.mjs     # one command: links the @deepseek-ai
                                  # pnpm store, or via `npm install`)
 ```
 
-The script locates the harness checkout at `../deepseek-harness` (or set
-`DSH_HARNESS_DIR`). Without this step, `dsh web` boot fails with
-`ERR_MODULE_NOT_FOUND: Cannot find package 'zod'` (and would fail on the
-`@deepseek-ai/*` peers next). `node scripts/setup-links.mjs --check` prints the
-state without writing anything.
+The script auto-locates the harness checkout at `../deepseek-harness` (also
+works when it sits next to the repo's *parent*, e.g. `E:\deepseek-harness` +
+`E:\kototoro_demo\dsh-loom`); override with `DSH_HARNESS_DIR`. Without this
+step, `dsh web` boot fails with `ERR_MODULE_NOT_FOUND: Cannot find package
+'zod'` (and would fail on the `@deepseek-ai/*` peers next). `node
+scripts/setup-links.mjs --check` prints the state without writing anything.
 
 ## What you get in the GUI
 
@@ -135,6 +138,32 @@ GC never touches the working set: memories referenced by an active task
 is hard-deleted — the report ends with re-fetch pointers for everything it
 archived, so archives are recoverable, not lost.
 
+## Auto-capture policy
+
+Capture is deterministic and offline — it only sees tool *results*, never the
+conversation. Exactly what earns a memory record:
+
+| Tool result | Action | Signal |
+|---|---|---|
+| `git commit … -m "subject"` | record — the written subject is the memory | 0.55 |
+| `git merge` / `rebase` / `cherry-pick` / `tag` / `checkout -b` | record (milestone) | 0.5 |
+| `git push` / `git stash` / commit without `-m` | **skip** — plumbing echo, not a decision | — |
+| write/edit of a significant config & doc path | record | 0.3 |
+| read of a config path | record | 0.3 |
+| repeated tool error | record (deduped by message) | 0.25 |
+
+Explicit `loom_store` writes are always recorded regardless of these rules
+(rate-limited per session).
+
+**Who earns a `[LOOM]` index line** (this is what actually touches the prompt):
+`signal >= minIndexSignal` **or** `hits >= promoteHits` **or** `kind === "task"`,
+then capped by `indexMaxLines` / `indexMaxChars`. One extra guard keeps the pipe
+clean: auto-captured git command echoes — text that embeds a shell chain
+(`git push: cd … && …`) — stay out of the index even when above the signal
+threshold, until recall hits have promoted them. Everything else sits quietly in
+storage, reachable on demand via `loom_recall` / `loom_detail` — "retrieved ≠
+injected".
+
 ## Injected blocks
 
 What the model actually sees (rendered once per session, then frozen):
@@ -151,8 +180,10 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 ```
 
 Prefixes: `[D]` decision · `[E]` error · `[P]` procedure · `[F]` fact ·
-`[I]` insight · `[H]` handoff · `[T]` task. `#` ids address the full records
-via `loom_detail`.
+`[I]` insight · `[H]` handoff · `[T]` task. Membership follows the
+*Auto-capture policy* (signal threshold / recall promotion / git-echo guard),
+bounded by the configured line and character budgets. `#` ids address the full
+records via `loom_detail`.
 
 ## Config
 
@@ -168,6 +199,8 @@ Defaults are token-conscious; override any key via the profile patch
     indexMaxLines: 12        # [LOOM] line cap
     indexMaxChars: 700       # [LOOM] char cap (token budget)
     minIndexSignal: 0.4      # auto-captures below this stay out of the index
+                             # (git command echoes are excluded regardless,
+                             # until promoted by recall hits)
     promoteHits: 3           # ...until recalled this many times
     expireDays: 180          # memory TTL (0 = never)
     maxMemoriesPerWorkspace: 2000

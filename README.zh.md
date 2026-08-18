@@ -6,8 +6,9 @@
 [pi-loom](https://github.com/skepsun/pi-loom) 与 [pi-esr](https://github.com/skepsun/pi-esr) 的思想——
 目标只有一个：**省 token**。
 
-- **零 LLM 摄入** — 纯模式匹配从工具结果自动捕获有意义的事件（git 操作、关键文件编辑、反复出现的错误），
-  另有显式 `loom_store`。热路径上没有任何模型调用。
+- **零 LLM 摄入** — 纯模式匹配从工具结果自动捕获有意义的事件（带书面 `-m` 提交信息的 git 里程碑、
+  关键文件编辑、反复出现的错误），另有显式 `loom_store`。热路径上没有任何模型调用，纯粹的操作
+  ——`git push` / `git stash` / 无提交信息的 commit——刻意**从不记录**（见下方「自动捕获策略」）。
 - **符号索引 + 渐进披露** — 一个紧凑的 `[LOOM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
   组装提示词时注入，并**按会话冻结**，让请求前缀字节稳定以复用 KV 缓存。模型需要细节时用
   `loom_recall` / `loom_detail` 下钻，而不是把命中的原文灌进上下文。
@@ -50,7 +51,7 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 
 然后**重启 `dsh web`**。数据保存在 `~/.dsh/storages/dsh_loom.json`。
 
-> 需要新建会话才能看到注入的 `[LOOM]`/`[ESR]` 块和六个工具——提示词与工具注册表都是按会话装配的。
+> 需要新建会话才能看到注入的 `[LOOM]`/`[ESR]` 块和全部工具——提示词与工具注册表都是按会话装配的。
 
 ### `link:` 安装的依赖准备
 
@@ -66,7 +67,8 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
                                  # 找不到则回退 `npm install`）
 ```
 
-脚本默认在 `../deepseek-harness` 找 harness（或用 `DSH_HARNESS_DIR` 指定）。
+脚本会自动定位 harness：`../deepseek-harness`（仓库上一级平级），也支持「仓库父级平级」布局
+（如 `E:\deepseek-harness` 与 `E:\kototoro_demo\dsh-loom`）——都找不到再用 `DSH_HARNESS_DIR` 指定。
 `node scripts/setup-links.mjs --check` 只打印状态不写入。
 
 ## 在 Web 端能得到什么
@@ -113,6 +115,28 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 归档项附上重取指针，归档可恢复、不是丢失。
 
 
+## 自动捕获策略
+
+捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
+
+| 工具结果 | 行为 | 信号 |
+|---|---|---|
+| `git commit … -m "提交信息"` | 记录——书面提交信息就是这条记忆 | 0.55 |
+| `git merge` / `rebase` / `cherry-pick` / `tag` / `checkout -b` | 记录（里程碑） | 0.5 |
+| `git push` / `git stash` / 无 `-m` 的 commit | **跳过**——操作回显，不是决策 | — |
+| 写入/编辑关键配置与文档路径 | 记录 | 0.3 |
+| 读取配置路径 | 记录 | 0.3 |
+| 反复出现的工具错误 | 记录（按消息去重） | 0.25 |
+
+显式 `loom_store` 的记录不受上述规则约束（按会话限流）。
+
+**谁能拿到 `[LOOM]` 索引行**（这才是真正进提示词的部分）：
+`signal >= minIndexSignal` **或** `hits >= promoteHits` **或** `kind === "task"`，
+再由 `indexMaxLines` / `indexMaxChars` 封顶。另有一道额外的闸保持管道干净：
+自动捕获的 git 命令回显——文本里嵌着 shell 命令链（`git push: cd … && …`）——
+即使信号超阈值也不进索引，直到被召回命中晋升为止。其余条目安静地躺在存储里，
+按需用 `loom_recall` / `loom_detail` 取用——「检索到 ≠ 注入」。
+
 ## 注入块
 
 模型实际看到的内容（每个会话渲染一次，然后冻结）：
@@ -129,6 +153,7 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 ```
 
 前缀：`[D]` 决定 · `[E]` 错误 · `[P]` 流程 · `[F]` 事实 · `[I]` 洞察 · `[H]` 交接 · `[T]` 任务。
+入选规则遵循「自动捕获策略」（信号阈值 / 命中晋升 / git 回显守卫），并按配置的行数与字符预算封顶。
 `#` id 通过 `loom_detail` 取完整记录。
 
 ## 配置
@@ -144,6 +169,7 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
     indexMaxLines: 12        # [LOOM] 行数上限
     indexMaxChars: 700       # [LOOM] 字符上限（token 预算）
     minIndexSignal: 0.4      # 低于此信号的自动捕获不进索引
+                             # （git 命令回显即便超阈值也不进，直到命中晋升）
     promoteHits: 3           # ……直到被召回这么多次才进索引
     expireDays: 180          # 记忆 TTL（0 = 永不过期）
     maxMemoriesPerWorkspace: 2000
