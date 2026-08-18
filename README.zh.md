@@ -14,6 +14,9 @@
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
   摊在明面上，而不是让 agent 没有证据就宣布完成。
+- **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
+  stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
+  永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。
 - **Web 查看器** — 一个带统计的记忆浏览器和配置卡片，完全构建在 DSH 原生设置槽位上（不碰任何第三方 UI 包）。
 
 ```
@@ -54,9 +57,10 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 重启后，全部落在 **DSH 原生**设置界面里：
 
 - **设置 → Loom 记忆** — 概览统计卡片（各工作区/类型的计数、自动捕获总量、各工作区 `[LOOM]` 索引
-  token 估算）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（含证据缺口）、以及关系列表。
-- **设置 → Plugins → dsh-loom** — 绑定 `dsh-loom` 设置命名空间的配置卡片；改动对新建会话即时生效
-  （已冻结的块保持稳定）。
+  token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（含证据缺口）、
+  关系列表，以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
+- **设置 → Plugins → dsh-loom** — 绑定 `dsh-loom` 设置命名空间的配置卡片（含 GC 开关与
+  stable 任务保留天数）；改动对新建会话即时生效（已冻结的块保持稳定）。
 
 浏览器半边由 DSH 的 client-module loader 直接从本包提供（`dsh.client` + `exports["./client"]`，无需重建
 web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由族。修改 `client/src` 后重建 bundle：
@@ -75,6 +79,22 @@ npm run build:client
 | `esr_task` | 创建任务实体（draft → active） | 写 |
 | `esr_close` | 按证据协议关闭任务（artifact + evaluation + memory_ref） | 写 |
 | `esr_link` | 在两个实体之间添加类型化关系（迷你图） | 写 |
+| `esr_gc` | 运行本工作区的记忆 GC（`dry_run:true` 预览不落库） | 写 |
+
+## 记忆 GC
+
+定时回收（`gcIntervalHours`，默认 24h）+ `esr_gc` 手动触发 + GUI 按钮，按 pi-esr 方式把存储保持在
+有界内——**机械、工作集保护、只归档**：
+
+- TTL 过期记忆归档（软删；id 保留，可通过 GUI 的 archived 筛选检索）；
+- 超容量工作区淘汰最低价值的*非保护*记忆；
+- stable 任务超 `gcStableRetentionDays` 归档、离开 `[ESR]`；
+- 两端点都已消失的链接被清理（悬空边）。
+
+GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task 类记忆、已入索引的命中
+（`hits >= promoteHits`）。用 `esr_gc` + `dry_run: true` 先预览。**不硬删**——报告的末尾为所有
+归档项附上重取指针，归档可恢复、不是丢失。
+
 
 ## 注入块
 
@@ -110,6 +130,9 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
     promoteHits: 3           # ……直到被召回这么多次才进索引
     expireDays: 180          # 记忆 TTL（0 = 永不过期）
     maxMemoriesPerWorkspace: 2000
+    gcEnabled: true          # 定时记忆 GC
+    gcIntervalHours: 24      # 回收节奏
+    gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
     loomIndexOrder: 40       # systemPrompt section 顺序（位于 tools 段之前）
     esrOrder: 41
 ```
@@ -117,7 +140,7 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 ## 开发
 
 ```sh
-npm test            # 15 个测试：核心 + Web API（node:test）
+npm test            # 21 个测试：核心 + Web API + GC（node:test）
 npm run build:client
 ```
 

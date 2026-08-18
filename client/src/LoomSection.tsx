@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LoomApi, LoomConfig, LoomOverview, MemoryRecord, TaskRecord, LinkRecord } from "./api";
+import type { LoomApi, LoomConfig, LoomOverview, MemoryRecord, TaskRecord, LinkRecord, GcReport } from "./api";
 
 export interface LoomSectionFace {
   api: LoomApi;
@@ -142,6 +142,9 @@ export function LoomSection({ api, t }: LoomSectionFace) {
   const [kind, setKind] = useState<string>("");
   const [q, setQ] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [gcDryRun, setGcDryRun] = useState(true);
+  const [gcReport, setGcReport] = useState<GcReport | null>(null);
+  const [gcRunning, setGcRunning] = useState(false);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -187,7 +190,22 @@ export function LoomSection({ api, t }: LoomSectionFace) {
     }
   };
 
+  const runGc = async () => {
+    setGcRunning(true);
+    setError(null);
+    try {
+      const { report } = await api.gc(workspace || undefined, gcDryRun);
+      setGcReport(report);
+      if (!gcDryRun) await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGcRunning(false);
+    }
+  };
+
   const indexCost = workspace && overview ? overview.indexes[workspace] : null;
+  const gc = overview?.gc ?? null;
 
   return (
     <div style={s.root}>
@@ -209,8 +227,50 @@ export function LoomSection({ api, t }: LoomSectionFace) {
             num={indexCost ? `~${indexCost.tokens}` : "–"}
             label="[LOOM] 索引 token / 工作区"
           />
+          {gc && (
+            <StatCard
+              num={String(gc.archivedMemories + gc.archivedTasks)}
+              label={`GC 已归档 · 链接-${gc.removedLinks}`}
+            />
+          )}
         </div>
       )}
+
+      <div style={s.subPanel}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>记忆 GC（pi-esr 约束）</span>
+          <label style={{ fontSize: 12, display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <input type="checkbox" checked={gcDryRun} onChange={(e) => setGcDryRun(e.target.checked)} />
+            仅预览（dry run）
+          </label>
+          <button style={s.btnPrimary} onClick={() => void runGc()} disabled={gcRunning || !workspace}>
+            {gcRunning ? "…" : "运行 GC"}
+          </button>
+          {gc && gc.lastRun > 0 && (
+            <span style={s.mono}>上次 {fmtDate(gc.lastRun)}</span>
+          )}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
+          工作集（active 任务引用 / 任务记忆 / 已入索引命中）永不驱逐；TTL 过期归档、超容量淘汰、stable 任务超窗归档、悬空链接清理。只归档不硬删——条目 id 保持可重取。
+        </div>
+        {gcReport && (
+          <div style={{ marginTop: 8, fontSize: 12.5 }}>
+            <div>
+              {gcReport.dryRun ? "dry-run 预览：" : "已执行："}
+              {" "}归档记忆 <b>{gcReport.archivedMemories.length}</b> · 归档任务 <b>{gcReport.archivedTasks.length}</b> · 清理链接 <b>{gcReport.removedLinks.length}</b> · 保护 <b>{gcReport.protectedMemories}</b>
+            </div>
+            {gcReport.archivedMemories.slice(0, 5).map((e) => (
+              <div key={e.id} style={s.mono}>- {e.id.slice(0, 8)} {e.reason}: {e.text}</div>
+            ))}
+            {gcReport.archivedTasks.slice(0, 3).map((t) => (
+              <div key={t.id} style={s.mono}>- {t.id.slice(0, 6)} {t.reason}: {t.name}</div>
+            ))}
+            {gcReport.removedLinks.slice(0, 3).map((l) => (
+              <div key={l.id} style={s.mono}>- link {l.source.slice(0, 8)} --{l.relation}--&gt; {l.target.slice(0, 8)}</div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={s.row}>
         <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>

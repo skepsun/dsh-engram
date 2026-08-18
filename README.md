@@ -18,6 +18,12 @@ with one goal: **save tokens**.
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of
   letting the agent declare victory without proof.
+- **Memory GC (pi-esr constraints)** — a scheduled, mechanical, archive-only
+  sweep: TTL-expired memories are archived, over-cap workspaces evict the
+  lowest-value entries, stable tasks past their retention window leave the
+  `[ESR]` surface, and dangling link edges are dropped. The working set (active
+  task refs, task memories, indexed hits) is never touched, and nothing is
+  hard-deleted — every archived entry keeps its id and stays re-fetchable.
 - **Web viewer** — a memory browser with benchmark-ish stats and a config card,
   built entirely on DSH's native settings slots (no third-party UI package).
 
@@ -63,9 +69,10 @@ Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 After restart, inside the **native** DSH settings surface:
 
 - **Settings → Loom Memory** — overview stat cards (counts by workspace/kind,
-  auto-capture totals, per-workspace `[LOOM]` index token estimate), a searchable /
-  filterable memory table with archive + delete actions, the ESR task board with
-  evidence gaps, and the relation list.
+  auto-capture totals, per-workspace `[LOOM]` index token estimate, cumulative
+  GC totals), a searchable / filterable memory table with archive + delete
+  actions, the ESR task board with evidence gaps, the relation list, and a
+  memory-GC panel (dry-run toggle + run button + pointer report).
 - **Settings → Plugins → dsh-loom** — a config card bound to the `dsh-loom`
   settings namespace. Changes apply to new sessions (frozen blocks stay stable).
 
@@ -88,6 +95,25 @@ npm run build:client
 | `esr_task` | Create a task entity (draft → active) | write |
 | `esr_close` | Close a task via the evidence protocol (artifact + evaluation + memory_ref) | write |
 | `esr_link` | Add a typed relation between two entities (mini graph) | write |
+| `esr_gc` | Run the memory GC for the workspace (`dry_run:true` previews) | write |
+
+## Memory GC
+
+A scheduled sweep (`gcIntervalHours`, default 24h) plus a manual `esr_gc` /
+GUI button keeps the store bounded the pi-esr way — **mechanical, working-set
+protected, archive-only**:
+
+- TTL-expired memories are archived (soft; the id stays, retrievable via the
+  GUI's archived filter);
+- over-cap workspaces evict the lowest-value *non-protected* memories;
+- stable tasks past `gcStableRetentionDays` become archived and leave `[ESR]`;
+- links whose **both** endpoints are gone are dropped (dangling edges).
+
+GC never touches the working set: memories referenced by an active task
+(`memory_refs`), task-kind memories, and already-indexed hits
+(`hits >= promoteHits`). Run `esr_gc` with `dry_run: true` to preview. Nothing
+is hard-deleted — the report ends with re-fetch pointers for everything it
+archived, so archives are recoverable, not lost.
 
 ## Injected blocks
 
@@ -125,6 +151,9 @@ Defaults are token-conscious; override any key via the profile patch
     promoteHits: 3           # ...until recalled this many times
     expireDays: 180          # memory TTL (0 = never)
     maxMemoriesPerWorkspace: 2000
+    gcEnabled: true          # scheduled memory GC
+    gcIntervalHours: 24      # sweep cadence
+    gcStableRetentionDays: 120  # stable tasks leave [ESR] after this
     loomIndexOrder: 40       # systemPrompt section order (before tools band)
     esrOrder: 41
 ```
@@ -132,7 +161,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 15 tests: core + web API (node:test)
+npm test            # 21 tests: core + web API + GC (node:test)
 npm run build:client
 ```
 

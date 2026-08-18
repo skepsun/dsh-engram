@@ -62,6 +62,36 @@ export interface LoomConfig {
   promoteHits: number;
   expireDays: number;
   maxMemoriesPerWorkspace: number;
+  gcEnabled: boolean;
+  gcStableRetentionDays: number;
+}
+
+export interface GcStats {
+  lastRun: number;
+  archivedMemories: number;
+  archivedTasks: number;
+  removedLinks: number;
+}
+
+export interface GcItem {
+  id: string;
+  workspace: string;
+  reason: string;
+  kind?: string;
+  text?: string;
+  name?: string;
+  source?: string;
+  relation?: string;
+  target?: string;
+}
+
+export interface GcReport {
+  dryRun: boolean;
+  workspaces: string[];
+  protectedMemories: number;
+  archivedMemories: GcItem[];
+  archivedTasks: GcItem[];
+  removedLinks: GcItem[];
 }
 
 export interface IndexCost {
@@ -76,6 +106,7 @@ export interface LoomOverview {
   totals: WorkspaceCounts;
   indexes: Record<string, IndexCost>;
   captures: { total: number; git: number; file: number; error: number };
+  gc: GcStats;
   config: LoomConfig;
 }
 
@@ -152,6 +183,19 @@ export class LoomApi {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, workspace }),
+      }),
+    );
+  }
+
+  gc(workspace: string | undefined, dryRun: boolean): Promise<{ report: GcReport }> {
+    return readJson(
+      fetch(`${API_PREFIX}/gc`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(workspace ? { workspace } : {}),
+          dryRun,
+        }),
       }),
     );
   }

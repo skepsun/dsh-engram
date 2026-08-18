@@ -21,6 +21,8 @@ export interface LoomConfigValue {
   promoteHits?: number;
   expireDays?: number;
   maxMemoriesPerWorkspace?: number;
+  gcEnabled?: boolean;
+  gcStableRetentionDays?: number;
 }
 
 export interface LoomConfigCardFace {
@@ -37,6 +39,8 @@ const FIELDS: Array<{ key: keyof LoomConfigValue; label: string; hint: string; k
   { key: "promoteHits", label: "晋升命中数", hint: "hit 数达此值的低信号条目进索引", kind: "num", min: 0, max: 20 },
   { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
   { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
+  { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
+  { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
 ];
 
 const s = {
