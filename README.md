@@ -30,14 +30,35 @@ Minimalist long-term memory for DeepSeek Harness, distilled from the
 ## Install
 
 ```sh
-# from a checkout
-dsh plugin --profile web add file:/d1/chuxiong/code/dsh-loom
-# or once published
+# from a checkout (development: symlink — live edits applied immediately)
+dsh plugin --profile web add link:/d1/chuxiong/code/dsh-loom
+# from a tarball or once published
 dsh plugin --profile web add dsh-loom
 ```
 
-Restart `dsh web`. The plugin is host-half only (no browser UI). Data persists
-in `~/.dsh/storages/dsh_loom.json`.
+Restart `dsh web`. Data persists in `~/.dsh/storages/dsh_loom.json`.
+
+## Web viewer (native settings surface)
+
+The plugin ships a browser half that plugs into DSH's **own** settings slots
+(no third-party UI package is touched):
+
+- **Settings → Loom 记忆** (`settings.section`) — a full page with overview
+  stat cards (counts by workspace/kind, auto-capture totals, per-workspace
+  `[LOOM]` index token estimate), memory search/filter table with archive and
+  delete actions, the ESR task board with evidence gaps, and the relation list.
+- **Settings → Plugins → dsh-loom** (`settings.plugin.item`) — a config card
+  bound to the `dsh-loom` settings namespace; changes land live for new
+  sessions (frozen `[LOOM]` blocks stay stable by design).
+
+Both are served by the client-module loader straight from this package
+(`dsh.client` + `exports["./client"]`); the host API behind them is the
+loopback-fenced `/api/dsh-loom/*` route family. Rebuild the browser bundle
+after touching `client/src`:
+
+```sh
+npm run build:client
+```
 
 ## Tools
 
