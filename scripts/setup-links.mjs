@@ -20,10 +20,10 @@
  *   DSH_HARNESS_DIR   harness checkout 路径（默认取仓库上一级 ../deepseek-harness）
  */
 
-import { existsSync, mkdirSync, readdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readlinkSync, rmdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const NODE_MODULES = join(REPO_ROOT, "node_modules");
@@ -167,11 +167,24 @@ function ensureLink(item) {
       console.log(`  ! ${label}: ${mount} 已存在但状态异常，运行脚本修复`);
       return;
     }
+    // 允许替换：符号链接直接 unlink；pnpm 预建的空目录用 rmdir 清掉。
     try {
-      unlinkSync(mount); // 仅当是符号链接，可安全删除
+      unlinkSync(mount);
       console.log(`  ~ ${label}: 替换旧链接`);
+      return;
     } catch {
-      console.log(`  ! ${label}: ${mount} 是真实目录且不含 package.json，无法自动替换，请手动清理后重试`);
+      /* not a symlink */
+    }
+    try {
+      if (readdirSync(mount).length === 0) {
+        rmdirSync(mount);
+        console.log(`  ~ ${label}: 移除空目录后重建`);
+      } else {
+        console.log(`  ! ${label}: ${mount} 是含文件的真实目录，无法自动替换，请手动清理后重试`);
+        return;
+      }
+    } catch {
+      console.log(`  ! ${label}: ${mount} 无法自动替换，请手动清理后重试`);
       return;
     }
   }
@@ -189,12 +202,22 @@ try {
   console.log(`repo    : ${REPO_ROOT}`);
   console.log(`harness : ${harness}`);
   for (const item of buildPlan(harness)) ensureLink(item);
-  const out = spawnSync(
+
+  // Self-verify: the whole host module graph must resolve now — this is the
+  // exact condition `dsh web` needs at boot (no more ERR_MODULE_NOT_FOUND).
+  const entry = pathToFileURL(join(REPO_ROOT, "lib", "index.js")).href;
+  const check = spawnSync(
     process.execPath,
-    ["-e", `console.log(require.resolve("zod", { paths: [process.argv[1]] }))`, REPO_ROOT],
+    ["--input-type=module", "-e",
+      `import(${JSON.stringify(entry)}).then(()=>console.log("host imports OK: " + ${JSON.stringify(entry)})).catch((e)=>{console.error("host imports FAIL: "+e.message);process.exit(1)})`],
     { encoding: "utf8" },
   );
-  console.log(`验证 zod : ${out.stdout.trim() || out.stderr.trim()}`);
+  const out = (check.stdout || check.stderr || "").toString().trim();
+  console.log(`自检 : ${out || "（无输出，exit " + check.status + "）"}`);
+  if (check.status !== 0) {
+    console.error("依赖自检未通过，请检查上方输出后重试（或不放心先跑 --check 看看）。");
+    process.exit(1);
+  }
 } catch (error) {
   console.error(`setup-links 失败: ${error.message}`);
   process.exit(1);
