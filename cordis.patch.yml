@@ -1,0 +1,10 @@
+# dsh-loom bundle patch: inserts the host plugin row into the web profile
+# roster. Activate with:
+#   dsh plugin --profile web add file:/d1/chuxiong/code/dsh-loom
+#
+# The row is a bare host-half plugin by package name. It does not need to
+# enable storage-domain / storage-json / session-query-sqlite — the standard
+# web profile (dsh-base x dsh-web-app) already mounts them.
+- insert:
+    - id: loom
+      name: dsh-loom
