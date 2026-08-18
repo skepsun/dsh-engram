@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LoomApi, LoomConfig, LoomOverview, MemoryRecord, TaskRecord, LinkRecord, GcReport } from "./api";
+import { useLoomTheme } from "./theme";
 
 export interface LoomSectionFace {
   api: LoomApi;
@@ -206,9 +207,10 @@ export function LoomSection({ api, t }: LoomSectionFace) {
 
   const indexCost = workspace && overview ? overview.indexes[workspace] : null;
   const gc = overview?.gc ?? null;
+  const { vars } = useLoomTheme();
 
   return (
-    <div style={s.root}>
+    <div style={{ ...s.root, ...vars }}>
       <h1 style={s.h1}>Loom 记忆</h1>
       <p style={s.sub}>
         跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_loom.json
@@ -360,11 +362,11 @@ export function LoomSection({ api, t }: LoomSectionFace) {
               </span>
             </div>
             {!isStable && gaps.length > 0 && (
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
                 缺口：{gaps.join(", ")} — 提供 artifact / evaluation / memory_ref 后 esr_close 转 STABLE
               </div>
             )}
-            {task.description && <div style={{ fontSize: 12, color: "#4b5563", marginTop: 4 }}>{task.description}</div>}
+            {task.description && <div style={{ fontSize: 12, color: "var(--dsh-color-muted-strong, #4b5563)", marginTop: 4 }}>{task.description}</div>}
             {task.memoryRefs.length > 0 && (
               <div style={{ fontSize: 12, marginTop: 4 }}>记忆引用：{task.memoryRefs.map((r) => <span key={r} style={s.tag}>{r.slice(0, 8)}</span>)}</div>
             )}
@@ -379,7 +381,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
           <span className="mono" style={s.mono}>{l.source.slice(0, 10)}</span>
           {" "}--{l.relation}--&gt;{" "}
           <span className="mono" style={s.mono}>{l.target.slice(0, 10)}</span>
-          <span style={{ color: "#9ca3af" }}> · {fmtDate(l.createdAt)}</span>
+          <span style={{ color: "var(--dsh-color-muted-weak, #9ca3af)" }}> · {fmtDate(l.createdAt)}</span>
         </div>
       ))}
     </div>

@@ -35,7 +35,13 @@ const result = await esbuild.build({
   format: "cjs",
   platform: "neutral",
   target: "es2022",
-  external: ["react", "react-dom/client"],
+  // Automatic JSX runtime, matching the harness platform: the loader's module
+  // table (packages/client/web/src/platform.ts) resolves react/jsx-runtime,
+  // so JSX compiles to require("react/jsx-runtime").jsx(...) instead of bare
+  // React.createElement with an undefined `React` (classic mode left `React`
+  // unresolved because no source file imports it as a value).
+  jsx: "automatic",
+  external: ["react", "react-dom/client", "react/jsx-runtime"],
   write: false,
   minify: false,
   sourcemap: false,

@@ -79,10 +79,19 @@ export function apply(ctx: ClientContext): void {
   const scope = ctx.settingsScope.bind<LoomConfigValue>({ namespace: "dsh-loom" });
   const cardInjected = (): LoomConfigCardFace => ({ scope });
   try {
+    // This slot is keyed in dsh-rc.7's successor (key = the namespace a card
+    // edits) but was a LIST slot in the deployed rc.7 web (identity = id).
+    // Register with BOTH so the card mounts under either contract: the list
+    // branch validates options.id, the keyed branch validates options.key,
+    // and each renderer indexes the entry by the field it knows. The host
+    // side still has to serve the `dsh-loom` settings namespace; when it does
+    // not (rc.7's WEB_SETTINGS_NAMESPACES whitelist), the card mounts but
+    // reports its namespace unavailable instead of throwing at boot.
     ctx.slots.inject("settings.plugin.item", () =>
       ctx.slots.register(
         {
           name: "settings.plugin.item",
+          id: "dsh-loom",
           key: "dsh-loom",
           locale: NS,
           inject: cardInjected,

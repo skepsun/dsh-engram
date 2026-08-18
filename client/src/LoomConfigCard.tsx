@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { SettingsScope, SettingsScopeSnapshot } from "@deepseek-ai/dsh-client-ui-settings/types";
+import { useLoomTheme } from "./theme";
 
 export interface LoomConfigValue {
   autoCapture?: boolean;
@@ -107,9 +108,10 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
 
   const value: LoomConfigValue = { ...((snap?.base as LoomConfigValue) ?? {}), ...draft };
   const writable = snap?.writable !== false && snap?.status !== "unavailable";
+  const { vars } = useLoomTheme();
 
   return (
-    <div>
+    <div style={vars}>
       {FIELDS.map((field) => {
         const raw = value[field.key];
         const overridden = snap?.user !== undefined && field.key in (snap.user as object);
@@ -140,7 +142,7 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
                 />
               )}
               <button
-                style={{ ...s.btn, color: overridden ? "#2563eb" : "#9ca3af" }}
+                style={{ ...s.btn, color: overridden ? "var(--dsh-color-primary, #2563eb)" : "var(--dsh-color-muted-weak, #9ca3af)" }}
                 title="重置为默认"
                 disabled={!writable || !overridden}
                 onClick={() => void resetField(field.key)}

@@ -145,31 +145,32 @@ function query(params: Record<string, string | number | undefined>): string {
 }
 
 export class LoomApi {
-  overview(): Promise<LoomOverview> {
-    return readJson(fetch(`${API_PREFIX}/overview`));
+  async overview(): Promise<LoomOverview> {
+    // NB: readJson expects a Response, not a Promise — always await fetch first.
+    return readJson(await fetch(`${API_PREFIX}/overview`));
   }
 
-  memories(opts: { workspace?: string; q?: string; kind?: string; status?: string; limit?: number } = {}): Promise<{ items: MemoryRecord[] }> {
+  async memories(opts: { workspace?: string; q?: string; kind?: string; status?: string; limit?: number } = {}): Promise<{ items: MemoryRecord[] }> {
     return readJson(
-      fetch(`${API_PREFIX}/memories${query({ workspace: opts.workspace, q: opts.q, kind: opts.kind, status: opts.status, limit: opts.limit })}`),
+      await fetch(`${API_PREFIX}/memories${query({ workspace: opts.workspace, q: opts.q, kind: opts.kind, status: opts.status, limit: opts.limit })}`),
     );
   }
 
-  tasks(workspace: string, includeStable = false): Promise<{ items: TaskRecord[] }> {
-    return readJson(fetch(`${API_PREFIX}/tasks${query({ workspace, includeStable: includeStable ? "1" : undefined })}`));
+  async tasks(workspace: string, includeStable = false): Promise<{ items: TaskRecord[] }> {
+    return readJson(await fetch(`${API_PREFIX}/tasks${query({ workspace, includeStable: includeStable ? "1" : undefined })}`));
   }
 
-  links(workspace: string): Promise<{ items: LinkRecord[] }> {
-    return readJson(fetch(`${API_PREFIX}/links${query({ workspace })}`));
+  async links(workspace: string): Promise<{ items: LinkRecord[] }> {
+    return readJson(await fetch(`${API_PREFIX}/links${query({ workspace })}`));
   }
 
-  config(): Promise<LoomConfig> {
-    return readJson(fetch(`${API_PREFIX}/config`));
+  async config(): Promise<LoomConfig> {
+    return readJson(await fetch(`${API_PREFIX}/config`));
   }
 
   async archive(id: string, workspace: string): Promise<void> {
     await readJson(
-      fetch(`${API_PREFIX}/memories/archive`, {
+      await fetch(`${API_PREFIX}/memories/archive`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, workspace }),
@@ -179,7 +180,7 @@ export class LoomApi {
 
   async remove(id: string, workspace: string): Promise<void> {
     await readJson(
-      fetch(`${API_PREFIX}/memories/delete`, {
+      await fetch(`${API_PREFIX}/memories/delete`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, workspace }),
@@ -187,9 +188,9 @@ export class LoomApi {
     );
   }
 
-  gc(workspace: string | undefined, dryRun: boolean): Promise<{ report: GcReport }> {
+  async gc(workspace: string | undefined, dryRun: boolean): Promise<{ report: GcReport }> {
     return readJson(
-      fetch(`${API_PREFIX}/gc`, {
+      await fetch(`${API_PREFIX}/gc`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
