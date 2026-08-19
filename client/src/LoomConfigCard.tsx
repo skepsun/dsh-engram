@@ -28,13 +28,17 @@ export interface LoomConfigValue {
   maxMemoriesPerWorkspace?: number;
   gcEnabled?: boolean;
   gcStableRetentionDays?: number;
+  /** Hostnames allowed past the /api/dsh-loom loopback fence (tunnel hosts). */
+  trustedHosts?: string[];
 }
 
 export interface LoomConfigCardFace {
   scope: LoomScope<LoomConfigValue>;
 }
 
-const FIELDS: Array<{ key: keyof LoomConfigValue; label: string; hint: string; kind: "bool" | "num"; step?: number; min?: number; max?: number }> = [
+type FieldKind = "bool" | "num" | "text";
+
+const FIELDS: Array<{ key: keyof LoomConfigValue; label: string; hint: string; kind: FieldKind; step?: number; min?: number; max?: number; width?: number }> = [
   { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
   { key: "sessionSearch", label: "会话历史搜索", hint: "loom_recall 支持跨会话 FTS 兜底", kind: "bool" },
   { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
@@ -46,6 +50,7 @@ const FIELDS: Array<{ key: keyof LoomConfigValue; label: string; hint: string; k
   { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
   { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
   { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
+  { key: "trustedHosts", label: "受信隧道域名", hint: "允许经隧道访问记忆查看器的域名，逗号分隔；留空 = 仅本机。改后需重启 dsh web 生效", kind: "text", width: 260 },
 ];
 
 const s = {
@@ -85,7 +90,7 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
     return off;
   }, [scope]);
 
-  const setField = useCallback((key: keyof LoomConfigValue, value: boolean | number | undefined) => {
+  const setField = useCallback((key: keyof LoomConfigValue, value: boolean | number | string[] | undefined) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 
@@ -141,6 +146,21 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
                   checked={raw === true}
                   disabled={!writable}
                   onChange={(e) => setField(field.key, e.target.checked)}
+                />
+              ) : field.kind === "text" ? (
+                <input
+                  type="text"
+                  style={{ ...s.input, width: field.width ?? 180 }}
+                  value={Array.isArray(raw) ? raw.join(", ") : raw === undefined ? "" : String(raw)}
+                  disabled={!writable}
+                  placeholder="host.domain, 另一域名…"
+                  onChange={(e) => {
+                    const tokens = e.target.value
+                      .split(/[,\s]+/)
+                      .map((x) => x.trim())
+                      .filter(Boolean);
+                    setField(field.key, tokens);
+                  }}
                 />
               ) : (
                 <input
