@@ -1,15 +1,19 @@
 /**
  * dsh-loom client: the Plugins → 配置 card (settings.plugin.item, keyed by the
  * `dsh-loom` namespace the host registers). Reads/writes the namespace through
- * ctx.settingsScope — the host applies changes to the live config for new
- * sessions (already-frozen [LOOM] blocks are stable by design).
+ * LoomScope — a self-sufficient transport over the connection's settings RPCs
+ * that keeps working when the GUI is reached through an operator-authorized
+ * tunnel (DSH's own settingsScope binder hard-codes off-loopback browsers to
+ * read-only memory persistence for every plugin card). The host applies
+ * changes to the live config for new sessions (already-frozen [LOOM] blocks
+ * are stable by design).
  *
  * Self-rendered with plain React: toggles for booleans, number inputs for the
  * integer knobs, per-field reset (unset → composition layer) and one Save.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { SettingsScope, SettingsScopeSnapshot } from "@deepseek-ai/dsh-client-ui-settings/types";
+import type { LoomScope, LoomScopeSnapshot } from "./scope";
 import { useLoomTheme } from "./theme";
 
 export interface LoomConfigValue {
@@ -27,7 +31,7 @@ export interface LoomConfigValue {
 }
 
 export interface LoomConfigCardFace {
-  scope: SettingsScope<LoomConfigValue>;
+  scope: LoomScope<LoomConfigValue>;
 }
 
 const FIELDS: Array<{ key: keyof LoomConfigValue; label: string; hint: string; kind: "bool" | "num"; step?: number; min?: number; max?: number }> = [
@@ -64,9 +68,10 @@ const s = {
 };
 
 export function LoomConfigCard({ scope }: LoomConfigCardFace) {
-  const [snap, setSnap] = useState<SettingsScopeSnapshot<LoomConfigValue> | null>(null);
+  const [snap, setSnap] = useState<LoomScopeSnapshot<LoomConfigValue> | null>(null);
   const [draft, setDraft] = useState<LoomConfigValue>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void scope.load();
@@ -86,6 +91,7 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
 
   const save = useCallback(async () => {
     setSaving(true);
+    setError(null);
     try {
       for (const field of FIELDS) {
         const value = draft[field.key];
@@ -95,15 +101,22 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
         }
       }
       await scope.load();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
     } finally {
       setSaving(false);
     }
   }, [draft, scope]);
 
   const resetField = useCallback(async (key: keyof LoomConfigValue) => {
-    await scope.unset(key);
-    await scope.load();
-    setDraft((prev) => ({ ...prev, [key]: undefined }));
+    setError(null);
+    try {
+      await scope.unset(key);
+      await scope.load();
+      setDraft((prev) => ({ ...prev, [key]: undefined }));
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
   }, [scope]);
 
   const value: LoomConfigValue = { ...((snap?.base as LoomConfigValue) ?? {}), ...draft };
@@ -159,10 +172,13 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
         </button>
       </div>
       <div style={s.note}>
-        {snap?.status === "unavailable"
-          ? "远程浏览器不可持久化设置（loopback-only）。"
-          : "设置对新建会话即时生效；已冻结的 [LOOM] 块保持前缀稳定。"}
+        {snap?.status === "unavailable" || snap?.status === "error"
+          ? snap?.reason ?? "该命名空间当前不可用。"
+          : snap?.writable
+            ? "设置对新建会话即时生效；已冻结的 [LOOM] 块保持前缀稳定。"
+            : "该命名空间当前为只读（宿主未授权写入或需重启应用）。"}
       </div>
+      {error && <div style={{ ...s.note, color: "#dc2626" }}>{error}</div>}
     </div>
   );
 }

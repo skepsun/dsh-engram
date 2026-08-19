@@ -107,11 +107,23 @@ After restart, inside the **native** DSH settings surface:
   (dry-run toggle + run button + pointer report).
 - **Settings → Plugins → dsh-loom** — a config card bound to the `dsh-loom`
   settings namespace. Changes apply to new sessions (frozen blocks stay stable).
+  The card drives the namespace through the connection's own settings RPCs
+  (not the isLoopback-gated scope), so it stays editable even when the GUI is
+  reached through an operator-authorized tunnel.
 
 The browser half is served by DSH's client-module loader directly from this
 package (`dsh.client` + `exports["./client"]`, no web-application rebuild); the
-data comes from the loopback-fenced `/api/dsh-loom/*` route family. If you change
-`client/src`, rebuild the bundle with:
+data comes from the loopback-fenced `/api/dsh-loom/*` route family. The fence
+stays closed by default; to reach the memory viewer from an authorized tunnel
+hostname, list it in the plugin's `trustedHosts` config (e.g. via the registry
+or a profile patch):
+
+```jsonc
+// patch/loom.json
+{ "loom": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
+```
+
+If you change `client/src`, rebuild the bundle with:
 
 ```sh
 npm run build:client

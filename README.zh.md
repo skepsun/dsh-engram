@@ -85,10 +85,20 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（含证据缺口）、
   关系列表，以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
 - **设置 → 插件 → dsh-loom** — 绑定 `dsh-loom` 设置命名空间的配置卡片（含 GC 开关与
-  stable 任务保留天数）；改动对新建会话即时生效（已冻结的块保持稳定）。
+  stable 任务保留天数）；改动对新建会话即时生效（已冻结的块保持稳定）。卡片通过连接自身的
+  settings RPC 直连命名空间（不走 isLoopback 门控的 scope），因此即使 GUI 经运营商授权的
+  隧道访问也保持可编辑。
 
 浏览器半边由 DSH 的 client-module loader 直接从本包提供（`dsh.client` + `exports["./client"]`，无需重建
-web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由族。修改 `client/src` 后重建 bundle：
+web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由族。围栏默认关闭隧道访问；如需经授权的
+隧道域名访问记忆查看器，把域名加进插件的 `trustedHosts` 配置（如通过 registry 或 profile patch）：
+
+```jsonc
+// patch/loom.json
+{ "loom": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
+```
+
+修改 `client/src` 后重建 bundle：
 
 ```sh
 npm run build:client

@@ -21,6 +21,7 @@ import type {} from "@deepseek-ai/dsh-client-locale/client";
 import { LoomApi } from "./api";
 import { LoomSection, type LoomSectionFace } from "./LoomSection";
 import { LoomConfigCard, type LoomConfigCardFace, type LoomConfigValue } from "./LoomConfigCard";
+import { LoomScopeImpl } from "./scope";
 
 /** Locale namespace this plugin owns. */
 const NS = "dsh-loom";
@@ -50,7 +51,7 @@ export const en: LoomKey = {
   error: "Load failed",
 };
 
-export const inject = ["slots", "locale", "settingsScope"];
+export const inject = ["slots", "locale", "connection"];
 
 /**
  * Mount the two native surfaces. A failure here must never take the GUI down —
@@ -85,17 +86,19 @@ export function apply(ctx: ClientContext): void {
     console.warn("[dsh-loom] settings.plugins.tab registration failed:", error);
   }
 
-  const scope = ctx.settingsScope.bind<LoomConfigValue>({ namespace: "dsh-loom" });
+  // Config card: drive the `dsh-loom` settings namespace through the
+  // connection's own settings RPCs. DSH's blessed settingsScope binder pins
+  // non-loopback browsers (e.g. the GUI reached through an authorized tunnel)
+  // to memory persistence — every plugin card renders empty and gray there.
+  // A self-sufficient transport keeps this card usable regardless of how the
+  // GUI is reached, while still persisting into the same settings document.
+  const connection = ctx.get("connection");
+  const scope = new LoomScopeImpl<LoomConfigValue>(connection.api, "dsh-loom");
   const cardInjected = (): LoomConfigCardFace => ({ scope });
   try {
-    // This slot is keyed in dsh-rc.7's successor (key = the namespace a card
-    // edits) but was a LIST slot in the deployed rc.7 web (identity = id).
-    // Register with BOTH so the card mounts under either contract: the list
-    // branch validates options.id, the keyed branch validates options.key,
-    // and each renderer indexes the entry by the field it knows. The host
-    // side still has to serve the `dsh-loom` settings namespace; when it does
-    // not (rc.7's WEB_SETTINGS_NAMESPACES whitelist), the card mounts but
-    // reports its namespace unavailable instead of throwing at boot.
+    // The card is dispatched by the configurable-plugins tab only when the
+    // host serves the `dsh-loom` namespace (key = namespace), so a host that
+    // never serves it simply shows no card instead of a dead one.
     ctx.slots.inject("settings.plugin.item", () =>
       ctx.slots.register(
         {
