@@ -98,11 +98,13 @@ scripts/setup-links.mjs --check` prints the state without writing anything.
 
 After restart, inside the **native** DSH settings surface:
 
-- **Settings → Loom Memory** — overview stat cards (counts by workspace/kind,
-  auto-capture totals, per-workspace `[LOOM]` index token estimate, cumulative
-  GC totals), a searchable / filterable memory table with archive + delete
-  actions, the ESR task board with evidence gaps, the relation list, and a
-  memory-GC panel (dry-run toggle + run button + pointer report).
+- **Settings → Plugins → Loom Memory** — a tab inside the Plugins settings
+  section (grouped with the configurable/inventory tabs, not a flat top-level
+  page): overview stat cards (counts by workspace/kind, auto-capture totals,
+  per-workspace `[LOOM]` index token estimate, cumulative GC totals), a
+  searchable / filterable memory table with archive + delete actions, the ESR
+  task board with evidence gaps, the relation list, and a memory-GC panel
+  (dry-run toggle + run button + pointer report).
 - **Settings → Plugins → dsh-loom** — a config card bound to the `dsh-loom`
   settings namespace. Changes apply to new sessions (frozen blocks stay stable).
 
