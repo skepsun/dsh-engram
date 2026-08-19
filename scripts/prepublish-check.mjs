@@ -34,13 +34,17 @@ function sh(cmd, args, cwd) {
 }
 
 try {
-  // 1. pack
-  sh("npm", ["pack", "--pack-destination", tmp], root);
+  // 1. pack. npm publish --dry-run propagates npm_config_dry_run into this
+  //    script's child npm, which would make the nested pack a no-op — pin
+  //    dry-run off explicitly so the tarball is always really produced.
+  sh("npm", ["pack", "--dry-run=false", "--pack-destination", tmp], root);
   const tarball = readdirSync(tmp).find((f) => f.startsWith("dsh-loom-") && f.endsWith(".tgz"));
   if (tarball === undefined) throw new Error("no packed tarball produced");
 
-  // 2. install the artifact + peers into the temp dir (mirrors a real profile)
-  sh("npm", ["install", "--no-audit", "--no-fund", join(tmp, tarball), ...PEERS], tmp);
+  // 2. install the artifact + peers into the temp dir (mirrors a real profile);
+  //    --dry-run=false again because npm publish --dry-run propagates the flag
+  //    into child npm and a no-op install would leave nothing to import.
+  sh("npm", ["install", "--no-audit", "--no-fund", "--dry-run=false", join(tmp, tarball), ...PEERS], tmp);
 
   // 3. import host + client from the INSTALLED fileset
   const installed = join(tmp, "node_modules", "dsh-loom");
