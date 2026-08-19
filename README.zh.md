@@ -51,6 +51,11 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 
 然后**重启 `dsh web`**。数据保存在 `~/.dsh/storages/dsh_loom.json`。
 
+> npm 与 GitHub 两种装法**都不需要手动补依赖**：pnpm 会自动安装 `zod`，
+> 并把可选的 `@deepseek-ai/*` peers 嵌套装进插件自身的 `node_modules`，CLI 也会
+> 自动把插件登记进 profile 的 `dsh.profile.bundles`。下面的 `setup-links` 只在
+> `link:` 开发工作流里需要——pnpm 故意不为符号链接目录安装依赖。
+
 > 需要新建会话才能看到注入的 `[LOOM]`/`[ESR]` 块和全部工具——提示词与工具注册表都是按会话装配的。
 
 ### `link:` 安装的依赖准备

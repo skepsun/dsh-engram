@@ -63,6 +63,13 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 
 Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 
+> The npm and GitHub installs below need **no manual dependency step**: pnpm
+> installs `zod` and vendors the optional `@deepseek-ai/*` peers into the
+> plugin's own `node_modules`, and the CLI auto-registers the plugin into the
+> profile's `dsh.profile.bundles`. The `setup-links` step below is only for
+> the `link:` development workflow, where pnpm deliberately does not install a
+> symlinked directory's dependencies.
+
 > A fresh session is required to see the injected `[LOOM]`/`[ESR]` blocks and the
 > tools; both prompts and the tools registry are assembled per session.
 

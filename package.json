@@ -3,6 +3,14 @@
   "description": "Minimalist long-term memory for DeepSeek Harness, distilling pi-loom + pi-esr ideas: zero-LLM auto-capture, a symbolic [LOOM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task/esr_close/esr_link). Hot path is model-free; storage on ctx.storageDomain; web memory viewer and config card through DSH's native settings slots.",
   "version": "0.1.1",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skepsun/dsh-loom.git"
+  },
+  "homepage": "https://github.com/skepsun/dsh-loom",
+  "bugs": {
+    "url": "https://github.com/skepsun/dsh-loom/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -13,7 +21,6 @@
   },
   "files": [
     "lib",
-    "client",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -24,6 +31,7 @@
   },
   "scripts": {
     "setup": "node scripts/setup-links.mjs",
+    "prepublishOnly": "node scripts/prepublish-check.mjs",
     "build:client": "node client/build.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
     "typecheck": "echo ok"
