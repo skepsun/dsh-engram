@@ -177,7 +177,8 @@ test("renderIndex is compact, stable-ordered, and char-capped", async () => {
   assert.equal(block, renderIndex(domain, "/pi-loom", "/code/pi-loom", cfg));
 
   const esr = renderEsr(domain, "/pi-loom", cfg);
-  assert.equal(esr, "");
+  // empty task board still nudges the mechanism (and stays compact)
+  assert.ok(esr.includes("[ESR] no open tasks"));
   await domain.close();
 });
 

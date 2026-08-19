@@ -145,7 +145,7 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 [LOOM] workspace: pi-loom · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
+drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -154,7 +154,8 @@ drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 
 前缀：`[D]` 决定 · `[E]` 错误 · `[P]` 流程 · `[F]` 事实 · `[I]` 洞察 · `[H]` 交接 · `[T]` 任务。
 入选规则遵循「自动捕获策略」（信号阈值 / 命中晋升 / git 回显守卫），并按配置的行数与字符预算封顶。
-`#` id 通过 `loom_detail` 取完整记录。
+`#` id 通过 `loom_detail` 取完整记录。工作区没有任务时，`[ESR]` 仍会渲染一行点名 `esr_task`/`esr_close`，
+让机制对模型保持可见，而不是整体消失。
 
 ## 配置
 

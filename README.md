@@ -172,7 +172,7 @@ What the model actually sees (rendered once per session, then frozen):
 [LOOM] workspace: pi-loom · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
+drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -183,7 +183,9 @@ Prefixes: `[D]` decision · `[E]` error · `[P]` procedure · `[F]` fact ·
 `[I]` insight · `[H]` handoff · `[T]` task. Membership follows the
 *Auto-capture policy* (signal threshold / recall promotion / git-echo guard),
 bounded by the configured line and character budgets. `#` ids address the full
-records via `loom_detail`.
+records via `loom_detail`. When a workspace has no tasks, `[ESR]` still renders
+one line naming `esr_task`/`esr_close` so the mechanism stays visible to the
+model instead of vanishing.
 
 ## Config
 
