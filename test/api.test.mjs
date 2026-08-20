@@ -285,4 +285,40 @@ test("api: nodes route lists entities; overview counts them", async () => {
   await domain.close();
 });
 
+test("api: preview route returns exact [ENGRAM]+[ESR] blocks + cost meta", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  await domain.storeMemory({ workspace: "/w", kind: "decision", text: "use JSON storage", tags: [], sessionId: "s" }, CONFIG);
+  await domain.putTask({
+    id: "tsk_1", workspace: "/w", name: "ship", state: "active", artifact: null, evaluation: null,
+    memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1,
+  });
+  const service = {
+    config: CONFIG,
+    captureStats: { total: 0, git: 0, file: 0, error: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+    renderIndexBlock: (ws) => `[ENGRAM] workspace: ${ws}\n[D] 2026 ship #abc`,
+    renderEsrBlock: (ws) => `[ESR] tasks: 1 active / 0 stable\n- tsk_1: ship — ACTIVE · gap: artifact, evaluation, memory_ref`,
+  };
+  const routes = makeEngramRoutes(service);
+
+  const missing = res();
+  await route(routes, `${API_PREFIX}/preview`).handler(req({ url: `${API_PREFIX}/preview` }), missing);
+  assert.equal(missing._out.status, 400);
+
+  const ok = res();
+  await route(routes, `${API_PREFIX}/preview`).handler(req({ url: `${API_PREFIX}/preview?workspace=${encodeURIComponent("/w")}` }), ok);
+  assert.equal(ok._out.status, 200);
+  const body = json(ok);
+  assert.equal(body.workspace, "/w");
+  assert.ok(body.engram.startsWith("[ENGRAM]"));
+  assert.ok(body.esr.startsWith("[ESR]"));
+  assert.equal(body.meta.engram.lines, 2);
+  assert.equal(body.meta.engram.chars, "[ENGRAM] workspace: /w\n[D] 2026 ship #abc".length);
+  assert.equal(body.meta.engram.tokens, Math.ceil(body.meta.engram.chars / 4));
+  assert.equal(body.meta.esr.lines, 2);
+  assert.deepEqual(body.meta.counts, { memories: 1, tasks: 1, links: 0, nodes: 0 });
+  await domain.close();
+});
+
 

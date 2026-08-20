@@ -147,6 +147,25 @@ export interface EngramOverview {
   config: EngramConfig;
 }
 
+/** Cost + count metadata for one injected block. */
+export interface BlockMeta {
+  chars: number;
+  tokens: number;
+  lines: number;
+}
+
+/** Exact [ENGRAM] + [ESR] blocks as injected into a session for one workspace. */
+export interface InjectPreview {
+  workspace: string;
+  engram: string;
+  esr: string;
+  meta: {
+    engram: BlockMeta;
+    esr: BlockMeta;
+    counts: { memories: number; tasks: number; links: number; nodes: number };
+  };
+}
+
 /** Error carrying the route's JSON error message. */
 export class EngramApiError extends Error {
   constructor(message: string) {
@@ -241,6 +260,10 @@ export class EngramApi {
 
   async config(): Promise<EngramConfig> {
     return readJson(await fetch(`${API_PREFIX}/config`));
+  }
+
+  async preview(workspace: string): Promise<InjectPreview> {
+    return readJson(await fetch(`${API_PREFIX}/preview${query({ workspace })}`));
   }
 
   async archive(id: string, workspace: string): Promise<void> {

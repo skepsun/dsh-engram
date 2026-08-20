@@ -143,7 +143,14 @@ After restart, inside the **native** DSH settings surface:
   colored per type with direction arrows; drag nodes, pan, wheel-zoom, re-layout,
   hover highlights the neighborhood, clicking a node pops a floating panel with
   its incident relations and linked objects; dangling links are counted and
-  warned about), and a
+  warned about), an **injection-preview** tab that renders the exact
+  `[ENGRAM]` index block (order 40) and `[ESR]` task/closure block (order 41)
+  the model sees each session — same pure functions as the system-prompt
+  sections — as two terminal-style panes with per-line coloring (block
+  headers, task lines, drill hint, and the data-driven `escalate:` reminder
+  highlighted), line/char/~token cost chips plus memory/task/link/node count
+  chips, 20s auto-refresh and one-click copy of the raw block text (backed by
+  the new `GET /api/dsh-engram/preview?workspace=…` route), and a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
   create/close use the host's new `POST /api/dsh-engram/tasks` and
   `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven

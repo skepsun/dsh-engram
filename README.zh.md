@@ -100,6 +100,10 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   以及一个独立的 **关系图谱** 页签：手写 SVG 力导向图（无第三方图库，保持 bundle 纯净），
   实体为圆形节点、任务为勾选徽标、关系按类型着色带方向箭头；支持拖拽节点/平移/滚轮缩放/重组，
   悬停高亮邻域、点选节点在悬浮面板查看其全部关系与关联对象，悬空链接（端点缺失）单独计数提示。
+  以及一个 **注入预览** 页签：用与 systemPrompt 完全相同的纯函数实时渲染模型每个会话看到的
+  `[ENGRAM]` 索引块（order 40）与 `[ESR]` 任务/闭环块（order 41），终端风双栏展示（行级着色：
+  块头/任务行/drill 行/escalate 提醒高亮），附行数·字符·~tokens 成本与记忆/任务/关系/节点计数芯片，
+  每 20s 自动刷新、可一键复制注入块原文（新增 `GET /api/dsh-engram/preview?workspace=…`）。
   以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
   `POST /api/dsh-engram/tasks` 与 `POST /api/dsh-engram/tasks/close`（与 esr_task / esr_close 同一证据门）。
   模型侧的主动行为由 [ENGRAM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
