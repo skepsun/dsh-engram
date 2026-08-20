@@ -14,8 +14,9 @@
   `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。召回对内存池做
   **进程内 BM25 排序**（TF·IDF + 标签/短语加权 + **时间衰减因子**，确定性、零依赖）；
   命中实体锚定的记忆时附带**实体邻域关系简表**（复用 esr_link：`node --rel--> node · conf%`）；
-  本地零命中时自动兜底到 **DSH 自带的跨会话全文索引**（`ctx.sessionQuery`，按 cwd 过滤）——
-  不另建 SQLite，完全复用宿主。
+  与历史失败**高度同源**的新错误会**唤醒旧 error 记忆**（刷新 recency + 命中，向 promoteHits
+  爬升直至重回索引，失败不重复堆积）；本地零命中时自动兜底到 **DSH 自带的跨会话全文索引**
+  （`ctx.sessionQuery`，按 cwd 过滤）——不另建 SQLite，完全复用宿主。
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
   摊在明面上，而不是让 agent 没有证据就宣布完成。可开 `verifyArtifact`（默认开）：非 URL 的

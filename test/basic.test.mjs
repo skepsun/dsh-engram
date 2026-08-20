@@ -375,3 +375,51 @@ test("engram_recall: entity neighborhood appended from the ESR relation table", 
 
   await Promise.all([domain.close(), domain2.close()]);
 });
+
+test("error revival: recurring failures re-warm one entry and resurface in [ENGRAM]", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const cfg = { ...CONFIG, promoteHits: 3 };
+
+  const first = await domain.storeMemory(
+    { workspace: "/ws", kind: "error", text: "npm run build failed: tsc: error TS2304", tags: ["error"], sessionId: "s", seq: 1, signal: 0.25 },
+    cfg,
+  );
+  assert.equal(first.duplicated, false);
+  const id = first.id;
+
+  // Near-repeat of the same failure → revived (same row, hit bumped, no new row).
+  const r2 = await domain.storeMemory(
+    { workspace: "/ws", kind: "error", text: "npm run build failed: tsc: error TS2305", tags: ["error"], sessionId: "s", seq: 2, signal: 0.25 },
+    cfg,
+  );
+  assert.equal(r2.revived, true);
+  assert.equal(r2.id, id);
+  assert.equal(domain.listMemories("/ws").length, 1);
+  assert.equal(domain.getMemory("/ws", id).hits, 1);
+
+  // Unrelated error stays its own entry.
+  await domain.storeMemory(
+    { workspace: "/ws", kind: "error", text: "git push rejected: host key verification failed", tags: ["error"], sessionId: "s", seq: 3, signal: 0.25 },
+    cfg,
+  );
+  assert.equal(domain.listMemories("/ws").length, 2);
+
+  // Two more revives push hits to promoteHits → the low-signal failure now
+  // earns an [ENGRAM] line (resurfaces) even though signal < minIndexSignal.
+  for (const code of ["TS2322", "TS2312"]) {
+    await domain.storeMemory(
+      { workspace: "/ws", kind: "error", text: `npm run build failed: tsc: error ${code}`, tags: ["error"], sessionId: "s", seq: 4, signal: 0.25 },
+      cfg,
+    );
+  }
+  const block = renderIndex(domain, "/ws", "/code/ws", cfg);
+  assert.ok(block.includes("failed"), "revived failure resurfaces in [ENGRAM]");
+
+  // Facts do NOT cluster by overlap — only error memories do.
+  const f1 = await domain.storeMemory({ workspace: "/ws", kind: "fact", text: "engine uses sqlite for storage", tags: [], sessionId: "s", seq: 6, signal: 0.6 }, cfg);
+  const f2 = await domain.storeMemory({ workspace: "/ws", kind: "fact", text: "engine uses sqlite for the persistence layer", tags: [], sessionId: "s", seq: 7, signal: 0.6 }, cfg);
+  assert.equal(f2.duplicated, false);
+  assert.notEqual(f2.id, f1.id);
+
+  await domain.close();
+});

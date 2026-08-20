@@ -19,9 +19,11 @@ with one goal: **save tokens**.
   in-process BM25 pass (TF·IDF with label/phrase boosts plus a gentle time-decay
   factor — deterministic, zero deps), appends a compact entity-neighborhood
   table (reusing esr_link: `node --rel--> node · conf%`) for entity-anchored
-  hits, and on zero local hits falls back to DSH's own cross-session full-text
-  index (`ctx.sessionQuery`, filtered by cwd) instead of building a parallel
-  SQLite index.
+  hits, re-warms the old `error` entry when a new failure is near-identical
+  (repeat-failure revival: recency + hit climb toward promoteHits so the
+  failure resurfaces instead of piling up), and on zero local hits falls back
+  to DSH's own cross-session full-text index (`ctx.sessionQuery`, filtered by
+  cwd) instead of building a parallel SQLite index.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of

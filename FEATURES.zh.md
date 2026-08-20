@@ -92,9 +92,8 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 
 1. **Experience vs Memory 两轴**（清华 Awesome-Memory-for-Agents 分类）：经任务结果**显式校验**的
    知识（Experience）与未经校验的信息（Memory）本就是两条路——我们的 **ESR 证据闭环 = Experience**、
-   平铺 [ENGram] = Memory，恰好落进这个两轴；「Learning from Experience」方向（如 MemGovern 的
-   experience cards、PROJECTMEM 的失败重试警告）是我们在 escalate 提示 + 未来「失败记忆复活」上的
-   参照系。
+   平铺 [ENGram] = Memory，恰好落进这个两轴；「Learning from Experience」方向的 PROJECTMEM
+   失败重试警告，我们以 **escalate 提示 + 失败记忆复活**（已落地）做了零 LLM 的实现。
 2. **小规模不需要 RAG**（Salesforce ConvoMem：《Why Your First 150 Conversations Don't Need RAG》）：
    记忆系统从零增长，工作区级（百级）语料下关键词检索足够——我们的「无向量 + 进程内 BM25 + 实体锚定」
    路线由此获得学术背书；mem0 新算法也把 **BM25 关键词与时间感知**列为多信号检索的一路（semantic +
@@ -109,15 +108,20 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 **明确不采纳**：向量库/语义去重、LLM consolidate 后台管理器、自编辑记忆块（Letta 路线，与冻结前缀
 相悖）、多跳图推理、图数据库、角色档案、视频记忆——全部与「零 LLM + 符号 + 极轻」定位冲突。
 
-## 近期的两处核心增强（复用 DSH 本身）
+## 近期的三处核心增强（复用 DSH 本身）
 
 - **证据硬核化（verifyArtifact）**：`esr_close` 的非 URL artifact 会按工作区（= DSH 提供的会话
   cwd）解析并在磁盘上实存校验；不存在则任务保持 ACTIVE 并给出原因（`force:true` 跳过磁盘校验，
   三种证据门仍必填）。工具与网页表单共享 `store.evidenceGate` 单一证据门，口径不漂移。设置里
   有「校验 artifact 存在」开关（DSH 自家 schemastery 表单，即时生效）。
-- **BM25 召回 + DSH 会话索引兜底**：`engram_recall` / 记忆搜索对内存池做进程内 BM25 排序
-  （确定性、零依赖、不建 SQLite）；本地零命中时自动复用 DSH 自带的跨会话全文索引
-  （`ctx.sessionQuery`，按 cwd 过滤）作为兜底，原来的 `search_sessions` 显式开关保持兼容。
+- **BM25 召回 + 时间衰减 + DSH 会话索引兜底**：`engram_recall` / 记忆搜索对内存池做进程内 BM25
+  排序（TF·IDF + 标签/短语加权 + 乘性时间衰减因子，确定性、零依赖、不建 SQLite）；本地零命中时
+  自动复用 DSH 自带的跨会话全文索引（`ctx.sessionQuery`，按 cwd 过滤）作为兜底，原来的
+  `search_sessions` 显式开关保持兼容。
+- **失败记忆复活（repeat-failure revival）**：capture 到与某条既有 `error` 记忆**高度同源**的失败时
+  （接口：≥2 个 token 重叠且覆盖较小集 ≥60%，弃权判定），不再新开一条，而是**唤醒旧条目**——
+  刷新 recency + 命中 +1；重复失败把它推向 `promoteHits` 门槛，最终在 `[ENGRAM]` 里重新冒头
+  （projectmem「重复失败前预警」的零 LLM 版本）。只对 error 记忆生效，fact/decision 等不受影响。
 
 ## 工程约定（复用时请遵守）
 
