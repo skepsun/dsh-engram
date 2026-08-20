@@ -45,9 +45,10 @@ const s = {
   stats: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 16 },
   card: {
     border: "1px solid var(--dsh-color-border, #e5e7eb)",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: "10px 12px",
     background: "var(--dsh-color-surface, #ffffff)",
+    boxShadow: "0 1px 2px rgba(15,23,42,.04), 0 2px 8px rgba(15,23,42,.03)",
   },
   cardNum: { fontSize: 22, fontWeight: 700, lineHeight: 1.2 },
   cardLabel: { color: "var(--dsh-color-muted, #6b7280)", fontSize: 11, marginTop: 2 },
@@ -62,29 +63,61 @@ const s = {
   },
   btn: {
     border: "1px solid var(--dsh-color-border, #d1d5db)",
-    borderRadius: 6,
-    padding: "5px 10px",
+    borderRadius: 8,
+    padding: "5px 11px",
     fontSize: 12,
     cursor: "pointer",
     background: "var(--dsh-color-surface, #fff)",
+    transition: "background .15s ease, border-color .15s ease",
   },
   btnPrimary: {
-    border: "1px solid var(--dsh-color-primary, #2563eb)",
-    borderRadius: 6,
-    padding: "5px 10px",
+    border: "1px solid transparent",
+    borderRadius: 8,
+    padding: "5px 11px",
     fontSize: 12,
     cursor: "pointer",
     color: "#fff",
-    background: "var(--dsh-color-primary, #2563eb)",
+    background: "linear-gradient(135deg, #6366f1 0%, #7c3aed 100%)",
+    boxShadow: "0 1px 3px rgba(99,102,241,.35)",
+    transition: "opacity .15s ease",
   },
   table: { width: "100%", borderCollapse: "collapse" as const, fontSize: 12.5, tableLayout: "fixed" as const },
   clamp3: { display: "-webkit-box" as const, WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const, overflow: "hidden", maxHeight: 60, minHeight: 18, lineHeight: 1.5, wordBreak: "break-word" as const, whiteSpace: "normal" as const },
   expanded: { whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.5 },
   linkBtn: { border: "none", background: "none", padding: 0, fontSize: 11.5, cursor: "pointer", color: "var(--dsh-color-primary, #2563eb)", textDecoration: "underline" as const },
   pageBar: { display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12.5, color: "var(--dsh-color-muted, #6b7280)", flexWrap: "wrap" as const },
-  tabBar: { display: "flex", gap: 4, borderBottom: "1px solid var(--dsh-color-border, #e5e7eb)", marginBottom: 12 },
-  tab: { border: "none", background: "none", padding: "8px 14px", fontSize: 13, cursor: "pointer", color: "var(--dsh-color-muted, #6b7280)", borderBottom: "2px solid transparent", fontWeight: 600, margin: 0 },
-  tabActive: { border: "none", background: "none", padding: "8px 14px", fontSize: 13, cursor: "pointer", color: "var(--dsh-color-primary, #2563eb)", borderBottom: "2px solid var(--dsh-color-primary, #2563eb)", fontWeight: 700, margin: 0 },
+  tabBar: {
+    display: "inline-flex",
+    gap: 4,
+    padding: 3,
+    background: "var(--dsh-color-hover-bg, #f3f4f6)",
+    borderRadius: 999,
+    marginBottom: 14,
+  },
+  tab: {
+    border: "none",
+    background: "none",
+    padding: "6px 16px",
+    fontSize: 13,
+    cursor: "pointer",
+    color: "var(--dsh-color-muted, #6b7280)",
+    borderRadius: 999,
+    fontWeight: 600,
+    margin: 0,
+    transition: "background .16s ease, color .16s ease",
+  },
+  tabActive: {
+    border: "none",
+    background: "var(--dsh-color-surface, #fff)",
+    color: "var(--dsh-color-primary, #2563eb)",
+    padding: "6px 16px",
+    fontSize: 13,
+    cursor: "pointer",
+    borderRadius: 999,
+    fontWeight: 700,
+    margin: 0,
+    boxShadow: "0 1px 3px rgba(15,23,42,.10)",
+  },
   th: {
     textAlign: "left" as const,
     padding: "6px 8px",
@@ -116,7 +149,38 @@ const s = {
   mono: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "var(--dsh-color-muted, #4b5563)" },
   empty: { color: "var(--dsh-color-muted, #9ca3af)", fontSize: 12.5, padding: "14px 4px" },
   error: { color: "#dc2626", fontSize: 12.5, marginBottom: 10 },
-  subPanel: { border: "1px solid var(--dsh-color-border, #e5e7eb)", borderRadius: 8, padding: "10px 12px", marginBottom: 10 },
+  subPanel: {
+    border: "1px solid var(--dsh-color-border, #e5e7eb)",
+    borderRadius: 12,
+    padding: "10px 12px",
+    marginBottom: 10,
+    background: "var(--dsh-color-surface, #fff)",
+    boxShadow: "0 1px 2px rgba(15,23,42,.03)",
+  },
+  relRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap" as const,
+    padding: "5px 8px",
+    borderRadius: 10,
+    border: "1px solid var(--dsh-color-border, #f3f4f6)",
+    background: "var(--dsh-color-hover-bg, #f8fafc)",
+  },
+  nodePill: {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: 220,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    borderRadius: 8,
+    padding: "2px 9px",
+    fontSize: 12,
+    fontWeight: 600,
+    background: "rgba(99,102,241,.12)",
+    color: "#4338ca",
+  },
 };
 
 function fmtDate(ts: number): string {
@@ -239,6 +303,14 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
   const workspaces = useMemo(() => (overview ? Object.keys(overview.workspaces) : []), [overview]);
   const kindsPresent = useMemo(() => (overview ? Object.keys(overview.kinds) : []), [overview]);
+
+  // Resolve node/task ids to display names for graph-style relation rows.
+  const nameOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of nodes) map.set(n.id, n.name);
+    for (const t of tasks) map.set(t.id, t.name);
+    return (id: string) => map.get(id) ?? id;
+  }, [nodes, tasks]);
 
   // 新建任务的默认工作区：未选具体工作区且未手动选过时，取第一个。
   useEffect(() => {
@@ -678,14 +750,19 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       {linkGroups.map(([ws, items]) => (
         <Fragment key={ws}>
           {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 条关系</div>}
-          {items.map((l: LinkRecord) => (
-            <div key={l.id} style={{ fontSize: 12.5, padding: "2px 0" }}>
-              <span className="mono" style={s.mono}>{l.source.slice(0, 10)}</span>
-              {" "}--{l.relation}--&gt;{" "}
-              <span className="mono" style={s.mono}>{l.target.slice(0, 10)}</span>
-              <span style={{ color: "var(--dsh-color-muted-weak, #9ca3af)" }}> · {fmtDate(l.createdAt)}</span>
-            </div>
-          ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+            {items.map((l: LinkRecord) => (
+              <div key={l.id} style={s.relRow}>
+                <span className="mono" style={s.nodePill} title={l.source}>{nameOf(l.source)}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--dsh-color-muted, #6b7280)" }}>
+                  <span style={{ border: "1px dashed var(--dsh-color-border, #cbd5e1)", borderRadius: 999, padding: "1px 7px" }}>{l.relation}</span>
+                  <span aria-hidden>→</span>
+                </span>
+                <span className="mono" style={s.nodePill} title={l.target}>{nameOf(l.target)}</span>
+                <span style={{ fontSize: 11, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>· {fmtDate(l.createdAt)}</span>
+              </div>
+            ))}
+          </div>
         </Fragment>
       ))}
         </>

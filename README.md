@@ -98,6 +98,17 @@ scripts/setup-links.mjs --check` prints the state without writing anything.
 
 After restart, inside the **native** DSH settings surface:
 
+- **Unified task strip above the composer** — the conversation dock that DSH
+  ships for its built-in todo tool is taken over (same `conversation.input.dock`
+  cell / `id: todo` at a lower priority) and **merged** into one modern control:
+  the session's current plan (`todo_write`'s `todos` projection) plus the
+  workspace's persistent **ESR tasks** (with evidence-gap badges and an inline
+  "补齐证据 → close" form) plus the **relation graph** rendered as
+  node → relation → node chips with entity/task names resolved. It only shows
+  while there is something to show, stays live with 15s polling, and the built-in
+  plan still renders (without the ESR parts) if the loopback-fenced API is
+  unreachable.
+
 - **Settings → Engram Memory** — a standalone first-class settings section
   (right after the Plugins section, not a child tab of it). Default
   "All workspaces" view shows every workspace's memories/tasks/links

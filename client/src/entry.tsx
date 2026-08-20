@@ -1,7 +1,11 @@
 /**
- * dsh-engram: browser-half entry — renders a standalone "Engram 记忆" settings
- * section (memory viewer / ESR board / GC) and the plugins configuration card
- * through DSH's native slot system.
+ * dsh-engram: browser-half entry — mounts three native surfaces:
+ *   1. the unified "任务" dock strip above the composer
+ *      (`conversation.input.dock`, shadowing the built-in todo cell and
+ *      merging the session plan with the workspace's ESR tasks + relations);
+ *   2. a standalone "Engram 记忆" settings section (memory viewer / ESR board /
+ *      GC);
+ *   3. the plugins configuration card.
  *
  * The rich page mounts as a first-class `settings.section` (设置 → Engram 记忆),
  * sitting right after the Plugins section in the settings sidebar; the config
@@ -17,8 +21,12 @@ import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-client-ui-settings";
 import type {} from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
+// Type-only: pulls the ui-conversation SlotMap merge so the
+// 'conversation.input.dock' dock entry typechecks against PropsRuntime.
+import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-locale/client";
 import { EngramApi } from "./api";
+import { EngramTaskDock } from "./EngramTaskDock";
 import { EngramSection, type EngramSectionFace } from "./EngramSection";
 import { EngramConfigCard, type EngramConfigCardFace, type EngramConfigValue } from "./EngramConfigCard";
 import { EngramScopeImpl } from "./scope";
@@ -51,10 +59,10 @@ export const en: EngramKey = {
   error: "Load failed",
 };
 
-export const inject = ["slots", "locale", "connection"];
+export const inject = ["slots", "locale", "connection", "sessions", "workspaces"];
 
 /**
- * Mount the two native surfaces. A failure here must never take the GUI down —
+ * Mount the ESR surfaces. A failure here must never take the GUI down —
  * wrap registrations so a slot absence degrades instead of breaking boot.
  */
 export function apply(ctx: ClientContext): void {
@@ -63,6 +71,29 @@ export function apply(ctx: ClientContext): void {
   const api = new EngramApi();
   const t = ctx.locale.bind(NS) as (key: string) => string;
   const sectionInjected = (): EngramSectionFace => ({ api, t });
+
+  // Unified task strip above the composer: takes over the SAME
+  // 'conversation.input.dock' cell as the built-in todo strip (id 'todo',
+  // lower priority => the cell's winner) and merges the session plan
+  // (todo_write's `todos` projection) with the workspace's ESR tasks and
+  // relations into one control — the built-in TodoPanel stays shadowed so
+  // the two task planes never show as separate strips.
+  try {
+    ctx.slots.inject("conversation.input.dock", () =>
+      ctx.slots.register(
+        {
+          name: "conversation.input.dock",
+          id: "todo",
+          order: 0,
+          priority: -1,
+          inject: () => ({ api }),
+        },
+        EngramTaskDock,
+      ),
+    );
+  } catch (error) {
+    console.warn("[dsh-engram] conversation.input.dock registration failed:", error);
+  }
 
   // Rich viewer as a standalone first-class settings section (设置 → Engram 记忆),
   // no longer a tab inside the Plugins section. The slot is list-kind; the
