@@ -19,10 +19,12 @@ import {
   shortId,
   hashText,
   slugId,
+  bm25Rank,
 } from "../lib/util.js";
 import { openEngramDomain } from "../lib/store.js";
 import { renderIndex, renderEsr } from "../lib/index-block.js";
 import { makeCaptureHandler } from "../lib/capture.js";
+import { registerTools } from "../lib/tools.js";
 
 /** In-memory storage-domain stand-in. */
 function fakeFacility() {
@@ -303,4 +305,73 @@ test("escalationHint: data-driven under-proactivity nudge appears, then disappea
   assert.ok(esr3.includes("tsk_9"));
   assert.ok(esr3.includes("escalate:"), "nudge coexists with open tasks");
   await Promise.all([domain.close(), domain2.close(), domain3.close()]);
+});
+
+test("bm25Rank: recency factor is gentle — relevance still wins, ties go fresh", async () => {
+  const now = Date.now();
+  // Old doc has both rare query terms (high BM25); fresh doc has only one.
+  // Recency must NOT override strong lexical relevance.
+  const ranked = bm25Rank(
+    [
+      { id: "fresh", text: "session", tags: [], updatedAt: now - 3600e3 },
+      { id: "old_rich", text: "the harness session index reuse", tags: [], updatedAt: now - 60 * 86400e3 },
+    ],
+    "session index",
+    5,
+    now,
+  );
+  assert.equal(ranked[0].id, "old_rich", "relevance wins over age");
+
+  // Identical text, unequal age → the fresh copy ranks first (decay lifts ties).
+  const equal = bm25Rank(
+    [
+      { id: "old", text: "alpha beta gamma", tags: [], updatedAt: now - 90 * 86400e3 },
+      { id: "fresh2", text: "alpha beta gamma", tags: [], updatedAt: now },
+    ],
+    "alpha",
+    5,
+    now,
+  );
+  assert.equal(equal[0].id, "fresh2", "fresh tie wins under a pinned clock");
+
+  // Recency never discards a hit: old match still returned.
+  assert.ok(bm25Rank([{ id: "stale", text: "pear", tags: [], updatedAt: 1 }], "pear", 5, now).length === 1);
+});
+
+test("engram_recall: entity neighborhood appended from the ESR relation table", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = { config: CONFIG, getDomain: () => Promise.resolve(domain), openedDomain: () => domain, log: { warn: () => {} } };
+  await domain.putEntity({ id: "ent_a", workspace: "/ws", name: "dsh-engram", description: "", kind: "package", sessionId: "s", createdAt: 1, updatedAt: 1 });
+  await domain.putEntity({ id: "ent_b", workspace: "/ws", name: "agent", description: "", kind: "concept", sessionId: "s", createdAt: 2, updatedAt: 2 });
+  await domain.putEntity({ id: "ent_c", workspace: "/ws", name: "other", description: "", kind: "", sessionId: "s", createdAt: 3, updatedAt: 3 });
+  await domain.addLink({ id: "lk1", workspace: "/ws", source: "ent_a", relation: "depends_on", target: "ent_b", confidence: 0.9, sessionId: "s", createdAt: 1 });
+  await domain.addLink({ id: "lk2", workspace: "/ws", source: "ent_c", relation: "implements", target: "ent_a", confidence: 0.5, sessionId: "s", createdAt: 2 });
+  await domain.storeMemory({ workspace: "/ws", kind: "fact", text: "dsh-engram reuses the harness session index", tags: [], entity: "ent_a", sessionId: "s", seq: 1, signal: 0.6 }, CONFIG);
+
+  const tools = new Map();
+  const ctx = {
+    effect: (fn) => fn(),
+    tools: { register: (tool) => { tools.set(tool.name, tool); return () => {}; } },
+  };
+  registerTools(ctx, service);
+
+  const agent = { session: { id: "s1", header: { cwd: "/ws" }, events: { length: 5 } } };
+  const recall = tools.get("engram_recall");
+  const out = await recall.execute({ query: "session index" }, { agent, signal: undefined });
+  assert.ok(out.includes("# recall:"), "recall section present");
+  assert.ok(out.includes("entity neighborhood"), "neighborhood section present for entity-anchored hit");
+  assert.match(out, /dsh-engram --depends_on--> agent \(90%\)/);
+  assert.match(out, /other --implements--> dsh-engram \(50%\)/);
+
+  // A hit without an entity anchor gets no neighborhood section.
+  const domain2 = await openEngramDomain(fakeFacility());
+  const service2 = { config: CONFIG, getDomain: () => Promise.resolve(domain2), openedDomain: () => domain2, log: { warn: () => {} } };
+  await domain2.storeMemory({ workspace: "/ws", kind: "fact", text: "plain memory about sqlite", tags: [], entity: null, sessionId: "s", seq: 1, signal: 0.6 }, CONFIG);
+  const tools2 = new Map();
+  const ctx2 = { effect: (fn) => fn(), tools: { register: (tool) => { tools2.set(tool.name, tool); return () => {}; } } };
+  registerTools(ctx2, service2);
+  const out2 = await tools2.get("engram_recall").execute({ query: "sqlite" }, { agent, signal: undefined });
+  assert.ok(!out2.includes("entity neighborhood"), "no neighborhood for non-entity hits");
+
+  await Promise.all([domain.close(), domain2.close()]);
 });

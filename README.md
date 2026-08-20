@@ -16,10 +16,12 @@ with one goal: **save tokens**.
   assembly and **frozen per session**, keeping the request prefix byte-stable for
   KV-cache reuse. The agent drills down with `engram_recall` / `engram_detail` instead
   of dumping raw hits into context; recall ranks the in-domain pool with an
-  in-process BM25 pass (TF·IDF with label/phrase boosts — deterministic, zero
-  deps), and on zero local hits it falls back to DSH's own cross-session
-  full-text index (`ctx.sessionQuery`, filtered by cwd) instead of building a
-  parallel SQLite index.
+  in-process BM25 pass (TF·IDF with label/phrase boosts plus a gentle time-decay
+  factor — deterministic, zero deps), appends a compact entity-neighborhood
+  table (reusing esr_link: `node --rel--> node · conf%`) for entity-anchored
+  hits, and on zero local hits falls back to DSH's own cross-session full-text
+  index (`ctx.sessionQuery`, filtered by cwd) instead of building a parallel
+  SQLite index.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of

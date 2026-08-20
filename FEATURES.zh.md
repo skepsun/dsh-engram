@@ -86,6 +86,29 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 - **设计取舍**：宿主没有干净的会话 cwd 切换 API，且改 `session.header.cwd` 会破坏
   「注入块按会话冻结 → 前缀稳定复用 KV 缓存」的架构，故做成纯 UI 焦点切换，不动模型上下文
 
+## 研究定位与主流对照（2026 年市场/论文调研结论）
+
+三条来自学术与市场的支撑性结论，写进文档是为了让后续维护者知道「为什么不照抄主流」：
+
+1. **Experience vs Memory 两轴**（清华 Awesome-Memory-for-Agents 分类）：经任务结果**显式校验**的
+   知识（Experience）与未经校验的信息（Memory）本就是两条路——我们的 **ESR 证据闭环 = Experience**、
+   平铺 [ENGram] = Memory，恰好落进这个两轴；「Learning from Experience」方向（如 MemGovern 的
+   experience cards、PROJECTMEM 的失败重试警告）是我们在 escalate 提示 + 未来「失败记忆复活」上的
+   参照系。
+2. **小规模不需要 RAG**（Salesforce ConvoMem：《Why Your First 150 Conversations Don't Need RAG》）：
+   记忆系统从零增长，工作区级（百级）语料下关键词检索足够——我们的「无向量 + 进程内 BM25 + 实体锚定」
+   路线由此获得学术背书；mem0 新算法也把 **BM25 关键词与时间感知**列为多信号检索的一路（semantic +
+   BM25 + entity + temporal），我们已具备 keyword / entity / temporal 三路，唯一不在的是 semantic（刻意）。
+3. **零 LLM 热路径是差异化的企业级事实**：claude-mem（91k★）靠后台 LLM worker 做语义摘要，mem0
+   每条写入调一次 LLM（官方标注 ~1s 延迟）；我们每次写入 0 模型调用、前缀按会话冻结复用 KV cache
+   （IAAR 综述把 KV 复用列为短期记忆标准技术）。如果要对外宣传「省 token」，这是可量化的卖点。
+
+据此，召回已补上 **时间衰减因子**（bm25Rank 乘性 recency，半衰期 14 天、最大 +50%，不覆盖强相关）
+与 **实体邻域展开**（recall 命中实体锚定记忆时，附该实体生于 esr_link 关系简表，≤8 行，纯复用现有表）。
+
+**明确不采纳**：向量库/语义去重、LLM consolidate 后台管理器、自编辑记忆块（Letta 路线，与冻结前缀
+相悖）、多跳图推理、图数据库、角色档案、视频记忆——全部与「零 LLM + 符号 + 极轻」定位冲突。
+
 ## 近期的两处核心增强（复用 DSH 本身）
 
 - **证据硬核化（verifyArtifact）**：`esr_close` 的非 URL artifact 会按工作区（= DSH 提供的会话
