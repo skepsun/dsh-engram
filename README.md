@@ -98,6 +98,21 @@ scripts/setup-links.mjs --check` prints the state without writing anything.
 
 After restart, inside the **native** DSH settings surface:
 
+- **Sidebar "ESR 看板" entry + full-screen kanban** — one more row under
+  New Session with a **live active-task badge** (polled from /overview every
+  30s across all workspaces). Clicking it opens a full-screen board in the
+  center column: **草稿 / 进行中(gaps) / 就绪(evidence ready) / 已闭环** columns,
+  workspace filter + search, an inline create form, and per-card
+  "补齐证据 → 关闭" closure forms sharing the esr_close gates (artifact +
+  evaluation + memory_refs). Following the task-board precedent, the entry and
+  the board are DOM-mounted and self-heal (MutationObserver re-inserts on shell
+  re-renders), with cross-panel exclusivity against task-board/ssh (opening one
+  evicts the others; clicking a sidebar session/workspace row hands the center
+  column back to the conversation). The conversation subtree stays mounted
+  underneath and is hidden by `html[data-dsh-engram-board]`, so toggling loses
+  no state.
+
+
 - **Unified task strip above the composer** — the conversation dock that DSH
   ships for its built-in todo tool is taken over (same `conversation.input.dock`
   cell / `id: todo` at a lower priority) and **merged** into one modern control:

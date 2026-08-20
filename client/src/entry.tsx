@@ -30,6 +30,7 @@ import { EngramTaskDock } from "./EngramTaskDock";
 import { EngramSection, type EngramSectionFace } from "./EngramSection";
 import { EngramConfigCard, type EngramConfigCardFace, type EngramConfigValue } from "./EngramConfigCard";
 import { EngramScopeImpl } from "./scope";
+import { mountEngramBoard } from "./EngramBoardMount";
 
 /** Locale namespace this plugin owns. */
 const NS = "dsh-engram";
@@ -144,5 +145,17 @@ export function apply(ctx: ClientContext): void {
     );
   } catch (error) {
     console.warn("[dsh-engram] settings.plugin.item registration failed:", error);
+  }
+
+  // Full-screen ESR kanban: sidebar entry (with live active-task badge) +
+  // center-column board, DOM-mounted (the conversation/sidebar slots are
+  // single-occupant). Guarded: a mount problem must never take the GUI down.
+  try {
+    ctx.effect(
+      () => mountEngramBoard(api),
+      "dsh-engram: ESR task board mount",
+    );
+  } catch (error) {
+    console.warn("[dsh-engram] ESR task board mount setup failed:", error);
   }
 }
