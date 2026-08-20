@@ -558,8 +558,11 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           {planItems.length > 0 && (
             <div style={planBox}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
-                  本轮计划（todo_write）
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
+                    本轮计划
+                  </span>
+                  <span style={badgeTodo}>原生 todo · 会话内</span>
                 </span>
                 <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
                   {planItems.filter((p) => p.status === "completed").length}/{planItems.length} 完成 · 跟随会话自动更新
@@ -573,6 +576,15 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                   </li>
                 ))}
               </ul>
+              {activeTasks.length === 0 && (
+                <div style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted, #6b7280))", paddingTop: 2 }}>
+                  <span aria-hidden style={{ color: badgeEsr.color }}>↳</span>
+                  <span>
+                    本轮计划是<strong>会话内</strong>原生 todo，随会话结束；多步/需长期保留的工作建议
+                    <strong>用 esr_task 建 ESR 任务</strong>（跨会话闭环，带证据门）沉淀下来。
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -580,8 +592,16 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
             <>
           {/* Toolbar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
-              工作区 ESR 任务 · {activeTasks.length} 进行中
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
+                工作区 ESR 任务 · {activeTasks.length} 进行中
+              </span>
+              <span style={badgeEsr}>ESR · 跨会话闭环</span>
+              {planItems.length > 0 && (
+                <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
+                  计划 {planItems.length} 条 todo
+                </span>
+              )}
             </span>
             <span style={{ flex: "1 1 auto" }} />
             <button type="button" className="ed-btn" style={{ ...btn }}
@@ -856,6 +876,23 @@ const planBox: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 5,
+};
+
+/** Provenance pill: tells todo (session-local) from ESR (cross-session) apart. */
+const srcBadge: CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 4,
+  fontSize: 10, fontWeight: 700, lineHeight: "16px",
+  padding: "0 7px", borderRadius: 999, whiteSpace: "nowrap",
+};
+const badgeTodo: CSSProperties = {
+  ...srcBadge,
+  color: "var(--dsw-alias-label-amber, #b45309)",
+  background: "var(--dsw-alias-bg-amber, rgba(217,119,6,.12))",
+};
+const badgeEsr: CSSProperties = {
+  ...srcBadge,
+  color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
+  background: "var(--dsw-alias-bg-bluish, rgba(99,102,241,.14))",
 };
 
 const btn: CSSProperties = {

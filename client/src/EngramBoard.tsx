@@ -222,6 +222,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           </svg>
           <span style={hb.title}>ESR 任务看板</span>
           <span style={hb.sub}>draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门</span>
+          <span style={hb.legendChip}>仅 ESR · 会话内 todo 见输入框上方任务条</span>
           {loading && <span style={hb.loading}>…</span>}
           <span style={{ flex: "1 1 auto" }} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={`证据完备度 ${Math.round(evidenceGauge.frac * 100)}% · ${evidenceGauge.ready}/${evidenceGauge.active} 个进行中任务证据齐 · ${evidenceGauge.stable} 已闭环`}>
@@ -250,6 +251,17 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           </button>
           <button type="button" style={hb.close} onClick={onRequestClose} aria-label="关闭看板">✕</button>
         </div>
+      </div>
+
+      {/* 分栏说明：原生 todo（会话内）与 ESR（跨会话闭环）不是同一平面 */}
+      <div style={hb.partition}>
+        <span style={hb.partitionTag}>原生 todo · 会话内</span>
+        <span>
+          由 todo_write 驱动，随会话结束，不跨会话保留；要长期沉淀的多步工作，请用
+          <strong> esr_task / 本板「新建」</strong>建为 ESR 任务（
+          <span style={hb.partitionTagEsr}>ESR · 跨会话闭环</span>
+          ），闭环（artifact + evaluation + memory_refs 证据门）后进 [ENGRAM]。
+        </span>
       </div>
 
       <div style={{ padding: "0 14px" }}>
@@ -358,6 +370,35 @@ const hb = {
   },
   title: { fontSize: 15, fontWeight: 700 },
   sub: { fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" },
+  legendChip: {
+    display: "inline-flex", alignItems: "center", gap: 4,
+    fontSize: 10, fontWeight: 700, lineHeight: "16px",
+    padding: "0 7px", borderRadius: 999, whiteSpace: "nowrap",
+    color: "var(--dsw-alias-label-tertiary, #9ca3af)",
+    border: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #d1d5db))",
+  },
+  /** Explanation bar partitioning the native todo plane from the ESR kanban. */
+  partition: {
+    display: "flex", gap: 6, alignItems: "flex-start",
+    fontSize: 11.5, lineHeight: 1.55, padding: "6px 14px",
+    color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))",
+    borderBottom: "1px dashed var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",
+    background: "var(--dsw-alias-bg-layer-2, rgba(127,127,127,.04))",
+  },
+  partitionTag: {
+    flex: "none", fontSize: 10, fontWeight: 700, lineHeight: "16px",
+    padding: "0 7px", borderRadius: 999,
+    color: "var(--dsw-alias-label-amber, #b45309)",
+    background: "rgba(217,119,6,.12)",
+    whiteSpace: "nowrap",
+  },
+  partitionTagEsr: {
+    flex: "none", fontSize: 10, fontWeight: 700, lineHeight: "16px",
+    padding: "0 7px", borderRadius: 999,
+    color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
+    background: "rgba(99,102,241,.12)",
+    whiteSpace: "nowrap",
+  },
   loading: { fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))" },
   select: {
     border: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #d1d5db))",
