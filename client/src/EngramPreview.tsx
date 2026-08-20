@@ -15,8 +15,10 @@ import { useEngramTheme } from "./theme";
 
 interface EngramPreviewFace {
   api: EngramApi;
-  /** "" means "全部工作区" — the panel falls back to the first workspace. */
+  /** "" means "全部工作区" — the panel falls back to a default workspace. */
   workspace: string;
+  /** Preferred non-empty workspace (richest content) for the auto default. */
+  defaultWorkspace: string;
   workspaces: string[];
 }
 
@@ -42,9 +44,11 @@ function lineColor(line: string, dark: boolean): React.CSSProperties {
   return {};
 }
 
-export function EngramPreview({ api, workspace, workspaces }: EngramPreviewFace) {
+export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: EngramPreviewFace) {
   const { dark, vars } = useEngramTheme();
-  const [ws, setWs] = useState<string>(workspace || workspaces[0] || "");
+  // Default = explicit filter → richest-content workspace → first listed, so the
+  // panel never lands on an empty workspace by default ([ENGRAM] 块空白误导).
+  const [ws, setWs] = useState<string>(workspace || defaultWorkspace || workspaces[0] || "");
   const [data, setData] = useState<InjectPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

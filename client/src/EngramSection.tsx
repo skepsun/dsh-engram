@@ -311,6 +311,23 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
   const workspaces = useMemo(() => (overview ? Object.keys(overview.workspaces) : []), [overview]);
   const kindsPresent = useMemo(() => (overview ? Object.keys(overview.kinds) : []), [overview]);
+  /** 注入预览默认挑「内容最多」的工作区——否则默认会落到 Object.keys 第一个（可能是空区），
+   * 导致 [ENGRAM] 块空白误导为「没有记忆」。显式选中工作区时跟随用户选择。 */
+  const previewDefault = useMemo(() => {
+    if (workspace !== "") return workspace;
+    if (!overview) return "";
+    let best = "";
+    let bestN = -1;
+    for (const ws of Object.keys(overview.workspaces)) {
+      const c = overview.workspaces[ws] ?? {};
+      const n = (c.memories ?? 0) + (c.tasks ?? 0) + (c.links ?? 0) + (c.nodes ?? 0);
+      if (n > bestN) {
+        bestN = n;
+        best = ws;
+      }
+    }
+    return best;
+  }, [workspace, overview]);
 
   // Resolve node/task ids to display names for graph-style relation rows.
   const nameOf = useMemo(() => {
@@ -829,7 +846,12 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       {view === "preview" && (
         <div style={s.subPanel}>
-          <EngramPreview api={api} workspace={workspace} workspaces={workspaces} />
+          <EngramPreview
+            api={api}
+            workspace={workspace}
+            defaultWorkspace={previewDefault}
+            workspaces={workspaces}
+          />
         </div>
       )}
 
