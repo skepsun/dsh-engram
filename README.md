@@ -98,18 +98,45 @@ scripts/setup-links.mjs --check` prints the state without writing anything.
 
 After restart, inside the **native** DSH settings surface:
 
-- **Settings → Plugins → Loom Memory** — a tab inside the Plugins settings
-  section (grouped with the configurable/inventory tabs, not a flat top-level
-  page): overview stat cards (counts by workspace/kind, auto-capture totals,
-  per-workspace `[LOOM]` index token estimate, cumulative GC totals), a
-  searchable / filterable memory table with archive + delete actions, the ESR
-  task board with evidence gaps, the relation list, and a memory-GC panel
-  (dry-run toggle + run button + pointer report).
-- **Settings → Plugins → dsh-loom** — a config card bound to the `dsh-loom`
-  settings namespace. Changes apply to new sessions (frozen blocks stay stable).
-  The card drives the namespace through the connection's own settings RPCs
-  (not the isLoopback-gated scope), so it stays editable even when the GUI is
-  reached through an operator-authorized tunnel.
+- **Settings → Loom Memory** — a standalone first-class settings section
+  (right after the Plugins section, not a child tab of it). Default
+  "All workspaces" view shows every workspace's memories/tasks/links
+  grouped by workspace (dropdown + prev/next workspace pager; the memory
+  table additionally pages 10 rows per page with a jump dropdown, fixed
+  column widths, 3-line clamped content ellipsis and full text on hover).
+  Overview
+  stat cards (counts by workspace/kind, auto-capture totals, per-workspace
+  `[LOOM]` index token estimate, cumulative GC totals), a searchable /
+  filterable memory table with archive + delete actions, an ESR task board
+  with an inline "new task" form and a per-task "fill evidence to close"
+  (artifact / evaluation / memory_ref → STABLE, same gates as esr_close),
+  a node + relation list (nodes are domain objects the model registers via
+  esr_node — package/service/repo/concept; relations via esr_link), and a
+  memory-GC panel (dry-run toggle + run button + pointer report). The GUI
+  create/close use the host's new `POST /api/dsh-loom/tasks` and
+  `POST /api/dsh-loom/tasks/close` routes. Model-side proactivity is driven
+  by the [LOOM]/[ESR] injected blocks: multi-step work gets a task now,
+  recurring domain objects get a node, related tasks/nodes get a link.
+
+  **Real behaviour telemetry (agent observability)** — the ESR page opens
+  with an "agent behaviour" panel fed by a new `usage` table (per workspace
+  × day rollup) + `GET /api/dsh-loom/stats`: every `loom_*`/`esr_*` tool call
+  is recorded (counts, failures, recall mechanics). Reported ratios:
+  **ESR proactivity** = esr calls / (memory + esr calls); **recall hit rate**
+  = recalls returning ≥1 hit / total recalls; **mean hits per query**;
+  **detail conversion** = a loom_detail following a hit recall within 8
+  session events. Per-tool counts + a 14-day daily rollup are shown too.
+  Numbers are real, from real sessions — lift ESR proactivity by watching
+  this panel and tuning the injected prompt.
+- **Settings → Plugins → Plugin configuration → dsh-loom** — a collapsible
+  config card in the same style as the built-in "Shell / Agent loop / Web
+  search" cards: title + one-line description + chevron, collapsed by default,
+  click to expand/collapse. Open, its ~12 options render under four groups —
+  Capture & Search / Index / Lifecycle & GC / Security. Changes apply to new
+  sessions (frozen blocks stay stable); Discard / Save with an "unsaved" badge
+  on the header. The card drives the namespace through the connection's own
+  settings RPCs (not the isLoopback-gated scope), so it stays editable even
+  when the GUI is reached through an operator-authorized tunnel.
 
 The browser half is served by DSH's client-module loader directly from this
 package (`dsh.client` + `exports["./client"]`, no web-application rebuild); the
@@ -237,12 +264,60 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 21 tests: core + web API + GC (node:test)
+npm test            # 29 tests: core + web API + GC + usage-observability (node:test)
+npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```
 
+### Testing & evaluation (two layers of real testing)
+
+**npm run eval** (eval/recall-bench.mjs) is the deterministic layer —
+LongMemEval-style: a controlled corpus (ASCII + CJK, known tags/entities/
+timestamps) measured through the real store/recall path (openLoomDomain +
+domain.recall), reporting Precision@k / Recall@k / MRR / Hit@1 per probe
+(exact tag, substring, multi-term, CJK, phrase-single, ordering, negative)
+plus StructMemEval-flavoured structure metrics (exact-duplicate dedup rate,
+entity anchoring coverage, dangling-link hygiene). Honest, reproducible
+numbers — everyone gets the same output. Current run: AVG P@k 0.770 /
+AVG R@k 1.000 / MRR 0.889 / hit@1 0.889 / 0 negative false-positives /
+dedup 1.0.
+
+**/api/dsh-loom/stats + the observability panel** is the real-session layer —
+it answers how the model actually uses the memory in production (ESR
+proactivity ratio, recall hit rate, detail conversion), while the eval
+answers how good the retrieval layer itself is.
+
 Repo layout: `lib/` (host half: store / capture / index-block / tools / api /
 settings), `client/` (browser half, TSX + `build.mjs`), `test/` (node:test).
+
+## Troubleshooting
+
+**The web GUI opens and immediately shows “Failed to load plugins”**, with a
+loader error like:
+
+```
+failed to apply loader entry … (@linxin666/dsh-client-ui-web-ui-settings):
+keyed slot "settings.plugin.item" requires options.key
+```
+
+Cause: DSH hosts since `0.1.0-rc.7` declare the config-card slot
+`settings.plugin.item` as **keyed by the settings namespace a card edits** —
+which is exactly how dsh-loom's own config card registers (under
+`key: "dsh-loom"`). The `@linxin666/dsh-web-ui-all` family **before 0.2.0**
+(`dsh-client-ui-web-ui-settings`) registered its group card into that slot
+**without a `key`**, and because a single failed loader entry aborts the whole
+boot, the GUI stays stuck on the failure page.
+
+Fixes:
+
+- **Proper fix — upgrade the family**: `@linxin666/dsh-web-ui-all@^0.2.x`.
+  The 0.2 line moved its settings surface out of the keyed slot into a
+  first-level `settings.section` (the upstream fix for exactly this error).
+- **Immediate unblock**: add `key: "web-ui-plugins"` to that one
+  `settings.plugin.item` registration in the installed
+  `node_modules/@linxin666/dsh-client-ui-web-ui-settings/lib/client.js`, then
+  restart `dsh web`. (Under namespace-keyed dispatch the group card simply
+  stays hidden; nothing else on the page is affected.)
 
 ## Related
 

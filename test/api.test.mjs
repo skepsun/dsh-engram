@@ -80,9 +80,9 @@ function res() {
 
 const json = (r) => JSON.parse(r._out.body);
 
-/** One-shot: route = first route whose path matches. */
-function route(routes, path) {
-  return routes.find((r) => r.path === path);
+/** One-shot: route = first route whose path + method match (method default GET). */
+function route(routes, path, method = "GET") {
+  return routes.find((r) => r.path === path && (r.method === void 0 || r.method === method));
 }
 
 test("api: overview reports per-workspace counts, indexes and captures", async () => {
@@ -165,7 +165,7 @@ test("api: tasks and links are workspace-scoped, archive + delete mutate", async
   // archive one memory
   const [m1] = domain.searchMemories({ workspace: "/w", q: "m1" });
   const ar = res();
-  await route(routes, `${API_PREFIX}/memories/archive`).handler(
+  await route(routes, `${API_PREFIX}/memories/archive`, "POST").handler(
     req({ method: "POST", url: `${API_PREFIX}/memories/archive`, body: { id: m1.id, workspace: "/w" } }),
     ar,
   );
@@ -175,7 +175,7 @@ test("api: tasks and links are workspace-scoped, archive + delete mutate", async
   // delete the other
   const [m2] = domain.searchMemories({ workspace: "/w", q: "m2" });
   const del = res();
-  await route(routes, `${API_PREFIX}/memories/delete`).handler(
+  await route(routes, `${API_PREFIX}/memories/delete`, "POST").handler(
     req({ method: "POST", url: `${API_PREFIX}/memories/delete`, body: { id: m2.id, workspace: "/w" } }),
     del,
   );
@@ -208,3 +208,81 @@ test("api: config endpoint returns the live config", async () => {
   assert.equal(json(r).expireDays, 90);
   await domain.close();
 });
+test("api: GUI task create + close routes (evidence gates)", async () => {
+  const domain = await openLoomDomain(fakeFacility());
+  const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeLoomRoutes(service);
+
+  // create without name → 400
+  const bad = res();
+  await route(routes, `${API_PREFIX}/tasks`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks`, body: { workspace: "/w" } }),
+    bad,
+  );
+  assert.equal(bad._out.status, 400);
+
+  // create → 200, lands in the store
+  const ok = res();
+  await route(routes, `${API_PREFIX}/tasks`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks`, body: { workspace: "/w", name: "gui task", description: "d" } }),
+    ok,
+  );
+  assert.equal(ok._out.status, 200);
+  const created = json(ok).task;
+  assert.ok(created.id.startsWith("tsk_"));
+  assert.equal(created.state, "active");
+  const listed = res();
+  await route(routes, `${API_PREFIX}/tasks`).handler(req({ url: `${API_PREFIX}/tasks?workspace=${encodeURIComponent("/w")}&includeStable=1` }), listed);
+  assert.equal(json(listed).items.length, 1);
+
+  // close without evidence → stays active, reports gaps
+  const g = res();
+  await route(routes, `${API_PREFIX}/tasks/close`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/close`, body: { workspace: "/w", id: created.id } }),
+    g,
+  );
+  assert.equal(g._out.status, 200);
+  const gbody = json(g);
+  assert.equal(gbody.state, "active");
+  assert.deepEqual(gbody.gaps, ["artifact", "evaluation", "memory_ref"]);
+
+  // close with full evidence → stable
+  const s = res();
+  await route(routes, `${API_PREFIX}/tasks/close`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/close`, body: { workspace: "/w", id: created.id, artifact: "/tmp/a", evaluation: "tests pass", memory_refs: ["m1"] } }),
+    s,
+  );
+  assert.equal(s._out.status, 200);
+  const sbody = json(s);
+  assert.equal(sbody.state, "stable");
+  assert.equal(domain.getTask("/w", created.id).state, "stable");
+
+  // unknown task → 404
+  const nf = res();
+  await route(routes, `${API_PREFIX}/tasks/close`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/close`, body: { workspace: "/w", id: "tsk_nope" } }),
+    nf,
+  );
+  assert.equal(nf._out.status, 404);
+  await domain.close();
+});
+test("api: nodes route lists entities; overview counts them", async () => {
+  const domain = await openLoomDomain(fakeFacility());
+  await domain.putEntity({ id: "ent_a", workspace: "/w", name: "A", kind: "pkg", description: "", sessionId: "s", createdAt: 1, updatedAt: 1 });
+  const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeLoomRoutes(service);
+  const n = res();
+  await route(routes, `${API_PREFIX}/nodes`).handler(req({ url: `${API_PREFIX}/nodes?workspace=${encodeURIComponent("/w")}` }), n);
+  assert.equal(n._out.status, 200);
+  assert.equal(json(n).items.length, 1);
+  assert.equal(json(n).items[0].id, "ent_a");
+  const missing = res();
+  await route(routes, `${API_PREFIX}/nodes`).handler(req({ url: `${API_PREFIX}/nodes` }), missing);
+  assert.equal(missing._out.status, 400);
+  const ov = res();
+  await route(routes, `${API_PREFIX}/overview`).handler(req({ url: `${API_PREFIX}/overview` }), ov);
+  assert.equal(json(ov).totals.nodes, 1);
+  await domain.close();
+});
+
+

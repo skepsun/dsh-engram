@@ -46,10 +46,22 @@ export interface LinkRecord {
   createdAt: number;
 }
 
+/** Graph node registered by the model via esr_node (id = ent_<slug>). */
+export interface EntityRecord {
+  id: string;
+  workspace: string;
+  name: string;
+  description: string;
+  kind: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface WorkspaceCounts {
   memories: number;
   tasks: number;
   links: number;
+  nodes: number;
 }
 
 export interface LoomConfig {
@@ -98,6 +110,31 @@ export interface IndexCost {
   chars: number;
   tokens: number;
   lines: number;
+}
+
+export interface UsageDay {
+  workspace: string;
+  day: string;
+  counts: Record<string, number>;
+  failures: number;
+  recall: Record<string, number>;
+}
+
+export interface UsageRatios {
+  calls: number;
+  esrCalls: number;
+  memCalls: number;
+  esrRatio: number | null;
+  recallHitRate: number | null;
+  recallHitsPerQuery: number | null;
+  detailFollowRate: number | null;
+}
+
+export interface LoomStats {
+  workspace: string | null;
+  byDay: UsageDay[];
+  totals: { counts: Record<string, number>; failures: number; recall: Record<string, number> };
+  ratios: UsageRatios;
 }
 
 export interface LoomOverview {
@@ -160,8 +197,46 @@ export class LoomApi {
     return readJson(await fetch(`${API_PREFIX}/tasks${query({ workspace, includeStable: includeStable ? "1" : undefined })}`));
   }
 
+  async createTask(workspace: string, name: string, description = ""): Promise<{ task: TaskRecord }> {
+    return readJson(
+      await fetch(`${API_PREFIX}/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspace, name, description }),
+      }),
+    );
+  }
+
+  async closeTask(
+    workspace: string,
+    id: string,
+    evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] },
+  ): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[] }> {
+    return readJson(
+      await fetch(`${API_PREFIX}/tasks/close`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspace,
+          id,
+          artifact: evidence.artifact ?? "",
+          evaluation: evidence.evaluation ?? "",
+          memory_refs: evidence.memoryRefs ?? [],
+        }),
+      }),
+    );
+  }
+
   async links(workspace: string): Promise<{ items: LinkRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/links${query({ workspace })}`));
+  }
+
+  async nodes(workspace: string): Promise<{ items: EntityRecord[] }> {
+    return readJson(await fetch(`${API_PREFIX}/nodes${query({ workspace })}`));
+  }
+
+  async stats(workspace?: string): Promise<LoomStats> {
+    return readJson(await fetch(`${API_PREFIX}/stats${query({ workspace })}`));
   }
 
   async config(): Promise<LoomConfig> {

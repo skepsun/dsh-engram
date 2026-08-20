@@ -1,7 +1,7 @@
 {
   "name": "dsh-loom",
-  "description": "Minimalist long-term memory for DeepSeek Harness, distilling pi-loom + pi-esr ideas: zero-LLM auto-capture, a symbolic [LOOM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task/esr_close/esr_link). Hot path is model-free; storage on ctx.storageDomain; web memory viewer and config card through DSH's native settings slots.",
-  "version": "0.1.1",
+  "description": "Minimalist long-term memory for DeepSeek Harness, distilling pi-loom + pi-esr ideas: zero-LLM auto-capture, a symbolic [LOOM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task / esr_node / esr_close / esr_link). Real agent-behaviour telemetry (usage rollup + /stats) and a deterministic offline recall benchmark (npm run eval). Hot path is model-free; storage on ctx.storageDomain; web memory viewer, observability panel and config card through DSH's native settings slots.",
+  "version": "0.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -34,7 +34,12 @@
     "prepublishOnly": "node scripts/prepublish-check.mjs",
     "build:client": "node client/build.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
+    "eval": "node eval/recall-bench.mjs",
     "typecheck": "echo ok"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "dsh": {
     "bundle": {

@@ -18,6 +18,7 @@ import {
   fmtDate,
   shortId,
   hashText,
+  slugId,
 } from "../lib/util.js";
 import { openLoomDomain } from "../lib/store.js";
 import { renderIndex, renderEsr } from "../lib/index-block.js";
@@ -232,4 +233,74 @@ test("shortId / fmtDate / hashText helpers", () => {
   assert.equal(fmtDate(new Date(2026, 5, 15).getTime()), "06-15");
   assert.equal(hashText("x").length, 16);
   assert.equal(truncate("abcdef", 3), "abc…");
+});
+test("entity nodes: id coercion, CRUD, summarize counts", async () => {
+  const domain = await openLoomDomain(fakeFacility());
+  await domain.putEntity({ id: "ent_" + slugId("DSH-Loom Plugin"), workspace: "/w", name: "dsh-loom", description: "d", kind: "package", sessionId: "s", createdAt: 1, updatedAt: 1 });
+  await domain.putEntity({ id: "ent_beta", workspace: "/w", name: "Beta", description: "", kind: "", sessionId: "s", createdAt: 2, updatedAt: 2 });
+  await domain.putEntity({ id: "ent_x", workspace: "/x", name: "X", description: "", kind: "", sessionId: "s", createdAt: 3, updatedAt: 3 });
+  const alpha = "ent_" + slugId("DSH-Loom Plugin");
+  assert.equal(domain.getEntity("/w", alpha).name, "dsh-loom");
+  assert.equal(domain.getEntity("/w", "ent_x"), void 0);
+  assert.deepEqual(domain.listEntities("/w").map((e) => e.id), [alpha, "ent_beta"]);
+  const summary = domain.summarize();
+  assert.equal(summary.workspaces["/w"].nodes, 2);
+  assert.equal(summary.totals.nodes, 3);
+  // same id = update, not duplicate
+  await domain.putEntity({ id: alpha, workspace: "/w", name: "dsh-loom", description: "v2", kind: "pkg", sessionId: "s", createdAt: 1, updatedAt: 4 });
+  assert.equal(domain.listEntities("/w").find((e) => e.id === alpha).description, "v2");
+  assert.equal(domain.summarize().totals.nodes, 3);
+  const removed = await domain.removeEntity("/w", "ent_beta");
+  assert.equal(removed, true);
+  assert.equal(domain.summarize().workspaces["/w"].nodes, 1);
+  await domain.close();
+});
+
+test("index block surfaces node count + node list; usurp proactive guidance", async () => {
+  const domain = await openLoomDomain(fakeFacility());
+  await domain.storeMemory({ workspace: "/w", kind: "decision", text: "JSON over sqlite", tags: [], sessionId: "s", seq: 1 }, CONFIG);
+  await domain.putEntity({ id: "ent_loom", workspace: "/w", name: "dsh-loom", description: "", kind: "package", sessionId: "s", createdAt: 1, updatedAt: 1 });
+  await domain.putTask({ id: "tsk_1", workspace: "/w", name: "t1", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
+  const block = renderIndex(domain, "/w", "/w", CONFIG);
+  assert.ok(block.includes("node(s)"));
+  assert.ok(block.includes("nodes: dsh-loom"));
+  assert.ok(block.includes("esr_node"));
+  const esr = renderEsr(domain, "/w", CONFIG);
+  assert.ok(!esr.includes("no open tasks"));
+  assert.ok(esr.includes("tsk_1"));
+  // empty workspace: no-open line teaches proactive behavior
+  const esrEmpty = renderEsr(domain, "/w2", CONFIG);
+  assert.match(esrEmpty, /BE PROACTIVE/);
+  await domain.close();
+});
+
+test("escalationHint: data-driven under-proactivity nudge appears, then disappears when healthy", async () => {
+  const { dayKey } = await import("../lib/usage.js");
+  const domain = await openLoomDomain(fakeFacility());
+  const d = dayKey();
+  // under-proactive: 4 mem ops vs 1 esr call (ratio 20% < 34%)
+  await domain.bumpUsage("/w", d, {
+    counts: { loom_store: 3, loom_recall: 1, esr_node: 1 },
+    failures: 0,
+    recall: { queries: 1, withHits: 1, hitsTotal: 3 },
+  });
+  const esr = renderEsr(domain, "/w", CONFIG);
+  assert.ok(esr.includes("escalate:"), "under-proactive workspace gets the nudge");
+  assert.match(esr, /4 mem ops vs 1 esr calls/);
+  // too little signal (fewer than 3 mem ops) → no nudge
+  const domain2 = await openLoomDomain(fakeFacility());
+  await domain2.bumpUsage("/w2", d, { counts: { loom_store: 1 }, failures: 0, recall: {} });
+  assert.ok(!renderEsr(domain2, "/w2", CONFIG).includes("escalate:"), "below sample floor: no nudge");
+  // healthy balance (esr ≥ ~half of mem ops) → nudge disappears (closed loop)
+  await domain.bumpUsage("/w", d, { counts: { esr_task: 2, esr_link: 1 }, failures: 0, recall: {} });
+  const esr2 = renderEsr(domain, "/w", CONFIG);
+  assert.ok(!esr2.includes("escalate:"), "healthy after escalation: nudge gone");
+  // with an active task, the hint still appends when under-proactive
+  const domain3 = await openLoomDomain(fakeFacility());
+  await domain3.bumpUsage("/w3", d, { counts: { loom_store: 4, loom_recall: 1, esr_task: 1 }, failures: 0, recall: {} });
+  await domain3.putTask({ id: "tsk_9", workspace: "/w3", name: "t9", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
+  const esr3 = renderEsr(domain3, "/w3", CONFIG);
+  assert.ok(esr3.includes("tsk_9"));
+  assert.ok(esr3.includes("escalate:"), "nudge coexists with open tasks");
+  await Promise.all([domain.close(), domain2.close(), domain3.close()]);
 });

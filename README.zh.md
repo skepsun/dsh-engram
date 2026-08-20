@@ -80,14 +80,30 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
 
 重启后，全部落在 **DSH 原生**设置界面里：
 
-- **设置 → 插件 → Loom 记忆** — 作为「插件」设置页里的一个 tab（与「可配置插件」「插件清单」等并列，
-  不再占用侧边栏顶级入口）：概览统计卡片（各工作区/类型的计数、自动捕获总量、各工作区 `[LOOM]` 索引
-  token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（含证据缺口）、
-  关系列表，以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
-- **设置 → 插件 → dsh-loom** — 绑定 `dsh-loom` 设置命名空间的配置卡片（含 GC 开关与
-  stable 任务保留天数）；改动对新建会话即时生效（已冻结的块保持稳定）。卡片通过连接自身的
-  settings RPC 直连命名空间（不走 isLoopback 门控的 scope），因此即使 GUI 经运营商授权的
-  隧道访问也保持可编辑。
+- **设置 → Loom 记忆** — 独立的一级设置页签（位于「插件」之后），不再是「插件」页里的子 tab；默认
+  「全部工作区」视图完整展示所有工作区的记忆/任务/关系（按工作区分组，工作区下拉 + 上一/下一工作区
+  翻页；记忆表格另行 10 条/页分页 + 跳页下拉，仅「类型 / 内容 / 操作」三列——正文列占满，时间、
+  标签、signal/hits/TTL 等全部折叠进内容行内（meta 行 + 标签行），正文限高三行省略、
+  行内「展开全文/收起」与 hover 均可看全文，归档/删除按钮竖向堆叠）。概览统计卡片（各工作区/类型的计数、自动捕获总量、各工作区 `[LOOM]` 索引
+  token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（「新建任务」
+  表单 + 点击「填写证据关闭…」补 artifact/evaluation/memory_ref 转 STABLE）、节点与关系清单
+  （节点 = 模型用 esr_node 登记的领域对象，如包/服务/仓库/概念；关系 = esr_link），
+  以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。ESR 的 GUI 新建/关闭走宿主新增的
+  `POST /api/dsh-loom/tasks` 与 `POST /api/dsh-loom/tasks/close`（与 esr_task / esr_close 同一证据门）。
+  模型侧的主动行为由 [LOOM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
+
+**真实行为观测（agent 遥测）** — ESR 页顶部新增「agent 行为观测」面板：每次模型调用 `loom_*`/`esr_*` 工具都实时累计到
+按（工作区 × 天）的 usage 滚动行（新增 `usage` 表 + `GET /api/dsh-loom/stats`），折算成指标：
+**ESR 主动性** = esr 工具调用数 /（记忆 + esr 工具调用总数）；**召回命中率** = 有命中的 loom_recall 次数 / 总次数；
+**平均命中/查询**；**detail 转化** = 命中召回后很快跟一次 loom_detail 的比例（会话内 8 事件窗口）；失败数按工具记。
+面板同时列出各工具调用计数与最近 14 天逐日滚动。这些是真实会话的真实数字——想提升 ESR 主动性，
+就观察面板上 esr 占比并调整注入提示。
+- **设置 → 插件 → 插件配置 → dsh-loom** — 与内置「终端 / Agent 循环 / 网页搜索」同款的
+  **默认折叠卡片**：标题 + 一行描述 + 箭头，点击展开/收起；展开后 12 个设置项按
+  「捕获与检索 / 索引 / 生命周期与 GC / 安全」四个分组展示。改动对新建会话即时生效
+  （已冻结的块保持稳定）；支持放弃修改 / 保存，有未保存改动时标题上出现「未保存」徽标。
+  卡片通过连接自身的 settings RPC 直连命名空间（不走 isLoopback 门控的 scope），因此即使
+  GUI 经运营商授权的隧道访问也保持可编辑。
 
 浏览器半边由 DSH 的 client-module loader 直接从本包提供（`dsh.client` + `exports["./client"]`，无需重建
 web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由族。围栏默认关闭隧道访问；如需经授权的
@@ -103,6 +119,22 @@ web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由�
 ```sh
 npm run build:client
 ```
+
+## 测试与评测
+
+```sh
+npm test    # 29 项单元测试（含 usage 滚动 / /stats 路由）
+npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
+```
+
+`npm run eval` 的检索部分参照 LongMemEval 的问答式评测：受控语料（ASCII + CJK、标签/实体/时间戳已知），
+对真实 `domain.recall()` 逐一校准 **Precision@k / Recall@k / MRR / Hit@1**（probe 覆盖 tag 精确、子串、
+多词、CJK、短语唯一、标签排序、负样本无回）；结构部分借鉴 StructMemEval：精确去重率（同文本存 3 次折叠为 1）、
+实体锚定覆盖率、节点/链接卫生（无悬空链接）。数字诚实、非调优——任何人跑出来都一样，复现即所得。
+
+两层「真实测试」的分工：`npm run eval` 回答「检索层本身有多好」（确定性、可复现）；
+`/api/dsh-loom/stats` + 观测面板回答「真实会话里模型实际怎么用」（ESR 主动性、召回命中率、detail 转化），
+两者结合才能判断：召回层没问题但命中率低 = 模型没学会问；反之亦然。
 
 ## 工具
 
@@ -206,6 +238,33 @@ npm run build:client
 
 仓库结构：`lib/`（宿主半边：store / capture / index-block / tools / api / settings）、
 `client/`（浏览器半边，TSX + `build.mjs`）、`test/`（node:test）。
+
+## 故障排查
+
+**Web 界面一打开就停在 “Failed to load plugins”**，loader 报错形如：
+
+```
+failed to apply loader entry … (@linxin666/dsh-client-ui-web-ui-settings):
+keyed slot "settings.plugin.item" requires options.key
+```
+
+原因：DSH 自 `0.1.0-rc.7` 起把配置卡槽位 `settings.plugin.item` 声明为**按
+settings 命名空间键控**（卡片用自身编辑的命名空间作 `key` 注册——dsh-loom
+的配置卡正是用 `key: "dsh-loom"` 这样注册的）。`@linxin666/dsh-web-ui-all`
+**0.2.0 之前的** `dsh-client-ui-web-ui-settings` 向该槽位注册分组卡片时**没有
+提供 `key`**；而 loader 只要有一个 entry 失败就会中止整个启动流程，于是 GUI
+一直卡在失败页。
+
+修复方式：
+
+- **正确修复——升级全家桶**：`@linxin666/dsh-web-ui-all@^0.2.x`。0.2
+  系列已把自身设置面从键控槽位迁出，改为一级 `settings.section`（上游正是
+  为这个报错做的修复）。
+- **临时解阻**：在已安装的
+  `node_modules/@linxin666/dsh-client-ui-web-ui-settings/lib/client.js` 中给那
+  个 `settings.plugin.item` 注册补上 `key: "web-ui-plugins"`，然后重启
+  `dsh web`。（在按命名空间键控的派发下，分组卡片只是不显示，不影响页面其
+  他部分。）
 
 ## 相关项目
 

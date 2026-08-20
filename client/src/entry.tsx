@@ -1,11 +1,11 @@
 /**
- * dsh-loom: browser-half entry — renders the Plugins settings page's "Loom
- * 记忆" tab (memory viewer / ESR board / GC) and the plugins configuration
- * card through DSH's native slot system.
+ * dsh-loom: browser-half entry — renders a standalone "Loom 记忆" settings
+ * section (memory viewer / ESR board / GC) and the plugins configuration card
+ * through DSH's native slot system.
  *
- * The rich page mounts as a *tab inside the Plugins settings section*
- * (`settings.plugins.tab`), the same grouping surface other plugins use, so
- * the sidebar stays free of a flat top-level "Loom 记忆" entry.
+ * The rich page mounts as a first-class `settings.section` (设置 → Loom 记忆),
+ * sitting right after the Plugins section in the settings sidebar; the config
+ * card stays in the Plugins → 插件配置 tab as a collapsible card.
  *
  * Zero direct imports of other plugins at runtime (bundle-purity gate): slots
  * and settingsScope come through the injected client context; the only value
@@ -64,17 +64,17 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS) as (key: string) => string;
   const sectionInjected = (): LoomSectionFace => ({ api, t });
 
-  // Rich viewer as a tab INSIDE the Plugins settings section (grouped with
-  // the configurable/inventory tabs instead of a flat top-level page). The
-  // slot is list-kind; the section renderer hands the component its inject
-  // face plus the locale bound to our NS.
+  // Rich viewer as a standalone first-class settings section (设置 → Loom 记忆),
+  // no longer a tab inside the Plugins section. The slot is list-kind; the
+  // settings shell hands the component its inject face plus the locale bound
+  // to our NS. Sits right after the Plugins section (order 15) in the ledger.
   try {
-    ctx.slots.inject("settings.plugins.tab", () =>
+    ctx.slots.inject("settings.section", () =>
       ctx.slots.register(
         {
-          name: "settings.plugins.tab",
+          name: "settings.section",
           id: "loom",
-          order: 20,
+          order: 16,
           label: () => t("nav"),
           locale: NS,
           inject: sectionInjected,
@@ -83,7 +83,7 @@ export function apply(ctx: ClientContext): void {
       ),
     );
   } catch (error) {
-    console.warn("[dsh-loom] settings.plugins.tab registration failed:", error);
+    console.warn("[dsh-loom] settings.section registration failed:", error);
   }
 
   // Config card: drive the `dsh-loom` settings namespace through the
