@@ -136,23 +136,6 @@ function IconRefresh({ size = 13 }: { size?: number }) {
   );
 }
 
-function IconLink({ size = 13 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M6.8 9.2c1 1 2.6 1 3.6 0l2.3-2.3a2.55 2.55 0 0 0-3.6-3.6L8.3 4.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9.2 6.8c-1-1-2.6-1-3.6 0L3.3 9.1a2.55 2.55 0 0 0 3.6 3.6l1.2-1.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconArrow({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2.6 8h10.4M9.6 4.8L13 8l-3.4 3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 /* Plan-item status glyphs (mirror the built-in TodoPanel's 14px artboard). */
 function PlanGlyph({ status }: { status: PlanItemStatus }) {
   if (status === "completed") {
@@ -282,12 +265,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     }
     setData((prev) => ({ ...prev, loading: true }));
     try {
-      const [tasks, links, nodes] = await Promise.all([
-        api.tasks(effWs, true),
-        api.links(effWs),
-        api.nodes(effWs),
-      ]);
-      setData({ tasks: tasks.items, links: links.items, nodes: nodes.items, denied: false, error: null, loading: false });
+      const [tasks] = await Promise.all([api.tasks(effWs, true)]);
+      setData({ tasks: tasks.items, links: [], nodes: [], denied: false, error: null, loading: false });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       const denied = /403|loopback/i.test(message);
@@ -341,21 +320,13 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const pagedTasks = data.tasks.slice(taskPage * TASK_PAGE_SIZE, taskPage * TASK_PAGE_SIZE + TASK_PAGE_SIZE);
   const stableCount = data.tasks.length - activeTasks.length;
 
-  // Resolve node/task ids to display names for relation rows.
-  const nameOf = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const n of data.nodes) map.set(n.id, n.name);
-    for (const t of data.tasks) map.set(t.id, t.name);
-    return (id: string) => map.get(id) ?? id;
-  }, [data.nodes, data.tasks]);
-
   // The strip stays hidden while there is genuinely nothing to show. Two
   // visibility planes, so the built-in plan never disappears behind the
   // engram API: plan items render from the host projection (no HTTP), while
-  // the ESR/relations sections need a successful /api/dsh-engram read.
+  // the ESR tasks need a successful /api/dsh-engram read.
   const planVisible = planItems.length > 0;
   const esrVisible = touched && !data.loading && !data.denied
-    && (activeTasks.length > 0 || data.links.length > 0);
+    && activeTasks.length > 0;
   if (!effWs || (!planVisible && !esrVisible)) return null;
 
   const refreshNow = () => void load();
@@ -544,7 +515,6 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           {stableCount > 0 && (
             <span style={{ ...chip, ...STATUS.stable }}>已闭环 {stableCount}</span>
           )}
-          {data.links.length > 0 && <span style={{ ...chip, ...chipNeutral }}>关系 {data.links.length}</span>}
           {data.error && (
             <span style={{ ...chip, ...chipError }} title={data.error}>API 失败</span>
           )}
@@ -754,37 +724,6 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
             </div>
           )}
 
-          {/* Relations */}
-          {data.links.length > 0 && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
-                  关系 · {data.links.length}
-                </span>
-                <span style={{ fontSize: 11, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <IconLink /> esr_node / esr_link 建模
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                {data.links.slice(0, 8).map((l) => (
-                  <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ ...nodePill }} title={l.source}>{nameOf(l.source)}</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))", fontSize: 11 }}>
-                      <span style={{ border: "1px dashed var(--dsw-alias-border-l3, #cbd5e1)", borderRadius: 999, padding: "1px 7px", color: "var(--dsw-alias-label-secondary, #64748b)" }}>{l.relation}</span>
-                      <IconArrow />
-                    </span>
-                    <span style={{ ...nodePill }} title={l.target}>{nameOf(l.target)}</span>
-                    <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>· {fmtD(l.createdAt)}</span>
-                  </div>
-                ))}
-                {data.links.length > 8 && (
-                  <div style={{ fontSize: 11, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-                    +{data.links.length - 8} 条更多 — 完整关系见 设置 → 设置 · Engram 记忆
-                  </div>
-                )}
-              </div>
-            </>
-          )}
             </>
           )}
         </div>
@@ -896,21 +835,6 @@ const chipRef: CSSProperties = {
   color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontWeight: 500,
-};
-
-const nodePill: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  maxWidth: 220,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  borderRadius: 8,
-  padding: "2px 9px",
-  fontSize: 11.5,
-  fontWeight: 600,
-  background: "var(--dsw-alias-state-business-tertiary, rgba(99,102,241,.12))",
-  color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
 };
 
 const taskCard: CSSProperties = {
