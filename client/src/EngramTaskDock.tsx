@@ -205,6 +205,9 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Task-card paging: keeps the strip bounded however many ESR tasks exist. */
   const [taskPage, setTaskPage] = useState(0);
+  /** todo→ESR promotions done this session (dedupe by plan content). */
+  const [promoted, setPromoted] = useState<Set<string>>(new Set());
+  const [promoteBusy, setPromoteBusy] = useState(false);
   const [closeArtifact, setCloseArtifact] = useState("");
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
@@ -347,6 +350,28 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     } finally {
       setActionBusy(false);
     }
+  };
+
+  /** Promote this session's unfinished todo items into ESR draft tasks — the
+      bridge across the funnel's narrowest point (todo-heavy, esr-light). */
+  const toPromote = planItems.filter((p) => p.status !== "completed" && !promoted.has(p.content));
+  const promoteAll = async () => {
+    if (!effWs || promoteBusy || toPromote.length === 0) return;
+    setPromoteBusy(true);
+    const done: string[] = [];
+    for (const it of toPromote) {
+      try {
+        await api.createTask(effWs, it.content, "源自会话计划（todo_write 一键沉淀）");
+        done.push(it.content);
+      } catch {
+        /* loopback guard or transient — keep it for a retry */
+      }
+    }
+    if (done.length > 0) {
+      setPromoted((prev) => new Set([...prev, ...done]));
+      void load();
+    }
+    setPromoteBusy(false);
   };
 
   const submitClose = async (task: TaskRecord) => {
@@ -557,6 +582,14 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                   </li>
                 ))}
               </ul>
+              {(toPromote.length > 0 || promoted.size > 0) && (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 1 }}>
+                  <button type="button" className="ed-btn" style={{ ...btn, ...btnSolid, padding: "3px 9px", fontSize: 11.5 }} disabled={promoteBusy || toPromote.length === 0} onClick={() => void promoteAll()} title="把本轮待办转成 ESR 任务草稿（跨会话保留）">
+                    {promoteBusy ? "…" : promoted.size > 0 ? (toPromote.length > 0 ? `已沉淀 ${promoted.size} 项 · 再沉淀 ${toPromote.length} 项` : `已沉淀 ${promoted.size} 项`) : `沉淀到 ESR（${toPromote.length} 项）`}
+                  </button>
+                  <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>转草稿 · 跨会话闭环</span>
+                </div>
+              )}
               {activeTasks.length === 0 && (
                 <div style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted, #6b7280))", paddingTop: 2 }}>
                   <span aria-hidden style={{ color: badgeEsr.color }}>↳</span>
