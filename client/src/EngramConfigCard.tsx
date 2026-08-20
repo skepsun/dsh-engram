@@ -98,6 +98,7 @@ export const GROUPS: EngramConfigGroup[] = [
       { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
       { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
+      { key: "verifyArtifact", label: "校验 artifact 存在", hint: "esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过", kind: "bool" },
     ],
   },
   {

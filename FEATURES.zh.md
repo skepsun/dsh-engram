@@ -86,6 +86,16 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 - **设计取舍**：宿主没有干净的会话 cwd 切换 API，且改 `session.header.cwd` 会破坏
   「注入块按会话冻结 → 前缀稳定复用 KV 缓存」的架构，故做成纯 UI 焦点切换，不动模型上下文
 
+## 近期的两处核心增强（复用 DSH 本身）
+
+- **证据硬核化（verifyArtifact）**：`esr_close` 的非 URL artifact 会按工作区（= DSH 提供的会话
+  cwd）解析并在磁盘上实存校验；不存在则任务保持 ACTIVE 并给出原因（`force:true` 跳过磁盘校验，
+  三种证据门仍必填）。工具与网页表单共享 `store.evidenceGate` 单一证据门，口径不漂移。设置里
+  有「校验 artifact 存在」开关（DSH 自家 schemastery 表单，即时生效）。
+- **BM25 召回 + DSH 会话索引兜底**：`engram_recall` / 记忆搜索对内存池做进程内 BM25 排序
+  （确定性、零依赖、不建 SQLite）；本地零命中时自动复用 DSH 自带的跨会话全文索引
+  （`ctx.sessionQuery`，按 cwd 过滤）作为兜底，原来的 `search_sessions` 显式开关保持兼容。
+
 ## 工程约定（复用时请遵守）
 
 - **无图表库**：图谱/仪表盘/圆环全部手写 SVG，`lib/client.js` 保持纯净（运行期只依赖 react 系）

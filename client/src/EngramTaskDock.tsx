@@ -380,7 +380,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
       if (out.state === "active") {
         setData((prev) => ({
           ...prev,
-          error: `证据仍有缺口：${(out.gaps ?? []).join(", ")} — 任务保持 ACTIVE`,
+          error: `证据仍有缺口：${(out.gaps ?? []).join(", ")}${out.artifactReason ? `（${out.artifactReason}）` : ""} — 任务保持 ACTIVE`,
         }));
       } else {
         setClosingFor(null);

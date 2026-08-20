@@ -15,11 +15,20 @@ with one goal: **save tokens**.
   budget 700 chars ≈ 175 tokens; one line per memory) is injected at prompt
   assembly and **frozen per session**, keeping the request prefix byte-stable for
   KV-cache reuse. The agent drills down with `engram_recall` / `engram_detail` instead
-  of dumping raw hits into context.
+  of dumping raw hits into context; recall ranks the in-domain pool with an
+  in-process BM25 pass (TF·IDF with label/phrase boosts — deterministic, zero
+  deps), and on zero local hits it falls back to DSH's own cross-session
+  full-text index (`ctx.sessionQuery`, filtered by cwd) instead of building a
+  parallel SQLite index.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of
-  letting the agent declare victory without proof.
+  letting the agent declare victory without proof. With `verifyArtifact` on
+  (default), a non-URL artifact is resolved against the workspace (= the session
+  cwd) and must exist on disk — otherwise the task stays ACTIVE with the reason;
+  `force:true` (or disabling the toggle) skips the disk check, the three gates
+  are still mandatory. The tool and the web forms share one gate
+  (`store.evidenceGate`), so the two surfaces can never drift.
 - **Memory GC (pi-esr constraints)** — a scheduled, mechanical, archive-only
   sweep: TTL-expired memories are archived, over-cap workspaces evict the
   lowest-value entries, stable tasks past their retention window leave the

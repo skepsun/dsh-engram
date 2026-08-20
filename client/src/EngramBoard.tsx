@@ -20,7 +20,7 @@ export interface EngramBoardApi {
   tasks(workspace: string, includeStable?: boolean): Promise<{ items: TaskRecord[] }>;
   links(workspace: string): Promise<{ items: LinkRecord[] }>;
   createTask(workspace: string, name: string, description?: string): Promise<unknown>;
-  closeTask(workspace: string, id: string, evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] }): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[] }>;
+  closeTask(workspace: string, id: string, evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] }): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[]; artifactReason?: string }>;
 }
 
 export interface EngramBoardProps {
@@ -192,14 +192,18 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     setBusy(true);
     try {
       const refs = closeRefs.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
-      await api.closeTask(t.workspace, t.id, { artifact: closeArtifact, evaluation: closeEval, memoryRefs: refs });
+      const res = await api.closeTask(t.workspace, t.id, { artifact: closeArtifact, evaluation: closeEval, memoryRefs: refs });
+      if (res.state === "active") {
+        setError(`证据仍有缺口：${(res.gaps ?? []).join(", ") || "—"}${res.artifactReason ? `（${res.artifactReason}）` : ""} — 任务保持 ACTIVE`);
+        return;
+      }
       setClosingFor(null);
       setCloseArtifact("");
       setCloseEval("");
       setCloseRefs("");
       // Refresh this workspace's tasks (moves the card to 已闭环).
-      const res = await api.tasks(t.workspace, true);
-      setTasksByWs((prev) => ({ ...prev, [t.workspace]: res.items }));
+      const tasks = await api.tasks(t.workspace, true);
+      setTasksByWs((prev) => ({ ...prev, [t.workspace]: tasks.items }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

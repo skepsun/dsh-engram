@@ -11,10 +11,15 @@
   ——`git push` / `git stash` / 无提交信息的 commit——刻意**从不记录**（见下方「自动捕获策略」）。
 - **符号索引 + 渐进披露** — 一个紧凑的 `[ENGRAM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
   组装提示词时注入，并**按会话冻结**，让请求前缀字节稳定以复用 KV 缓存。模型需要细节时用
-  `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。
+  `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。召回对内存池做
+  **进程内 BM25 排序**（TF·IDF + 标签/短语加权，确定性、零依赖）；本地零命中时自动兜底到
+  **DSH 自带的跨会话全文索引**（`ctx.sessionQuery`，按 cwd 过滤）——不另建 SQLite，完全复用宿主。
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
-  摊在明面上，而不是让 agent 没有证据就宣布完成。
+  摊在明面上，而不是让 agent 没有证据就宣布完成。可开 `verifyArtifact`（默认开）：非 URL 的
+  artifact 按工作区（= 会话 cwd）解析并在磁盘上实存校验，路径不存在则任务保持 ACTIVE、给出原因；
+  `force:true`（或关掉该开关）可跳过磁盘校验——三种证据门照样必填。工具与网页表单共享同一个
+  证据门（`store.evidenceGate`），口径绝不会漂移。
 - **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
   stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
   永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。

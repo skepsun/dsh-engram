@@ -424,7 +424,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         memoryRefs: refs,
       });
       if (out.state === "active") {
-        setError(`证据仍有缺口：${(out.gaps ?? []).join(", ")} — 任务保持 ACTIVE，补齐后再提交`);
+        setError(`证据仍有缺口：${(out.gaps ?? []).join(", ")}${out.artifactReason ? `（${out.artifactReason}）` : ""} — 任务保持 ACTIVE，补齐后再提交`);
       }
       setCloseFor(null);
       setCloseArtifact("");

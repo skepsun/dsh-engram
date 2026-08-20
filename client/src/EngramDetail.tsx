@@ -154,7 +154,7 @@ export function EngramDetail({ target, api, memories, tasks, nodes, links, onClo
     try {
       const refs = gRefs.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
       const res = await api.closeTask(task.workspace, task.id, { artifact: gArt.trim() || undefined, evaluation: gEval.trim() || undefined, memoryRefs: refs.length ? refs : undefined });
-      setNotice(res.state === "stable" ? `已闭环 → STABLE ✓` : `仍有缺口：${(res.gaps ?? []).join(", ") || "—"}`);
+      setNotice(res.state === "stable" ? `已闭环 → STABLE ✓` : `仍有缺口：${(res.gaps ?? []).join(", ") || "—"}${res.artifactReason ? `（${res.artifactReason}）` : ""}`);
       onChanged?.();
     } catch (e) {
       setNotice(`关闭失败：${e instanceof Error ? e.message : String(e)}`);

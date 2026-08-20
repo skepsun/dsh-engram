@@ -230,7 +230,7 @@ export class EngramApi {
     workspace: string,
     id: string,
     evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] },
-  ): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[] }> {
+  ): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[]; artifactReason?: string }> {
     return readJson(
       await fetch(`${API_PREFIX}/tasks/close`, {
         method: "POST",

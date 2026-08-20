@@ -26,6 +26,9 @@ const CONFIG = {
   maxTasksPerWorkspace: 40,
   engramIndexOrder: 40,
   esrOrder: 41,
+  // Pure-logic tests use fake workspace keys ("/w"); the on-disk evidence gate
+  // gets its own dedicated test with a real tempdir (verifyArtifact: true).
+  verifyArtifact: false,
 };
 
 function fakeFacility() {
@@ -266,6 +269,70 @@ test("api: GUI task create + close routes (evidence gates)", async () => {
   assert.equal(nf._out.status, 404);
   await domain.close();
 });
+
+test("api: evidence gate verifies artifact exists on disk (verifyArtifact)", async () => {
+  const os = await import("node:os");
+  const fsp = await import("node:fs/promises");
+  const path = await import("node:path");
+  const ws = await fsp.mkdtemp(path.join(os.tmpdir(), "dsh-engram-gate-"));
+  await fsp.mkdir(path.join(ws, "out"), { recursive: true });
+  await fsp.writeFile(path.join(ws, "out", "report.md"), "# done\n");
+
+  const cfg = { ...CONFIG, verifyArtifact: true };
+  const domain = await openEngramDomain(fakeFacility());
+  const service = { config: cfg, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeEngramRoutes(service);
+
+  const create = async (name) => {
+    const r = res();
+    await route(routes, `${API_PREFIX}/tasks`, "POST").handler(
+      req({ method: "POST", url: `${API_PREFIX}/tasks`, body: { workspace: ws, name, description: "" } }),
+      r,
+    );
+    return json(r).task.id;
+  };
+  const close = async (id, body) => {
+    const r = res();
+    await route(routes, `${API_PREFIX}/tasks/close`, "POST").handler(
+      req({ method: "POST", url: `${API_PREFIX}/tasks/close`, body: { workspace: ws, id, ...body } }),
+      r,
+    );
+    return json(r);
+  };
+
+  // relative artifact that exists on disk → stable
+  const t1 = await create("exists");
+  const c1 = await close(t1, { artifact: "out/report.md", evaluation: "reviewed", memory_refs: ["m1"] });
+  assert.equal(c1.state, "stable");
+
+  // missing artifact → stays active with an explicit reason
+  const t2 = await create("missing");
+  const c2 = await close(t2, { artifact: "out/gone.md", evaluation: "reviewed", memory_refs: ["m1"] });
+  assert.equal(c2.state, "active");
+  assert.ok(c2.gaps.includes("artifact"));
+  assert.match(c2.artifactReason, /not found on disk/);
+
+  // http(s) artifact → stable (URLs are exempt)
+  const t3 = await create("url");
+  const c3 = await close(t3, { artifact: "https://example.com/release/2.0.0", evaluation: "reviewed", memory_refs: ["m1"] });
+  assert.equal(c3.state, "stable");
+
+  // absolute path that exists → stable
+  const t4 = await create("abs");
+  const c4 = await close(t4, { artifact: path.join(ws, "out", "report.md"), evaluation: "reviewed", memory_refs: ["m1"] });
+  assert.equal(c4.state, "stable");
+
+  // gates still required with verify on
+  const t5 = await create("gated");
+  const c5 = await close(t5, { artifact: "out/report.md", evaluation: "" });
+  assert.equal(c5.state, "active");
+  assert.ok(c5.gaps.includes("evaluation"));
+  assert.ok(c5.gaps.includes("memory_ref"));
+
+  await domain.close();
+  await fsp.rm(ws, { recursive: true, force: true });
+});
+
 test("api: nodes route lists entities; overview counts them", async () => {
   const domain = await openEngramDomain(fakeFacility());
   await domain.putEntity({ id: "ent_a", workspace: "/w", name: "A", kind: "pkg", description: "", sessionId: "s", createdAt: 1, updatedAt: 1 });
