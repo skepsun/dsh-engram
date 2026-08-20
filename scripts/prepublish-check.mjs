@@ -21,7 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const tmp = mkdtempSync(join(tmpdir(), "dsh-loom-pack-"));
+const tmp = mkdtempSync(join(tmpdir(), "dsh-engram-pack-"));
 const PEERS = [
   "@deepseek-ai/cordis@^4.0.1",
   "@deepseek-ai/dsh-settings@^0.1.0-rc.7",
@@ -38,7 +38,7 @@ try {
   //    script's child npm, which would make the nested pack a no-op — pin
   //    dry-run off explicitly so the tarball is always really produced.
   sh("npm", ["pack", "--dry-run=false", "--pack-destination", tmp], root);
-  const tarball = readdirSync(tmp).find((f) => f.startsWith("dsh-loom-") && f.endsWith(".tgz"));
+  const tarball = readdirSync(tmp).find((f) => f.endsWith(".tgz"));
   if (tarball === undefined) throw new Error("no packed tarball produced");
 
   // 2. install the artifact + peers into the temp dir (mirrors a real profile);
@@ -46,8 +46,10 @@ try {
   //    into child npm and a no-op install would leave nothing to import.
   sh("npm", ["install", "--no-audit", "--no-fund", "--dry-run=false", join(tmp, tarball), ...PEERS], tmp);
 
-  // 3. import host + client from the INSTALLED fileset
-  const installed = join(tmp, "node_modules", "dsh-loom");
+  // 3. import host + client from the INSTALLED fileset (name may be scoped:
+  //    @scope/pkg installs under node_modules/@scope/pkg)
+  const name = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).name;
+  const installed = join(tmp, "node_modules", ...name.split("/"));
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
   const host = await import(pathToFileURL(join(installed, manifest.main)).href);
   const expected = ["apply", "inject", "name"].sort().join(",");

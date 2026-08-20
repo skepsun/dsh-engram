@@ -1,8 +1,8 @@
 /**
- * dsh-loom recall & structure benchmark (offline, deterministic).
+ * dsh-engram recall & structure benchmark (offline, deterministic).
  *
  * LongMemEval-style controlled corpus with known ground-truth answers,
- * measured through the REAL store/recall path (`openLoomDomain` + `recall`):
+ * measured through the REAL store/recall path (`openEngramDomain` + `recall`):
  *   Precision@k / Recall@k / Hit@1 / MRR  over literal retrieval (tag-exact,
  *   substring, multi-term, CJK, recency tie-break, entity timeline, negatives).
  *
@@ -12,9 +12,9 @@
  * Run: npm run eval   (exit 0; numbers are honest, not tuned).
  */
 
-import { openLoomDomain } from "../lib/store.js";
+import { openEngramDomain } from "../lib/store.js";
 
-const WS = "/home/u/projs/dsh-loom";
+const WS = "/home/u/projs/dsh-engram";
 
 const CONFIG = {
   indexMaxLines: 12,
@@ -64,7 +64,7 @@ const SEEDS = [
   // topic C — memory system (tag: memory)
   ["decision", "Deterministic literal recall over embeddings: scores are stable across restarts", ["memory", "recall"], "ent_memory", 19],
   ["error", "TDZ crash: hooks referenced memPageCount before initialization — fixed by ordering", ["memory", "ui", "bug"], "ent_memory", 18],
-  ["handoff", "ipfs pinning offloaded to dsh-store; loom keeps only textual memories", ["memory", "handoff"], "ent_memory", 17],
+  ["handoff", "ipfs pinning offloaded to dsh-store; engram keeps only textual memories", ["memory", "handoff"], "ent_memory", 17],
   // topic D — Chinese ops notes (CJK retrieval)
   ["procedure", "中文发布流程：先跑 npm test 再 npm run build:client，全部通过后热重载", ["发布", "流程"], "ent_ops", 16],
   ["fact", "中文名词约定：模型主动调用 esr 工具记作『esr 主动性』", ["约定", "esr"], "ent_ops", 15],
@@ -144,7 +144,7 @@ async function runStructureBench(domain) {
 
 async function main() {
   const facility = fakeFacility();
-  const domain = await openLoomDomain(facility);
+  const domain = await openEngramDomain(facility);
   for (let i = 0; i < SEEDS.length; i += 1) {
     const [kind, text, tags, entity, ageDays] = SEEDS[i];
     await domain.storeMemory(
@@ -163,7 +163,7 @@ async function main() {
   const hit1 = recallRows.filter((x) => x.hitAt1).length / n;
   const mrr = avg("mrr");
 
-  console.log("== dsh-loom recall & structure benchmark ==");
+  console.log("== dsh-engram recall & structure benchmark ==");
   console.log("corpus:", SEEDS.length, "seeded + 3 dedup stores, workspace", WS);
   console.log("");
   console.log("-- retrieval (LongMemEval-style probes through real recall()) --");

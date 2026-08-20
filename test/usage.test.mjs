@@ -1,5 +1,5 @@
 /**
- * dsh-loom usage-observability tests — recall-output parsing, daily rollups,
+ * dsh-engram usage-observability tests — recall-output parsing, daily rollups,
  * and the /stats route ratios (real ESR-proactivity / recall-hit metrics).
  */
 
@@ -7,8 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
-import { openLoomDomain } from "../lib/store.js";
-import { makeLoomRoutes, API_PREFIX } from "../lib/api.js";
+import { openEngramDomain } from "../lib/store.js";
+import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
 import { dayKey, recallStatsFromOutput } from "../lib/usage.js";
 
 const CONFIG = {
@@ -63,17 +63,17 @@ test("recallStatsFromOutput counts item lines and zero-hit messages", () => {
 });
 
 test("bumpUsage merges per-tool counts, failures, recall across days and workspaces", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const d1 = dayKey(new Date(2026, 7, 20).getTime());
   const d2 = dayKey(new Date(2026, 7, 21).getTime());
-  await domain.bumpUsage("/ws/a", d1, { counts: { loom_store: 1, esr_task: 1 }, failures: 0, recall: { queries: 1, withHits: 1, hitsTotal: 2 } });
+  await domain.bumpUsage("/ws/a", d1, { counts: { engram_store: 1, esr_task: 1 }, failures: 0, recall: { queries: 1, withHits: 1, hitsTotal: 2 } });
   await domain.bumpUsage("/ws/a", d1, { counts: { esr_node: 2 }, failures: 1, recall: { queries: 1, hitsTotal: 5 } });
-  await domain.bumpUsage("/ws/b", d2, { counts: { loom_recall: 1 }, failures: 0, recall: {} });
+  await domain.bumpUsage("/ws/b", d2, { counts: { engram_recall: 1 }, failures: 0, recall: {} });
   const all = domain.usageRows();
   // two bumps on the same (workspace, day) merge into ONE row; /ws/b adds another
   assert.equal(all.length, 2);
   const a1 = all.find((r) => r.workspace === "/ws/a" && r.day === d1);
-  assert.equal(a1.counts.loom_store, 1);
+  assert.equal(a1.counts.engram_store, 1);
   assert.equal(a1.counts.esr_task, 1);
   assert.equal(a1.counts.esr_node, 2);
   assert.equal(a1.failures, 1);
@@ -85,18 +85,18 @@ test("bumpUsage merges per-tool counts, failures, recall across days and workspa
 });
 
 test("api: /stats returns ratios from the usage rollup", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const day = dayKey();
   // 2 memory calls + 2 esr calls → esrRatio 0.5; 2 recall queries, 1 with hits
-  await domain.bumpUsage("/ws/a", day, { counts: { loom_store: 1, loom_recall: 2, esr_node: 2, esr_task: 1 }, failures: 1, recall: { queries: 2, withHits: 1, hitsTotal: 4 } });
+  await domain.bumpUsage("/ws/a", day, { counts: { engram_store: 1, engram_recall: 2, esr_node: 2, esr_task: 1 }, failures: 1, recall: { queries: 2, withHits: 1, hitsTotal: 4 } });
   const service = {
     config: CONFIG,
     captureStats: { total: 0, git: 0, file: 0, error: 0 },
     openedDomain: () => domain,
     getDomain: () => Promise.resolve(domain),
-    renderIndexBlock: () => "[LOOM] workspace: a",
+    renderIndexBlock: () => "[ENGRAM] workspace: a",
   };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const handler = routes.find((r) => r.path === `${API_PREFIX}/stats` && (r.method === void 0 || r.method === "GET"));
   assert.ok(handler, "/stats route registered");
   const r = res();

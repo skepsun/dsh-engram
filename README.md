@@ -1,20 +1,20 @@
-# dsh-loom
+# dsh-engram
 
 > **[English](README.md) · [中文](README.zh.md)**
 
 Minimalist long-term memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), distilled from the
-[pi-loom](https://github.com/skepsun/pi-loom) and [pi-esr](https://github.com/skepsun/pi-esr) ideas —
+[symbolic-index](https://github.com/skepsun/symbolic-index) and [pi-esr](https://github.com/skepsun/pi-esr) ideas —
 with one goal: **save tokens**.
 
 - **Zero-LLM intake** — auto-captures meaningful events from tool results by pure
   pattern matching (git milestones with a written `-m` commit message, edits to
-  key files, repeated errors), plus an explicit `loom_store`. Nothing on the hot
+  key files, repeated errors), plus an explicit `engram_store`. Nothing on the hot
   path calls a model, and pure plumbing — `git push` / `git stash` / silent
   commits — is deliberately never recorded (see *Auto-capture policy* below).
-- **Symbolic index + progressive disclosure** — a compact `[LOOM]` block (default
+- **Symbolic index + progressive disclosure** — a compact `[ENGRAM]` block (default
   budget 700 chars ≈ 175 tokens; one line per memory) is injected at prompt
   assembly and **frozen per session**, keeping the request prefix byte-stable for
-  KV-cache reuse. The agent drills down with `loom_recall` / `loom_detail` instead
+  KV-cache reuse. The agent drills down with `engram_recall` / `engram_detail` instead
   of dumping raw hits into context.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
@@ -36,7 +36,7 @@ MIT   ·   node >= 22.19   ·   host-half + browser-half in one package
 ## Why another memory plugin?
 
 Surveys of the existing DSH plugin ecosystem show the recall-bridge, approval-gate,
-LLM-distillation and vector/graph niches are already crowded. dsh-loom fills the
+LLM-distillation and vector/graph niches are already crowded. dsh-engram fills the
 three gaps that matter for token discipline:
 
 1. **No model in the write path** — capture is deterministic pattern matching.
@@ -45,23 +45,23 @@ three gaps that matter for token discipline:
 3. **Honest task closure** — STABLE cannot be declared without evidence.
 
 DSH already provides cross-session FTS (`ctx.sessionQuery`), storage
-(`ctx.storageDomain`), prompt-injection hooks and settings slots; dsh-loom is a
+(`ctx.storageDomain`), prompt-injection hooks and settings slots; dsh-engram is a
 thin composition layer over them, not a re-implementation.
 
 ## Install
 
 ```sh
 # from GitHub (this repo)
-dsh plugin --profile web add github:skepsun/dsh-loom
+dsh plugin --profile web add github:skepsun/dsh-engram
 
 # once published to npm
-dsh plugin --profile web add dsh-loom
+dsh plugin --profile web add dsh-engram
 
 # local development (symlink — edits apply immediately)
-dsh plugin --profile web add link:/path/to/dsh-loom
+dsh plugin --profile web add link:/path/to/dsh-engram
 ```
 
-Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
+Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_engram.json`.
 
 > The npm and GitHub installs below need **no manual dependency step**: pnpm
 > installs `zod` and vendors the optional `@deepseek-ai/*` peers into the
@@ -70,7 +70,7 @@ Then **restart `dsh web`**. Data persists in `~/.dsh/storages/dsh_loom.json`.
 > the `link:` development workflow, where pnpm deliberately does not install a
 > symlinked directory's dependencies.
 
-> A fresh session is required to see the injected `[LOOM]`/`[ESR]` blocks and the
+> A fresh session is required to see the injected `[ENGRAM]`/`[ESR]` blocks and the
 > tools; both prompts and the tools registry are assembled per session.
 
 ### Dependencies for `link:` installs
@@ -80,7 +80,7 @@ host-side dependencies must be present **next to the checkout** — they are not
 tracked by git:
 
 ```sh
-cd /path/to/dsh-loom
+cd /path/to/dsh-engram
 node scripts/setup-links.mjs     # one command: links the @deepseek-ai
                                  # workspace packages into node_modules AND
                                  # installs zod (reused from the harness
@@ -89,7 +89,7 @@ node scripts/setup-links.mjs     # one command: links the @deepseek-ai
 
 The script auto-locates the harness checkout at `../deepseek-harness` (also
 works when it sits next to the repo's *parent*, e.g. `E:\deepseek-harness` +
-`E:\kototoro_demo\dsh-loom`); override with `DSH_HARNESS_DIR`. Without this
+`E:\kototoro_demo\dsh-engram`); override with `DSH_HARNESS_DIR`. Without this
 step, `dsh web` boot fails with `ERR_MODULE_NOT_FOUND: Cannot find package
 'zod'` (and would fail on the `@deepseek-ai/*` peers next). `node
 scripts/setup-links.mjs --check` prints the state without writing anything.
@@ -98,7 +98,7 @@ scripts/setup-links.mjs --check` prints the state without writing anything.
 
 After restart, inside the **native** DSH settings surface:
 
-- **Settings → Loom Memory** — a standalone first-class settings section
+- **Settings → Engram Memory** — a standalone first-class settings section
   (right after the Plugins section, not a child tab of it). Default
   "All workspaces" view shows every workspace's memories/tasks/links
   grouped by workspace (dropdown + prev/next workspace pager; the memory
@@ -106,29 +106,29 @@ After restart, inside the **native** DSH settings surface:
   column widths, 3-line clamped content ellipsis and full text on hover).
   Overview
   stat cards (counts by workspace/kind, auto-capture totals, per-workspace
-  `[LOOM]` index token estimate, cumulative GC totals), a searchable /
+  `[ENGRAM]` index token estimate, cumulative GC totals), a searchable /
   filterable memory table with archive + delete actions, an ESR task board
   with an inline "new task" form and a per-task "fill evidence to close"
   (artifact / evaluation / memory_ref → STABLE, same gates as esr_close),
   a node + relation list (nodes are domain objects the model registers via
   esr_node — package/service/repo/concept; relations via esr_link), and a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
-  create/close use the host's new `POST /api/dsh-loom/tasks` and
-  `POST /api/dsh-loom/tasks/close` routes. Model-side proactivity is driven
-  by the [LOOM]/[ESR] injected blocks: multi-step work gets a task now,
+  create/close use the host's new `POST /api/dsh-engram/tasks` and
+  `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven
+  by the [ENGRAM]/[ESR] injected blocks: multi-step work gets a task now,
   recurring domain objects get a node, related tasks/nodes get a link.
 
   **Real behaviour telemetry (agent observability)** — the ESR page opens
   with an "agent behaviour" panel fed by a new `usage` table (per workspace
-  × day rollup) + `GET /api/dsh-loom/stats`: every `loom_*`/`esr_*` tool call
+  × day rollup) + `GET /api/dsh-engram/stats`: every `engram_*`/`esr_*` tool call
   is recorded (counts, failures, recall mechanics). Reported ratios:
   **ESR proactivity** = esr calls / (memory + esr calls); **recall hit rate**
   = recalls returning ≥1 hit / total recalls; **mean hits per query**;
-  **detail conversion** = a loom_detail following a hit recall within 8
+  **detail conversion** = a engram_detail following a hit recall within 8
   session events. Per-tool counts + a 14-day daily rollup are shown too.
   Numbers are real, from real sessions — lift ESR proactivity by watching
   this panel and tuning the injected prompt.
-- **Settings → Plugins → Plugin configuration → dsh-loom** — a collapsible
+- **Settings → Plugins → Plugin configuration → dsh-engram** — a collapsible
   config card in the same style as the built-in "Shell / Agent loop / Web
   search" cards: title + one-line description + chevron, collapsed by default,
   click to expand/collapse. Open, its ~12 options render under four groups —
@@ -140,14 +140,14 @@ After restart, inside the **native** DSH settings surface:
 
 The browser half is served by DSH's client-module loader directly from this
 package (`dsh.client` + `exports["./client"]`, no web-application rebuild); the
-data comes from the loopback-fenced `/api/dsh-loom/*` route family. The fence
+data comes from the loopback-fenced `/api/dsh-engram/*` route family. The fence
 stays closed by default; to reach the memory viewer from an authorized tunnel
 hostname, list it in the plugin's `trustedHosts` config (e.g. via the registry
 or a profile patch):
 
 ```jsonc
-// patch/loom.json
-{ "loom": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
+// patch/engram.json
+{ "engram": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
 ```
 
 If you change `client/src`, rebuild the bundle with:
@@ -160,9 +160,9 @@ npm run build:client
 
 | Tool | Purpose | Kind |
 |---|---|---|
-| `loom_store` | Explicitly store one memory (kind, tags, optional entity anchor) | write |
-| `loom_recall` | Deterministic keyword recall over workspace memories; optional `search_sessions` FTS over past sessions | read |
-| `loom_detail` | Full record of one memory id (provenance, tags, hits) | read |
+| `engram_store` | Explicitly store one memory (kind, tags, optional entity anchor) | write |
+| `engram_recall` | Deterministic keyword recall over workspace memories; optional `search_sessions` FTS over past sessions | read |
+| `engram_detail` | Full record of one memory id (provenance, tags, hits) | read |
 | `esr_task` | Create a task entity (draft → active) | write |
 | `esr_close` | Close a task via the evidence protocol (artifact + evaluation + memory_ref) | write |
 | `esr_link` | Add a typed relation between two entities (mini graph) | write |
@@ -200,16 +200,16 @@ conversation. Exactly what earns a memory record:
 | read of a config path | record | 0.3 |
 | repeated tool error | record (deduped by message) | 0.25 |
 
-Explicit `loom_store` writes are always recorded regardless of these rules
+Explicit `engram_store` writes are always recorded regardless of these rules
 (rate-limited per session).
 
-**Who earns a `[LOOM]` index line** (this is what actually touches the prompt):
+**Who earns a `[ENGRAM]` index line** (this is what actually touches the prompt):
 `signal >= minIndexSignal` **or** `hits >= promoteHits` **or** `kind === "task"`,
 then capped by `indexMaxLines` / `indexMaxChars`. One extra guard keeps the pipe
 clean: auto-captured git command echoes — text that embeds a shell chain
 (`git push: cd … && …`) — stay out of the index even when above the signal
 threshold, until recall hits have promoted them. Everything else sits quietly in
-storage, reachable on demand via `loom_recall` / `loom_detail` — "retrieved ≠
+storage, reachable on demand via `engram_recall` / `engram_detail` — "retrieved ≠
 injected".
 
 ## Injected blocks
@@ -217,10 +217,10 @@ injected".
 What the model actually sees (rendered once per session, then frozen):
 
 ```
-[LOOM] workspace: pi-loom · 2 memories · 1 task(s) active · 0 links
+[ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
+drill: engram_store (user asks to remember) | engram_recall <query> | engram_detail <id> | esr_task / esr_close / esr_link
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -231,7 +231,7 @@ Prefixes: `[D]` decision · `[E]` error · `[P]` procedure · `[F]` fact ·
 `[I]` insight · `[H]` handoff · `[T]` task. Membership follows the
 *Auto-capture policy* (signal threshold / recall promotion / git-echo guard),
 bounded by the configured line and character budgets. `#` ids address the full
-records via `loom_detail`. When a workspace has no tasks, `[ESR]` still renders
+records via `engram_detail`. When a workspace has no tasks, `[ESR]` still renders
 one line naming `esr_task`/`esr_close` so the mechanism stays visible to the
 model instead of vanishing.
 
@@ -241,13 +241,13 @@ Defaults are token-conscious; override any key via the profile patch
 (`~/.dsh/profiles/web/cordis.patch.yml`) or the web config card:
 
 ```yaml
-- id: loom
+- id: engram
   config:
     autoCapture: true        # zero-LLM tool-result capture
-    sessionSearch: true      # loom_recall may also FTS past sessions
+    sessionSearch: true      # engram_recall may also FTS past sessions
     autoCapturePerSession: 40
-    indexMaxLines: 12        # [LOOM] line cap
-    indexMaxChars: 700       # [LOOM] char cap (token budget)
+    indexMaxLines: 12        # [ENGRAM] line cap
+    indexMaxChars: 700       # [ENGRAM] char cap (token budget)
     minIndexSignal: 0.4      # auto-captures below this stay out of the index
                              # (git command echoes are excluded regardless,
                              # until promoted by recall hits)
@@ -257,7 +257,7 @@ Defaults are token-conscious; override any key via the profile patch
     gcEnabled: true          # scheduled memory GC
     gcIntervalHours: 24      # sweep cadence
     gcStableRetentionDays: 120  # stable tasks leave [ESR] after this
-    loomIndexOrder: 40       # systemPrompt section order (before tools band)
+    engramIndexOrder: 40    # systemPrompt section order (before tools band)
     esrOrder: 41
 ```
 
@@ -273,7 +273,7 @@ npm run build:client
 
 **npm run eval** (eval/recall-bench.mjs) is the deterministic layer —
 LongMemEval-style: a controlled corpus (ASCII + CJK, known tags/entities/
-timestamps) measured through the real store/recall path (openLoomDomain +
+timestamps) measured through the real store/recall path (openEngramDomain +
 domain.recall), reporting Precision@k / Recall@k / MRR / Hit@1 per probe
 (exact tag, substring, multi-term, CJK, phrase-single, ordering, negative)
 plus StructMemEval-flavoured structure metrics (exact-duplicate dedup rate,
@@ -282,7 +282,7 @@ numbers — everyone gets the same output. Current run: AVG P@k 0.770 /
 AVG R@k 1.000 / MRR 0.889 / hit@1 0.889 / 0 negative false-positives /
 dedup 1.0.
 
-**/api/dsh-loom/stats + the observability panel** is the real-session layer —
+**/api/dsh-engram/stats + the observability panel** is the real-session layer —
 it answers how the model actually uses the memory in production (ESR
 proactivity ratio, recall hit rate, detail conversion), while the eval
 answers how good the retrieval layer itself is.
@@ -302,8 +302,8 @@ keyed slot "settings.plugin.item" requires options.key
 
 Cause: DSH hosts since `0.1.0-rc.7` declare the config-card slot
 `settings.plugin.item` as **keyed by the settings namespace a card edits** —
-which is exactly how dsh-loom's own config card registers (under
-`key: "dsh-loom"`). The `@linxin666/dsh-web-ui-all` family **before 0.2.0**
+which is exactly how dsh-engram's own config card registers (under
+`key: "dsh-engram"`). The `@linxin666/dsh-web-ui-all` family **before 0.2.0**
 (`dsh-client-ui-web-ui-settings`) registered its group card into that slot
 **without a `key`**, and because a single failed loader entry aborts the whole
 boot, the GUI stays stuck on the failure page.
@@ -321,7 +321,7 @@ Fixes:
 
 ## Related
 
-- [pi-loom](https://github.com/skepsun/pi-loom) — the original cross-session
+- [symbolic-index](https://github.com/skepsun/symbolic-index) — the original cross-session
   memory plugin (5-signal RRF fusion, sqlite-vec, Dream Engine).
 - [pi-esr](https://github.com/skepsun/pi-esr) — project-lifetime evidence-driven
   task states; the closure protocol here is its lite form.

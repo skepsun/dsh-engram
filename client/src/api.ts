@@ -1,10 +1,10 @@
 /**
- * dsh-loom client: browser API client for the /api/dsh-loom route family.
+ * dsh-engram client: browser API client for the /api/dsh-engram route family.
  * Plain same-origin fetch (the SSH panel's proven pattern) — no RPC, no
  * WebSocket. Every endpoint is loopback-fenced on the host side.
  */
 
-export const API_PREFIX = "/api/dsh-loom";
+export const API_PREFIX = "/api/dsh-engram";
 
 export interface MemoryRecord {
   id: string;
@@ -64,7 +64,7 @@ export interface WorkspaceCounts {
   nodes: number;
 }
 
-export interface LoomConfig {
+export interface EngramConfig {
   autoCapture: boolean;
   sessionSearch: boolean;
   autoCapturePerSession: number;
@@ -130,28 +130,28 @@ export interface UsageRatios {
   detailFollowRate: number | null;
 }
 
-export interface LoomStats {
+export interface EngramStats {
   workspace: string | null;
   byDay: UsageDay[];
   totals: { counts: Record<string, number>; failures: number; recall: Record<string, number> };
   ratios: UsageRatios;
 }
 
-export interface LoomOverview {
+export interface EngramOverview {
   workspaces: Record<string, WorkspaceCounts>;
   kinds: Record<string, number>;
   totals: WorkspaceCounts;
   indexes: Record<string, IndexCost>;
   captures: { total: number; git: number; file: number; error: number };
   gc: GcStats;
-  config: LoomConfig;
+  config: EngramConfig;
 }
 
 /** Error carrying the route's JSON error message. */
-export class LoomApiError extends Error {
+export class EngramApiError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "LoomApiError";
+    this.name = "EngramApiError";
   }
 }
 
@@ -160,14 +160,14 @@ async function readJson<T>(response: Response): Promise<T> {
   try {
     body = await response.json();
   } catch {
-    throw new LoomApiError(`HTTP ${response.status}: invalid JSON response`);
+    throw new EngramApiError(`HTTP ${response.status}: invalid JSON response`);
   }
   if (!response.ok) {
     const message =
       typeof body === "object" && body !== null && typeof (body as { error?: unknown }).error === "string"
         ? (body as { error: string }).error
         : `HTTP ${response.status}`;
-    throw new LoomApiError(message);
+    throw new EngramApiError(message);
   }
   return body as T;
 }
@@ -181,8 +181,8 @@ function query(params: Record<string, string | number | undefined>): string {
   return text === "" ? "" : `?${text}`;
 }
 
-export class LoomApi {
-  async overview(): Promise<LoomOverview> {
+export class EngramApi {
+  async overview(): Promise<EngramOverview> {
     // NB: readJson expects a Response, not a Promise — always await fetch first.
     return readJson(await fetch(`${API_PREFIX}/overview`));
   }
@@ -235,11 +235,11 @@ export class LoomApi {
     return readJson(await fetch(`${API_PREFIX}/nodes${query({ workspace })}`));
   }
 
-  async stats(workspace?: string): Promise<LoomStats> {
+  async stats(workspace?: string): Promise<EngramStats> {
     return readJson(await fetch(`${API_PREFIX}/stats${query({ workspace })}`));
   }
 
-  async config(): Promise<LoomConfig> {
+  async config(): Promise<EngramConfig> {
     return readJson(await fetch(`${API_PREFIX}/config`));
   }
 

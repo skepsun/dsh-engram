@@ -1,5 +1,5 @@
 /**
- * dsh-loom GC tests — pi-esr-flavoured memory garbage collection:
+ * dsh-engram GC tests — pi-esr-flavoured memory garbage collection:
  * working-set protection, TTL expiry, over-cap eviction, stable-task
  * retention, dangling-link removal, dry-run no-op, and the /gc API route.
  */
@@ -8,8 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
-import { openLoomDomain } from "../lib/store.js";
-import { makeLoomRoutes, API_PREFIX } from "../lib/api.js";
+import { openEngramDomain } from "../lib/store.js";
+import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
 
 const CONFIG = {
   promoteHits: 3,
@@ -54,7 +54,7 @@ async function seed(domain, ws = "/w") {
 }
 
 test("gc: archives TTL-expired memories, keeps the working set", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const ws = "/w";
   const decision = await domain.storeMemory({ workspace: ws, kind: "decision", text: "protected — pointed at by an active task", tags: [], sessionId: "s1" }, CONFIG);
   // working set: an ACTIVE task carries the decision id in its memoryRefs
@@ -77,7 +77,7 @@ test("gc: archives TTL-expired memories, keeps the working set", async () => {
 });
 
 test("gc: over-cap eviction protects indexed hits and task memories", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const ws = "/w";
   const seedCfg = { ...CONFIG, maxMemoriesPerWorkspace: 2000 };
   for (let i = 0; i < 4; i += 1) {
@@ -101,7 +101,7 @@ test("gc: over-cap eviction protects indexed hits and task memories", async () =
 });
 
 test("gc: stable tasks past retention are archived and leave the surface", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const ws = "/w";
   const now = Date.now();
   await domain.putTask({
@@ -125,7 +125,7 @@ test("gc: stable tasks past retention are archived and leave the surface", async
 });
 
 test("gc: removes only fully-dangling links", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const ws = "/w";
   const now = Date.now();
   await domain.putTask({
@@ -143,7 +143,7 @@ test("gc: removes only fully-dangling links", async () => {
 });
 
 test("gc: dryRun mutates nothing", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const ws = "/w";
   await seed(domain, ws); // 1 expired + 1 live
   const before = domain.listMemories(ws, 200).length;
@@ -154,7 +154,7 @@ test("gc: dryRun mutates nothing", async () => {
 });
 
 test("api: POST /gc returns a report and updates gcStats (except in dryRun)", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   await seed(domain, "/w");
   const service = {
     config: CONFIG,
@@ -163,7 +163,7 @@ test("api: POST /gc returns a report and updates gcStats (except in dryRun)", as
     captureStats: { total: 0, git: 0, file: 0, error: 0 },
     gcStats: { lastRun: 0, archivedMemories: 0, archivedTasks: 0, removedLinks: 0 },
   };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const stream = new Readable();
   stream._read = () => {};
   stream.method = "POST";

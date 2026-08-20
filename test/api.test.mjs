@@ -1,5 +1,5 @@
 /**
- * dsh-loom web API tests — exercise `makeLoomRoutes` handlers (overview /
+ * dsh-engram web API tests — exercise `makeEngramRoutes` handlers (overview /
  * memories filter + search / tasks / links / config / archive / delete)
  * against the in-memory domain with loopback-fenced fake requests.
  */
@@ -8,8 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
-import { openLoomDomain } from "../lib/store.js";
-import { makeLoomRoutes, API_PREFIX } from "../lib/api.js";
+import { openEngramDomain } from "../lib/store.js";
+import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -24,7 +24,7 @@ const CONFIG = {
   maxMemoriesPerWorkspace: 2000,
   maxMemoryChars: 1600,
   maxTasksPerWorkspace: 40,
-  loomIndexOrder: 40,
+  engramIndexOrder: 40,
   esrOrder: 41,
 };
 
@@ -86,7 +86,7 @@ function route(routes, path, method = "GET") {
 }
 
 test("api: overview reports per-workspace counts, indexes and captures", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   await domain.storeMemory({ workspace: "/ws/a", kind: "decision", text: "use JSON storage", tags: ["arch"], sessionId: "s1" }, CONFIG);
   await domain.storeMemory({ workspace: "/ws/a", kind: "fact", text: "vitest chosen", tags: ["test"], sessionId: "s1" }, CONFIG);
   await domain.storeMemory({ workspace: "/ws/b", kind: "error", text: "flaky e2e", tags: [], sessionId: "s2" }, CONFIG);
@@ -99,9 +99,9 @@ test("api: overview reports per-workspace counts, indexes and captures", async (
     captureStats: { total: 7, git: 5, file: 1, error: 1 },
     openedDomain: () => domain,
     getDomain: () => Promise.resolve(domain),
-    renderIndexBlock: () => "[LOOM] workspace: a",
+    renderIndexBlock: () => "[ENGRAM] workspace: a",
   };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const r = res();
   await route(routes, `${API_PREFIX}/overview`).handler(req({ url: `${API_PREFIX}/overview` }), r);
   assert.equal(r._out.status, 200);
@@ -113,16 +113,16 @@ test("api: overview reports per-workspace counts, indexes and captures", async (
   assert.equal(body.kinds["error"], 1);
   assert.equal(body.captures.git, 5);
   assert.equal(body.config.expireDays, 180);
-  assert.equal(body.indexes["/ws/a"].chars, "[LOOM] workspace: a".length);
+  assert.equal(body.indexes["/ws/a"].chars, "[ENGRAM] workspace: a".length);
   await domain.close();
 });
 
 test("api: memories filter by workspace + kind and search by q", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   await domain.storeMemory({ workspace: "/w", kind: "decision", text: "sqlite-vec wins", tags: ["arch"], sessionId: "s" }, CONFIG);
   await domain.storeMemory({ workspace: "/w", kind: "fact", text: "node 22", tags: [], sessionId: "s" }, CONFIG);
   const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
 
   const allRes = res();
   await route(routes, `${API_PREFIX}/memories`).handler(req({ url: `${API_PREFIX}/memories` }), allRes);
@@ -139,7 +139,7 @@ test("api: memories filter by workspace + kind and search by q", async () => {
 });
 
 test("api: tasks and links are workspace-scoped, archive + delete mutate", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   await domain.storeMemory({ workspace: "/w", kind: "fact", text: "m1", tags: [], sessionId: "s" }, CONFIG);
   await domain.storeMemory({ workspace: "/w", kind: "fact", text: "m2", tags: [], sessionId: "s" }, CONFIG);
   await domain.putTask({
@@ -152,7 +152,7 @@ test("api: tasks and links are workspace-scoped, archive + delete mutate", async
   });
   await domain.addLink({ id: "l1", workspace: "/w", source: "a", relation: "depends_on", target: "b", sessionId: "s", createdAt: 1 });
   const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
 
   const t = res();
   await route(routes, `${API_PREFIX}/tasks`).handler(req({ url: `${API_PREFIX}/tasks?workspace=${encodeURIComponent("/w")}&includeStable=1` }), t);
@@ -185,9 +185,9 @@ test("api: tasks and links are workspace-scoped, archive + delete mutate", async
 });
 
 test("api: non-loopback requests are refused with 403", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const r = res();
   await route(routes, `${API_PREFIX}/config`).handler(
     req({ url: `${API_PREFIX}/config`, remoteAddress: "192.168.1.9", host: "10.0.0.2:3080" }),
@@ -198,10 +198,10 @@ test("api: non-loopback requests are refused with 403", async () => {
 });
 
 test("api: config endpoint returns the live config", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const live = { ...CONFIG, expireDays: 90 };
   const service = { config: live, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const r = res();
   await route(routes, `${API_PREFIX}/config`).handler(req({ url: `${API_PREFIX}/config` }), r);
   assert.equal(r._out.status, 200);
@@ -209,9 +209,9 @@ test("api: config endpoint returns the live config", async () => {
   await domain.close();
 });
 test("api: GUI task create + close routes (evidence gates)", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
 
   // create without name → 400
   const bad = res();
@@ -267,10 +267,10 @@ test("api: GUI task create + close routes (evidence gates)", async () => {
   await domain.close();
 });
 test("api: nodes route lists entities; overview counts them", async () => {
-  const domain = await openLoomDomain(fakeFacility());
+  const domain = await openEngramDomain(fakeFacility());
   await domain.putEntity({ id: "ent_a", workspace: "/w", name: "A", kind: "pkg", description: "", sessionId: "s", createdAt: 1, updatedAt: 1 });
   const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
-  const routes = makeLoomRoutes(service);
+  const routes = makeEngramRoutes(service);
   const n = res();
   await route(routes, `${API_PREFIX}/nodes`).handler(req({ url: `${API_PREFIX}/nodes?workspace=${encodeURIComponent("/w")}` }), n);
   assert.equal(n._out.status, 200);

@@ -1,17 +1,17 @@
-# dsh-loom
+# dsh-engram
 
 > **[中文](README.zh.md) · [English](README.md)**
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 设计的极简长期记忆插件，融合了
-[pi-loom](https://github.com/skepsun/pi-loom) 与 [pi-esr](https://github.com/skepsun/pi-esr) 的思想——
+[symbolic-index](https://github.com/skepsun/symbolic-index) 与 [pi-esr](https://github.com/skepsun/pi-esr) 的思想——
 目标只有一个：**省 token**。
 
 - **零 LLM 摄入** — 纯模式匹配从工具结果自动捕获有意义的事件（带书面 `-m` 提交信息的 git 里程碑、
-  关键文件编辑、反复出现的错误），另有显式 `loom_store`。热路径上没有任何模型调用，纯粹的操作
+  关键文件编辑、反复出现的错误），另有显式 `engram_store`。热路径上没有任何模型调用，纯粹的操作
   ——`git push` / `git stash` / 无提交信息的 commit——刻意**从不记录**（见下方「自动捕获策略」）。
-- **符号索引 + 渐进披露** — 一个紧凑的 `[LOOM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
+- **符号索引 + 渐进披露** — 一个紧凑的 `[ENGRAM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
   组装提示词时注入，并**按会话冻结**，让请求前缀字节稳定以复用 KV 缓存。模型需要细节时用
-  `loom_recall` / `loom_detail` 下钻，而不是把命中的原文灌进上下文。
+  `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
   摊在明面上，而不是让 agent 没有证据就宣布完成。
@@ -27,36 +27,36 @@ MIT   ·   node >= 22.19   ·   host 半边 + 浏览器半边合在一包
 ## 为什么还要一个记忆插件？
 
 对既有 DSH 插件生态的调研显示，记忆领域里"召回桥 / 审批门 / LLM 蒸馏 / 向量+图"这几个方向已经挤满了。
-dsh-loom 补的是对 token 纪律真正重要的三个空白：
+dsh-engram 补的是对 token 纪律真正重要的三个空白：
 
 1. **写入路径没有模型** — 捕获是确定性的模式匹配。
 2. **提示词里不灌原文** — 只注入有界的符号索引，检索按需进行（"检索到 ≠ 注入"）。
 3. **诚实的任务闭环** — 没有证据就不能宣布 STABLE。
 
 DSH 已经提供跨会话 FTS（`ctx.sessionQuery`）、存储（`ctx.storageDomain`）、提示词注入钩子和设置槽位；
-dsh-loom 只是这些能力之上的一层薄组合层，而非重新实现。
+dsh-engram 只是这些能力之上的一层薄组合层，而非重新实现。
 
 ## 安装
 
 ```sh
 # 从 GitHub（本仓库）
-dsh plugin --profile web add github:skepsun/dsh-loom
+dsh plugin --profile web add github:skepsun/dsh-engram
 
 # 发布到 npm 之后
-dsh plugin --profile web add dsh-loom
+dsh plugin --profile web add dsh-engram
 
 # 本地开发（符号链接——改动立即生效）
-dsh plugin --profile web add link:/path/to/dsh-loom
+dsh plugin --profile web add link:/path/to/dsh-engram
 ```
 
-然后**重启 `dsh web`**。数据保存在 `~/.dsh/storages/dsh_loom.json`。
+然后**重启 `dsh web`**。数据保存在 `~/.dsh/storages/dsh_engram.json`。
 
 > npm 与 GitHub 两种装法**都不需要手动补依赖**：pnpm 会自动安装 `zod`，
 > 并把可选的 `@deepseek-ai/*` peers 嵌套装进插件自身的 `node_modules`，CLI 也会
 > 自动把插件登记进 profile 的 `dsh.profile.bundles`。下面的 `setup-links` 只在
 > `link:` 开发工作流里需要——pnpm 故意不为符号链接目录安装依赖。
 
-> 需要新建会话才能看到注入的 `[LOOM]`/`[ESR]` 块和全部工具——提示词与工具注册表都是按会话装配的。
+> 需要新建会话才能看到注入的 `[ENGRAM]`/`[ESR]` 块和全部工具——提示词与工具注册表都是按会话装配的。
 
 ### `link:` 安装的依赖准备
 
@@ -66,39 +66,39 @@ dsh plugin --profile web add link:/path/to/dsh-loom
 一条命令重建依赖层：
 
 ```sh
-cd /path/to/dsh-loom
+cd /path/to/dsh-engram
 node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_modules，
                                  # 并安装 zod（优先复用 harness pnpm store，
                                  # 找不到则回退 `npm install`）
 ```
 
 脚本会自动定位 harness：`../deepseek-harness`（仓库上一级平级），也支持「仓库父级平级」布局
-（如 `E:\deepseek-harness` 与 `E:\kototoro_demo\dsh-loom`）——都找不到再用 `DSH_HARNESS_DIR` 指定。
+（如 `E:\deepseek-harness` 与 `E:\kototoro_demo\dsh-engram`）——都找不到再用 `DSH_HARNESS_DIR` 指定。
 `node scripts/setup-links.mjs --check` 只打印状态不写入。
 
 ## 在 Web 端能得到什么
 
 重启后，全部落在 **DSH 原生**设置界面里：
 
-- **设置 → Loom 记忆** — 独立的一级设置页签（位于「插件」之后），不再是「插件」页里的子 tab；默认
+- **设置 → Engram 记忆** — 独立的一级设置页签（位于「插件」之后），不再是「插件」页里的子 tab；默认
   「全部工作区」视图完整展示所有工作区的记忆/任务/关系（按工作区分组，工作区下拉 + 上一/下一工作区
   翻页；记忆表格另行 10 条/页分页 + 跳页下拉，仅「类型 / 内容 / 操作」三列——正文列占满，时间、
   标签、signal/hits/TTL 等全部折叠进内容行内（meta 行 + 标签行），正文限高三行省略、
-  行内「展开全文/收起」与 hover 均可看全文，归档/删除按钮竖向堆叠）。概览统计卡片（各工作区/类型的计数、自动捕获总量、各工作区 `[LOOM]` 索引
+  行内「展开全文/收起」与 hover 均可看全文，归档/删除按钮竖向堆叠）。概览统计卡片（各工作区/类型的计数、自动捕获总量、各工作区 `[ENGRAM]` 索引
   token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（「新建任务」
   表单 + 点击「填写证据关闭…」补 artifact/evaluation/memory_ref 转 STABLE）、节点与关系清单
   （节点 = 模型用 esr_node 登记的领域对象，如包/服务/仓库/概念；关系 = esr_link），
   以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。ESR 的 GUI 新建/关闭走宿主新增的
-  `POST /api/dsh-loom/tasks` 与 `POST /api/dsh-loom/tasks/close`（与 esr_task / esr_close 同一证据门）。
-  模型侧的主动行为由 [LOOM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
+  `POST /api/dsh-engram/tasks` 与 `POST /api/dsh-engram/tasks/close`（与 esr_task / esr_close 同一证据门）。
+  模型侧的主动行为由 [ENGRAM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
 
-**真实行为观测（agent 遥测）** — ESR 页顶部新增「agent 行为观测」面板：每次模型调用 `loom_*`/`esr_*` 工具都实时累计到
-按（工作区 × 天）的 usage 滚动行（新增 `usage` 表 + `GET /api/dsh-loom/stats`），折算成指标：
-**ESR 主动性** = esr 工具调用数 /（记忆 + esr 工具调用总数）；**召回命中率** = 有命中的 loom_recall 次数 / 总次数；
-**平均命中/查询**；**detail 转化** = 命中召回后很快跟一次 loom_detail 的比例（会话内 8 事件窗口）；失败数按工具记。
+**真实行为观测（agent 遥测）** — ESR 页顶部新增「agent 行为观测」面板：每次模型调用 `engram_*`/`esr_*` 工具都实时累计到
+按（工作区 × 天）的 usage 滚动行（新增 `usage` 表 + `GET /api/dsh-engram/stats`），折算成指标：
+**ESR 主动性** = esr 工具调用数 /（记忆 + esr 工具调用总数）；**召回命中率** = 有命中的 engram_recall 次数 / 总次数；
+**平均命中/查询**；**detail 转化** = 命中召回后很快跟一次 engram_detail 的比例（会话内 8 事件窗口）；失败数按工具记。
 面板同时列出各工具调用计数与最近 14 天逐日滚动。这些是真实会话的真实数字——想提升 ESR 主动性，
 就观察面板上 esr 占比并调整注入提示。
-- **设置 → 插件 → 插件配置 → dsh-loom** — 与内置「终端 / Agent 循环 / 网页搜索」同款的
+- **设置 → 插件 → 插件配置 → dsh-engram** — 与内置「终端 / Agent 循环 / 网页搜索」同款的
   **默认折叠卡片**：标题 + 一行描述 + 箭头，点击展开/收起；展开后 12 个设置项按
   「捕获与检索 / 索引 / 生命周期与 GC / 安全」四个分组展示。改动对新建会话即时生效
   （已冻结的块保持稳定）；支持放弃修改 / 保存，有未保存改动时标题上出现「未保存」徽标。
@@ -106,12 +106,12 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   GUI 经运营商授权的隧道访问也保持可编辑。
 
 浏览器半边由 DSH 的 client-module loader 直接从本包提供（`dsh.client` + `exports["./client"]`，无需重建
-web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-loom/*` 路由族。围栏默认关闭隧道访问；如需经授权的
+web 应用）；数据来自 loopback 围栏保护的 `/api/dsh-engram/*` 路由族。围栏默认关闭隧道访问；如需经授权的
 隧道域名访问记忆查看器，把域名加进插件的 `trustedHosts` 配置（如通过 registry 或 profile patch）：
 
 ```jsonc
-// patch/loom.json
-{ "loom": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
+// patch/engram.json
+{ "engram": { "trustedHosts": ["cream-club-fragrances-caught.trycloudflare.com"] } }
 ```
 
 修改 `client/src` 后重建 bundle：
@@ -133,16 +133,16 @@ npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/
 实体锚定覆盖率、节点/链接卫生（无悬空链接）。数字诚实、非调优——任何人跑出来都一样，复现即所得。
 
 两层「真实测试」的分工：`npm run eval` 回答「检索层本身有多好」（确定性、可复现）；
-`/api/dsh-loom/stats` + 观测面板回答「真实会话里模型实际怎么用」（ESR 主动性、召回命中率、detail 转化），
+`/api/dsh-engram/stats` + 观测面板回答「真实会话里模型实际怎么用」（ESR 主动性、召回命中率、detail 转化），
 两者结合才能判断：召回层没问题但命中率低 = 模型没学会问；反之亦然。
 
 ## 工具
 
 | 工具 | 用途 | 类型 |
 |---|---|---|
-| `loom_store` | 显式存入一条记忆（kind、tags、可选实体锚点） | 写 |
-| `loom_recall` | 工作区记忆的确定性关键词召回；可选 `search_sessions` 跨会话 FTS | 读 |
-| `loom_detail` | 一条记忆 id 的完整记录（来源、标签、命中数） | 读 |
+| `engram_store` | 显式存入一条记忆（kind、tags、可选实体锚点） | 写 |
+| `engram_recall` | 工作区记忆的确定性关键词召回；可选 `search_sessions` 跨会话 FTS | 读 |
+| `engram_detail` | 一条记忆 id 的完整记录（来源、标签、命中数） | 读 |
 | `esr_task` | 创建任务实体（draft → active） | 写 |
 | `esr_close` | 按证据协议关闭任务（artifact + evaluation + memory_ref） | 写 |
 | `esr_link` | 在两个实体之间添加类型化关系（迷你图） | 写 |
@@ -176,24 +176,24 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 | 读取配置路径 | 记录 | 0.3 |
 | 反复出现的工具错误 | 记录（按消息去重） | 0.25 |
 
-显式 `loom_store` 的记录不受上述规则约束（按会话限流）。
+显式 `engram_store` 的记录不受上述规则约束（按会话限流）。
 
-**谁能拿到 `[LOOM]` 索引行**（这才是真正进提示词的部分）：
+**谁能拿到 `[ENGRAM]` 索引行**（这才是真正进提示词的部分）：
 `signal >= minIndexSignal` **或** `hits >= promoteHits` **或** `kind === "task"`，
 再由 `indexMaxLines` / `indexMaxChars` 封顶。另有一道额外的闸保持管道干净：
 自动捕获的 git 命令回显——文本里嵌着 shell 命令链（`git push: cd … && …`）——
 即使信号超阈值也不进索引，直到被召回命中晋升为止。其余条目安静地躺在存储里，
-按需用 `loom_recall` / `loom_detail` 取用——「检索到 ≠ 注入」。
+按需用 `engram_recall` / `engram_detail` 取用——「检索到 ≠ 注入」。
 
 ## 注入块
 
 模型实际看到的内容（每个会话渲染一次，然后冻结）：
 
 ```
-[LOOM] workspace: pi-loom · 2 memories · 1 task(s) active · 0 links
+[ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <id> | esr_task / esr_close / esr_link
+drill: engram_store (user asks to remember) | engram_recall <query> | engram_detail <id> | esr_task / esr_close / esr_link
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -202,7 +202,7 @@ drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <i
 
 前缀：`[D]` 决定 · `[E]` 错误 · `[P]` 流程 · `[F]` 事实 · `[I]` 洞察 · `[H]` 交接 · `[T]` 任务。
 入选规则遵循「自动捕获策略」（信号阈值 / 命中晋升 / git 回显守卫），并按配置的行数与字符预算封顶。
-`#` id 通过 `loom_detail` 取完整记录。工作区没有任务时，`[ESR]` 仍会渲染一行点名 `esr_task`/`esr_close`，
+`#` id 通过 `engram_detail` 取完整记录。工作区没有任务时，`[ESR]` 仍会渲染一行点名 `esr_task`/`esr_close`，
 让机制对模型保持可见，而不是整体消失。
 
 ## 配置
@@ -210,13 +210,13 @@ drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <i
 默认值以 token 为优先；可通过 profile 补丁（`~/.dsh/profiles/web/cordis.patch.yml`）或 Web 配置卡片覆盖任意键：
 
 ```yaml
-- id: loom
+- id: engram
   config:
     autoCapture: true        # 零 LLM 工具结果捕获
-    sessionSearch: true      # loom_recall 也可对历史会话 FTS
+    sessionSearch: true      # engram_recall 也可对历史会话 FTS
     autoCapturePerSession: 40
-    indexMaxLines: 12        # [LOOM] 行数上限
-    indexMaxChars: 700       # [LOOM] 字符上限（token 预算）
+    indexMaxLines: 12        # [ENGRAM] 行数上限
+    indexMaxChars: 700       # [ENGRAM] 字符上限（token 预算）
     minIndexSignal: 0.4      # 低于此信号的自动捕获不进索引
                              # （git 命令回显即便超阈值也不进，直到命中晋升）
     promoteHits: 3           # ……直到被召回这么多次才进索引
@@ -225,7 +225,7 @@ drill: loom_store (user asks to remember) | loom_recall <query> | loom_detail <i
     gcEnabled: true          # 定时记忆 GC
     gcIntervalHours: 24      # 回收节奏
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
-    loomIndexOrder: 40       # systemPrompt section 顺序（位于 tools 段之前）
+    engramIndexOrder: 40    # systemPrompt section 顺序（位于 tools 段之前）
     esrOrder: 41
 ```
 
@@ -249,8 +249,8 @@ keyed slot "settings.plugin.item" requires options.key
 ```
 
 原因：DSH 自 `0.1.0-rc.7` 起把配置卡槽位 `settings.plugin.item` 声明为**按
-settings 命名空间键控**（卡片用自身编辑的命名空间作 `key` 注册——dsh-loom
-的配置卡正是用 `key: "dsh-loom"` 这样注册的）。`@linxin666/dsh-web-ui-all`
+settings 命名空间键控**（卡片用自身编辑的命名空间作 `key` 注册——dsh-engram
+的配置卡正是用 `key: "dsh-engram"` 这样注册的）。`@linxin666/dsh-web-ui-all`
 **0.2.0 之前的** `dsh-client-ui-web-ui-settings` 向该槽位注册分组卡片时**没有
 提供 `key`**；而 loader 只要有一个 entry 失败就会中止整个启动流程，于是 GUI
 一直卡在失败页。
@@ -268,7 +268,7 @@ settings 命名空间键控**（卡片用自身编辑的命名空间作 `key` �
 
 ## 相关项目
 
-- [pi-loom](https://github.com/skepsun/pi-loom) — 原始跨会话记忆插件（5 信号 RRF 融合、sqlite-vec、Dream Engine）。
+- [symbolic-index](https://github.com/skepsun/symbolic-index) — 原始跨会话记忆插件（5 信号 RRF 融合、sqlite-vec、Dream Engine）。
 - [pi-esr](https://github.com/skepsun/pi-esr) — 项目全周期的证据驱动任务状态；这里的闭环协议是它的简化形态。
 
 ## 许可

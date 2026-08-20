@@ -1,11 +1,11 @@
 /**
- * dsh-loom client: self-sufficient settings scope for the config card.
+ * dsh-engram client: self-sufficient settings scope for the config card.
  *
  * DSH's blessed `settingsScope` binder hard-codes persistence to `memory`
  * (status forever `unavailable`) whenever the browser is NOT reachable over a
  * loopback-origin connection — e.g. the GUI opened through an
  * operator-authorized cloudflare tunnel. That makes every plugin's config
- * card render empty and gray off-loopback, a DSH design decision dsh-loom
+ * card render empty and gray off-loopback, a DSH design decision dsh-engram
  * cannot change. But the underlying RPCs (`connection.api.settings.describe` /
  * `.mutate`) DO work over a trusted host, which is exactly how the card gets
  * dispatched at all. So this controller drives the same namespace through the
@@ -16,10 +16,10 @@
 
 import type { IApiClient } from "@deepseek-ai/dsh-client-connection/api";
 
-export type LoomScopeStatus = "loading" | "ready" | "unavailable" | "error";
+export type EngramScopeStatus = "loading" | "ready" | "unavailable" | "error";
 
-export interface LoomScopeSnapshot<T> {
-  status: LoomScopeStatus;
+export interface EngramScopeSnapshot<T> {
+  status: EngramScopeStatus;
   /** Resolved value (composition base → user layer), or undefined before ready. */
   value: T | undefined;
   /** Composition base layer (plugin defaults), when served. */
@@ -34,9 +34,9 @@ export interface LoomScopeSnapshot<T> {
   reason?: string;
 }
 
-export interface LoomScope<T> {
+export interface EngramScope<T> {
   load(): Promise<void>;
-  getSnapshot(): LoomScopeSnapshot<T>;
+  getSnapshot(): EngramScopeSnapshot<T>;
   subscribe(listener: () => void): () => void;
   set<U extends keyof T>(key: U, value: T[U]): Promise<void>;
   unset<U extends keyof T>(key: U): Promise<void>;
@@ -52,7 +52,7 @@ interface NamespaceView {
 }
 
 /** Snapshot while the first read is still in flight. */
-const LOADING: LoomScopeSnapshot<unknown> = {
+const LOADING: EngramScopeSnapshot<unknown> = {
   status: "loading",
   value: undefined,
   base: undefined,
@@ -61,14 +61,14 @@ const LOADING: LoomScopeSnapshot<unknown> = {
   writable: false,
 };
 
-export class LoomScopeImpl<T> implements LoomScope<T> {
+export class EngramScopeImpl<T> implements EngramScope<T> {
   private listeners = new Set<() => void>();
-  private snapshot: LoomScopeSnapshot<T> = LOADING as LoomScopeSnapshot<T>;
+  private snapshot: EngramScopeSnapshot<T> = LOADING as EngramScopeSnapshot<T>;
   private disposed = false;
 
   constructor(private api: IApiClient, private ns: string, private opts: { writable: boolean } = { writable: true }) {}
 
-  getSnapshot(): LoomScopeSnapshot<T> {
+  getSnapshot(): EngramScopeSnapshot<T> {
     return this.snapshot;
   }
 
@@ -88,7 +88,7 @@ export class LoomScopeImpl<T> implements LoomScope<T> {
 
   async load(): Promise<void> {
     if (this.disposed) return;
-    this.snapshot = LOADING as LoomScopeSnapshot<T>;
+    this.snapshot = LOADING as EngramScopeSnapshot<T>;
     this.notify();
     try {
       const response = await this.api.settings.describe({});

@@ -1,15 +1,15 @@
 {
-  "name": "dsh-loom",
-  "description": "Minimalist long-term memory for DeepSeek Harness, distilling pi-loom + pi-esr ideas: zero-LLM auto-capture, a symbolic [LOOM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task / esr_node / esr_close / esr_link). Real agent-behaviour telemetry (usage rollup + /stats) and a deterministic offline recall benchmark (npm run eval). Hot path is model-free; storage on ctx.storageDomain; web memory viewer, observability panel and config card through DSH's native settings slots.",
+  "name": "dsh-engram",
+  "description": "Minimalist long-term memory for DeepSeek Harness, distilling symbolic-index + pi-esr ideas: zero-LLM auto-capture, a symbolic [ENGRAM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task / esr_node / esr_close / esr_link). Real agent-behaviour telemetry (usage rollup + /stats) and a deterministic offline recall benchmark (npm run eval). Hot path is model-free; storage on ctx.storageDomain; web memory viewer, observability panel and config card through DSH's native settings slots.",
   "version": "0.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/skepsun/dsh-loom.git"
+    "url": "git+https://github.com/skepsun/dsh-engram.git"
   },
-  "homepage": "https://github.com/skepsun/dsh-loom",
+  "homepage": "https://github.com/skepsun/dsh-engram",
   "bugs": {
-    "url": "https://github.com/skepsun/dsh-loom/issues"
+    "url": "https://github.com/skepsun/dsh-engram/issues"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -83,7 +83,7 @@
     "deepseek-harness",
     "memory",
     "long-term-memory",
-    "pi-loom",
+    "symbolic-index",
     "pi-esr"
   ],
   "publishConfig": {

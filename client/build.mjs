@@ -1,5 +1,5 @@
 /**
- * dsh-loom: client bundle build — produce `lib/client.js` in the client-module
+ * dsh-engram: client bundle build — produce `lib/client.js` in the client-module
  * loader's lazy-CJS factory format.
  *
  * The loader (`window.__ModuleLoader__.load({ id, factory })`) only registers
@@ -9,13 +9,13 @@
  * wrap the esbuild output in the factory closure (mirroring the format the
  * shipped bundles use).
  *
- * This is a DEV tool for the external dsh-loom repo; it resolves esbuild from
+ * This is a DEV tool for the external dsh-engram repo; it resolves esbuild from
  * the harness checkout (the only place it is installed locally).
  */
 
 import { createRequire } from "node:module";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // esbuild is a transitive dep of the harness, stored in its pnpm store —
@@ -27,7 +27,7 @@ const esbuild = require("esbuild");
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
-const ID = "dsh-loom";
+const ID = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).name;
 
 const result = await esbuild.build({
   entryPoints: [resolve(HERE, "src/entry.tsx")],

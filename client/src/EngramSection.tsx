@@ -1,7 +1,7 @@
 /**
- * dsh-loom client: the Settings → "Loom 记忆" page (settings.section).
+ * dsh-engram client: the Settings → "Engram 记忆" page (settings.section).
  *
- * Reads the real store through the /api/dsh-loom route family and renders:
+ * Reads the real store through the /api/dsh-engram route family and renders:
  *   - overview stat cards (counts, capture totals, per-workspace index cost)
  *   - memory search/filter table with archive/delete actions
  *   - the ESR task board (state + evidence gaps) and the relation list
@@ -10,11 +10,11 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import type { LoomApi, LoomConfig, LoomOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, LoomStats } from "./api";
-import { useLoomTheme } from "./theme";
+import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
+import { useEngramTheme } from "./theme";
 
-export interface LoomSectionFace {
-  api: LoomApi;
+export interface EngramSectionFace {
+  api: EngramApi;
   t: (key: string) => string;
 }
 
@@ -170,13 +170,13 @@ function groupByWorkspace<T extends { workspace: string }>(items: T[]): Array<[s
   );
 }
 
-export function LoomSection({ api, t }: LoomSectionFace) {
-  const [overview, setOverview] = useState<LoomOverview | null>(null);
+export function EngramSection({ api, t }: EngramSectionFace) {
+  const [overview, setOverview] = useState<EngramOverview | null>(null);
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [nodes, setNodes] = useState<EntityRecord[]>([]);
-  const [usageStats, setUsageStats] = useState<LoomStats | null>(null);
+  const [usageStats, setUsageStats] = useState<EngramStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<string>("");
   const [kind, setKind] = useState<string>("");
@@ -244,7 +244,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
   useEffect(() => {
     if (!newTaskWs && workspaces.length > 0 && !workspace) setNewTaskWs(workspaces[0]);
   }, [newTaskWs, workspaces, workspace]);
-  const cfg: LoomConfig | null = overview?.config ?? null;
+  const cfg: EngramConfig | null = overview?.config ?? null;
 
   const act = async (fn: () => Promise<void>) => {
     try {
@@ -314,7 +314,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
     if (memPage >= memPageCount) setMemPage(Math.max(0, memPageCount - 1));
   }, [memPage, memPageCount]);
 
-  /** GUI 新建任务（POST /api/dsh-loom/tasks），默认落到当前选中的工作区。 */
+  /** GUI 新建任务（POST /api/dsh-engram/tasks），默认落到当前选中的工作区。 */
   const createNewTask = async () => {
     const ws = newTaskWs || workspace || workspaces[0] || "";
     if (!ws || newTaskName.trim() === "") return;
@@ -361,13 +361,13 @@ export function LoomSection({ api, t }: LoomSectionFace) {
   const indexCost = workspace && overview ? overview.indexes[workspace] : null;
   const gc = overview?.gc ?? null;
   const wsCounts = workspace && overview ? overview.workspaces[workspace] ?? null : null;
-  const { vars } = useLoomTheme();
+  const { vars } = useEngramTheme();
 
   return (
     <div style={{ ...s.root, ...vars }}>
-      <h1 style={s.h1}>Loom 记忆</h1>
+      <h1 style={s.h1}>Engram 记忆</h1>
       <p style={s.sub}>
-        跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_loom.json
+        跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_engram.json
       </p>
 
       {error && <div style={s.error}>{t("error")}: {error}</div>}
@@ -395,7 +395,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
           <StatCard num={String(overview.captures.total)} label="自动捕获" />
           <StatCard
             num={indexCost ? `~${indexCost.tokens}` : "–"}
-            label="[LOOM] 索引 token / 工作区"
+            label="[ENGRAM] 索引 token / 工作区"
           />
           {gc && (
             <StatCard
@@ -500,7 +500,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
         </thead>
         <tbody>
           {flatRows.length === 0 && (
-            <tr><td colSpan={3} style={s.empty}>暂无记忆 — 使用 loom_store 显式记录，或让自动捕获工作（git 提交 / 关键文件编辑 / 工具错误）</td></tr>
+            <tr><td colSpan={3} style={s.empty}>暂无记忆 — 使用 engram_store 显式记录，或让自动捕获工作（git 提交 / 关键文件编辑 / 工具错误）</td></tr>
           )}
           {memPageRows.map((r) =>
             r.kind === "head" ? (
@@ -559,7 +559,7 @@ export function LoomSection({ api, t }: LoomSectionFace) {
       <div style={s.subPanel}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
           agent 行为观测
-          <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}> · 每次 loom_*/esr_* 工具调用实时累计（真实数据，按工作区/天滚动）</span>
+          <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}> · 每次 engram_*/esr_* 工具调用实时累计（真实数据，按工作区/天滚动）</span>
         </div>
         {!usageStats ? (
           <div style={s.mono}>…</div>

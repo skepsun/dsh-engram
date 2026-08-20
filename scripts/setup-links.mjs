@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * dsh-loom 开发/本地链接安装依赖脚本（跨平台）。
+ * dsh-engram 开发/本地链接安装依赖脚本（跨平台）。
  *
  * 为什么需要它：
- *   dsh-loom 宿主侧运行期 import：
+ *   dsh-engram 宿主侧运行期 import：
  *     - zod（registry 唯一外部依赖）
  *     - @deepseek-ai/{dsh-settings,dsh-storage-domain,schemastery}（harness 工作区包）
  *   当插件以 `link:` 方式进 profile 时，Node 从插件的真实路径向上解析 import，
@@ -47,7 +47,7 @@ function findHarness() {
   }
   // common layouts:
   //   harness/  + repo at harness/../deepseek-harness          (sibling of repo)
-  //   E:\deepseek-harness + E:\kototoro_demo\dsh-loom          (sibling of repo's parent)
+  //   E:\deepseek-harness + E:\kototoro_demo\dsh-engram          (sibling of repo's parent)
   for (const candidate of [
     resolve(REPO_ROOT, "..", "deepseek-harness"),       // 与仓库平级
     resolve(REPO_ROOT, "..", "..", "deepseek-harness"), // 与仓库父级平级
@@ -60,7 +60,7 @@ function findHarness() {
     dir = dirname(dir);
   }
   throw new Error(
-    "找不到 deepseek-harness checkout：请设置 DSH_HARNESS_DIR，或把 dsh-loom 放到 " +
+    "找不到 deepseek-harness checkout：请设置 DSH_HARNESS_DIR，或把 dsh-engram 放到 " +
       "harness 兄弟目录（../deepseek-harness / ../../deepseek-harness）。",
   );
 }

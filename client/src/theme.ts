@@ -1,5 +1,5 @@
 /**
- * dsh-loom client theme adapter.
+ * dsh-engram client theme adapter.
  *
  * The DSH shell signals its theme only through the `color-scheme` CSS value
  * on <html> (e.g. `style="color-scheme: dark;"`); it does NOT expose any
@@ -16,7 +16,7 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-export interface LoomPalette {
+export interface EngramPalette {
   text: string;
   surface: string;
   border: string;
@@ -27,7 +27,7 @@ export interface LoomPalette {
   primary: string;
 }
 
-const LIGHT: LoomPalette = {
+const LIGHT: EngramPalette = {
   text: "#111827",
   surface: "#ffffff",
   border: "#e5e7eb",
@@ -38,7 +38,7 @@ const LIGHT: LoomPalette = {
   primary: "#2563eb",
 };
 
-const DARK: LoomPalette = {
+const DARK: EngramPalette = {
   text: "#e6e9ef",
   surface: "#1c222b",
   border: "#37404e",
@@ -58,7 +58,7 @@ function detectDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-export function useLoomTheme(): { dark: boolean; vars: CSSProperties } {
+export function useEngramTheme(): { dark: boolean; vars: CSSProperties } {
   const [dark, setDark] = useState<boolean>(detectDark);
 
   useEffect(() => {

@@ -1,11 +1,11 @@
 /**
- * dsh-loom client: the Plugins → 配置 card (settings.plugin.item, keyed by the
- * `dsh-loom` namespace the host registers). Reads/writes the namespace through
- * LoomScope — a self-sufficient transport over the connection's settings RPCs
+ * dsh-engram client: the Plugins → 配置 card (settings.plugin.item, keyed by the
+ * `dsh-engram` namespace the host registers). Reads/writes the namespace through
+ * EngramScope — a self-sufficient transport over the connection's settings RPCs
  * that keeps working when the GUI is reached through an operator-authorized
  * tunnel (DSH's own settingsScope binder hard-codes off-loopback browsers to
  * read-only memory persistence for every plugin card). The host applies
- * changes to the live config for new sessions (already-frozen [LOOM] blocks
+ * changes to the live config for new sessions (already-frozen [ENGRAM] blocks
  * are stable by design).
  *
  * Card chrome mirrors the built-in "Shell / Agent loop / Web search" plugin
@@ -20,10 +20,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { LoomScope, LoomScopeSnapshot } from "./scope";
-import { useLoomTheme } from "./theme";
+import type { EngramScope, EngramScopeSnapshot } from "./scope";
+import { useEngramTheme } from "./theme";
 
-export interface LoomConfigValue {
+export interface EngramConfigValue {
   autoCapture?: boolean;
   sessionSearch?: boolean;
   autoCapturePerSession?: number;
@@ -35,18 +35,18 @@ export interface LoomConfigValue {
   maxMemoriesPerWorkspace?: number;
   gcEnabled?: boolean;
   gcStableRetentionDays?: number;
-  /** Hostnames allowed past the /api/dsh-loom loopback fence (tunnel hosts). */
+  /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
   trustedHosts?: string[];
 }
 
-export interface LoomConfigCardFace {
-  scope: LoomScope<LoomConfigValue>;
+export interface EngramConfigCardFace {
+  scope: EngramScope<EngramConfigValue>;
 }
 
 type FieldKind = "bool" | "num" | "text";
 
-export interface LoomConfigField {
-  key: keyof LoomConfigValue;
+export interface EngramConfigField {
+  key: keyof EngramConfigValue;
   label: string;
   hint: string;
   kind: FieldKind;
@@ -56,18 +56,18 @@ export interface LoomConfigField {
   width?: number;
 }
 
-export interface LoomConfigGroup {
+export interface EngramConfigGroup {
   id: string;
   title: string;
   description?: string;
-  fields: LoomConfigField[];
+  fields: EngramConfigField[];
 }
 
 /**
  * A setting group rendered inside the card's disclosure. Reading the ~12
  * knobs as four labelled units is easier than one flat list.
  */
-export const GROUPS: LoomConfigGroup[] = [
+export const GROUPS: EngramConfigGroup[] = [
   {
     id: "capture",
     title: "捕获与检索",
@@ -75,16 +75,16 @@ export const GROUPS: LoomConfigGroup[] = [
     fields: [
       { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
       { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
-      { key: "sessionSearch", label: "会话历史搜索", hint: "loom_recall 支持跨会话 FTS 兜底", kind: "bool" },
+      { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
     ],
   },
   {
     id: "index",
     title: "索引",
-    description: "[LOOM] 块的内容预算与晋升规则",
+    description: "[ENGRAM] 块的内容预算与晋升规则",
     fields: [
-      { key: "indexMaxLines", label: "索引最大行数", hint: "[LOOM] 块最多显示的条目行数", kind: "num", min: 0, max: 50 },
-      { key: "indexMaxChars", label: "索引字符上限", hint: "[LOOM] 块 token 预算", kind: "num", min: 0, max: 4000 },
+      { key: "indexMaxLines", label: "索引最大行数", hint: "[ENGRAM] 块最多显示的条目行数", kind: "num", min: 0, max: 50 },
+      { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
       { key: "minIndexSignal", label: "入索引信号阈值", hint: "signal ≥ 此值的自动捕获才进索引", kind: "num", min: 0, max: 1, step: 0.05 },
       { key: "promoteHits", label: "晋升命中数", hint: "hit 数达此值的低信号条目进索引", kind: "num", min: 0, max: 20 },
     ],
@@ -111,13 +111,13 @@ export const GROUPS: LoomConfigGroup[] = [
 ];
 
 /** Flat field ledger — save/reset iterate every group's fields in order. */
-export const FIELDS: LoomConfigField[] = GROUPS.flatMap((group) => group.fields);
+export const FIELDS: EngramConfigField[] = GROUPS.flatMap((group) => group.fields);
 
 /** One-line description under the card's name, mirroring the built-in cards. */
-const CARD_DESCRIPTION = "控制 loom 记忆的捕获、索引、保留与隧道访问";
+const CARD_DESCRIPTION = "控制 engram 记忆的捕获、索引、保留与隧道访问";
 
 // The built-in plugin cards are styled with the platform's dsw-alias design
-// tokens; mirroring them here makes dsh-loom read as a sibling of the Shell /
+// tokens; mirroring them here makes dsh-engram read as a sibling of the Shell /
 // Agent loop / Web search cards in the same tab.
 const s = {
   card: {
@@ -274,9 +274,9 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function LoomConfigCard({ scope }: LoomConfigCardFace) {
-  const [snap, setSnap] = useState<LoomScopeSnapshot<LoomConfigValue> | null>(null);
-  const [draft, setDraft] = useState<LoomConfigValue>({});
+export function EngramConfigCard({ scope }: EngramConfigCardFace) {
+  const [snap, setSnap] = useState<EngramScopeSnapshot<EngramConfigValue> | null>(null);
+  const [draft, setDraft] = useState<EngramConfigValue>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -286,19 +286,19 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
     const off = scope.subscribe(() => {
       const next = scope.getSnapshot();
       setSnap(next);
-      const value = (next.value ?? next.base) as LoomConfigValue | undefined;
+      const value = (next.value ?? next.base) as EngramConfigValue | undefined;
       if (value) setDraft((prev) => ({ ...value, ...prev }));
     });
     setSnap(scope.getSnapshot());
     return off;
   }, [scope]);
 
-  const setField = useCallback((key: keyof LoomConfigValue, value: boolean | number | string[] | undefined) => {
+  const setField = useCallback((key: keyof EngramConfigValue, value: boolean | number | string[] | undefined) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   /** Effective stored values the draft is edited against. */
-  const effective: LoomConfigValue = ((snap?.value ?? snap?.base) as LoomConfigValue | undefined) ?? {};
+  const effective: EngramConfigValue = ((snap?.value ?? snap?.base) as EngramConfigValue | undefined) ?? {};
   const anyDirty = FIELDS.some((field) => {
     const staged = draft[field.key];
     return staged !== undefined && staged !== (effective as Record<string, unknown>)[field.key];
@@ -325,11 +325,11 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
 
   const discard = useCallback(() => {
     setError(null);
-    const value: LoomConfigValue = ((snap?.value ?? snap?.base) as LoomConfigValue | undefined) ?? {};
+    const value: EngramConfigValue = ((snap?.value ?? snap?.base) as EngramConfigValue | undefined) ?? {};
     setDraft({ ...value });
   }, [snap]);
 
-  const resetField = useCallback(async (key: keyof LoomConfigValue) => {
+  const resetField = useCallback(async (key: keyof EngramConfigValue) => {
     setError(null);
     try {
       await scope.unset(key);
@@ -340,10 +340,10 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
     }
   }, [scope]);
 
-  const value: LoomConfigValue = { ...((snap?.base as LoomConfigValue) ?? {}), ...draft };
+  const value: EngramConfigValue = { ...((snap?.base as EngramConfigValue) ?? {}), ...draft };
   const writable = snap?.writable !== false && snap?.status !== "unavailable";
   const available = snap?.status === "ready";
-  const { vars } = useLoomTheme();
+  const { vars } = useEngramTheme();
 
   return (
     <div style={vars}>
@@ -352,11 +352,11 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
           type="button"
           style={s.header}
           aria-expanded={open}
-          aria-label={`${open ? "收起" : "展开"} dsh-loom 设置`}
+          aria-label={`${open ? "收起" : "展开"} dsh-engram 设置`}
           onClick={() => setOpen((prev) => !prev)}
         >
           <span style={s.headText}>
-            <span style={s.name}>dsh-loom</span>
+            <span style={s.name}>dsh-engram</span>
             <span style={s.description}>{CARD_DESCRIPTION}</span>
           </span>
           {anyDirty && <span style={s.pending}>未保存</span>}
@@ -435,7 +435,7 @@ export function LoomConfigCard({ scope }: LoomConfigCardFace) {
               </div>
             ))}
             <div style={s.note}>
-              设置对新建会话即时生效；已冻结的 [LOOM] 块保持前缀稳定。
+              设置对新建会话即时生效；已冻结的 [ENGRAM] 块保持前缀稳定。
             </div>
             {error && <div style={s.failed}>{error}</div>}
             <div style={s.footer}>
