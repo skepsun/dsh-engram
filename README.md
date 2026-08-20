@@ -306,8 +306,12 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
 ```
 
 Prefixes: `[D]` decision · `[E]` error · `[P]` procedure · `[F]` fact ·
-`[I]` insight · `[H]` handoff · `[T]` task. Membership follows the
-*Auto-capture policy* (signal threshold / recall promotion / git-echo guard),
+`[I]` insight · `[H]` handoff · `[T]` task. A procedure re-used enough times
+(`hits >= promoteHits`) becomes a "proven experience" — its prefix upgrades to
+`[P✓]` and it is stably ranked first in the block (newest-first within each
+group, keeping the block deterministic): our zero-LLM counterpart to TencentDB
+Agent Memory's "Skill = validated, executable experience". Membership follows
+the *Auto-capture policy* (signal threshold / recall promotion / git-echo guard),
 bounded by the configured line and character budgets. `#` ids address the full
 records via `engram_detail`. When a workspace has no tasks, `[ESR]` still renders
 one line naming `esr_task`/`esr_close` so the mechanism stays visible to the

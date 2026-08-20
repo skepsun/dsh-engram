@@ -423,3 +423,34 @@ test("error revival: recurring failures re-warm one entry and resurface in [ENGR
 
   await domain.close();
 });
+
+test("index block: proven procedures get a P✓ marker and rank first", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const cfg = { ...CONFIG, indexMaxLines: 12, promoteHits: 3 };
+
+  await domain.storeMemory({ workspace: "/ws", kind: "decision", text: "decide on vector search", tags: [], sessionId: "s", seq: 1, signal: 0.8 }, cfg);
+  const proc = await domain.storeMemory({ workspace: "/ws", kind: "procedure", text: "rollback plan: checkout + npm ci + re-run tests", tags: ["procedure"], sessionId: "s", seq: 2, signal: 0.6 }, cfg);
+  for (let i = 0; i < 3; i += 1) await domain.touchMemory("/ws", proc.id);
+  await domain.storeMemory({ workspace: "/ws", kind: "procedure", text: "draft checklist template", tags: ["procedure"], sessionId: "s", seq: 3, signal: 0.6 }, cfg);
+
+  const block = renderIndex(domain, "/ws", "/code/ws", cfg);
+  const proven = block.indexOf("[P✓]");
+  const plain = block.indexOf("[P] ");
+  const dec = block.indexOf("[D] ");
+  assert.ok(proven !== -1, "proven procedure carries the P✓ marker");
+  assert.ok(plain !== -1, "unproven procedure still renders as [P] (no ✓)");
+  assert.ok(proven < plain, "proven procedure ranks before the unproven one");
+  assert.ok(proven < dec, "proven procedure ranks before other memories");
+
+  // boundary: promoteHits-1 hits is NOT proven yet
+  const domain2 = await openEngramDomain(fakeFacility());
+  const p2 = await domain2.storeMemory({ workspace: "/ws2", kind: "procedure", text: "rebuild steps", tags: [], sessionId: "s", seq: 1, signal: 0.6 }, CONFIG);
+  await domain2.touchMemory("/ws2", p2.id);
+  await domain2.touchMemory("/ws2", p2.id);
+  const block2 = renderIndex(domain2, "/ws2", "/code/ws2", CONFIG);
+  assert.ok(!block2.includes("P✓"), "hits below promoteHits stay plainly [P]");
+
+  // deterministic: two renders identical
+  assert.equal(block, renderIndex(domain, "/ws", "/code/ws", cfg));
+  await Promise.all([domain.close(), domain2.close()]);
+});

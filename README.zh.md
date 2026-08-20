@@ -240,6 +240,9 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
 ```
 
 前缀：`[D]` 决定 · `[E]` 错误 · `[P]` 流程 · `[F]` 事实 · `[I]` 洞察 · `[H]` 交接 · `[T]` 任务。
+被反复使用（`hits >= promoteHits`）的流程记忆升格为「实证经验」——前缀变 `[P✓]` 且**稳定排在
+索引块最前**（每组内部仍按新旧排序，块保持确定性）；这是我们对 TencentDB Agent Memory「Skill=
+经过验证的可执行经验」的零 LLM 对应物。
 入选规则遵循「自动捕获策略」（信号阈值 / 命中晋升 / git 回显守卫），并按配置的行数与字符预算封顶。
 `#` id 通过 `engram_detail` 取完整记录。工作区没有任务时，`[ESR]` 仍会渲染一行点名 `esr_task`/`esr_close`，
 让机制对模型保持可见，而不是整体消失。
