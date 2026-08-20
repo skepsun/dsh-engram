@@ -156,7 +156,14 @@ After restart, inside the **native** DSH settings surface:
   when closure-ready, amber while gapped, gray with no evidence yet; the
   board header adds an **aggregate ring** showing overall evidence
   completeness (%) plus how many in-progress tasks are closure-ready. Pure
-  SVG, no chart library, bundle stays clean. And a
+  SVG, no chart library, bundle stays clean. A **telemetry dashboard** tab
+  turns the /stats usage rollup (workspace × day) into a pure-SVG dashboard:
+  three gauges for **ESR proactivity** (benchmarked against the 0.34 escalate
+  threshold, amber + hint when low), **recall hit rate** and **detail
+  follow-through**, five stat cards (total / esr / memory calls, avg hits per
+  query, failures), a 14-day mem-vs-esr stacked bar chart and a Top-8 tool
+  breakdown (mem blue / esr purple), 20s auto-refresh with an automatic
+  small-sample (<10 calls) warning. And a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
   create/close use the host's new `POST /api/dsh-engram/tasks` and
   `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven

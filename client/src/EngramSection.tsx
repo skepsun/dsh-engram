@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { EngramGraph } from "./EngramGraph";
 import { EngramPreview } from "./EngramPreview";
 import { EvidenceRing } from "./EvidenceRing";
+import { EngramTelemetry } from "./EngramTelemetry";
 import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
 import { useEngramTheme } from "./theme";
 
@@ -253,7 +254,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [busy, setBusy] = useState(false);
   const [memPage, setMemPage] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"mem" | "esr" | "graph" | "preview">("mem");
+  const [view, setView] = useState<"mem" | "esr" | "graph" | "preview" | "telemetry">("mem");
   const [gcDryRun, setGcDryRun] = useState(true);
   const [gcReport, setGcReport] = useState<GcReport | null>(null);
   const [gcRunning, setGcRunning] = useState(false);
@@ -453,6 +454,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
         <button style={view === "graph" ? s.tabActive : s.tab} onClick={() => setView("graph")}>关系图谱</button>
         <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>注入预览</button>
+        <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
       </div>
 
       {view === "mem" && (
@@ -802,6 +804,12 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       {view === "preview" && (
         <div style={s.subPanel}>
           <EngramPreview api={api} workspace={workspace} workspaces={workspaces} />
+        </div>
+      )}
+
+      {view === "telemetry" && (
+        <div style={s.subPanel}>
+          <EngramTelemetry api={api} workspace={workspace} />
         </div>
       )}
     </div>

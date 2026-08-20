@@ -109,6 +109,10 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   artifact · evaluation · memory_ref 三道闭环门——全绿=证据齐可闭环、琥珀=有缺口、灰=尚无证据；
   看板头部还有一个**聚合环**，显示全部进行中任务的证据完备度（%）与就绪数，一次看清整盘闭环进度。
   纯 SVG 实现（无图表库，保持 bundle 纯净）。
+  以及一个 **遥测仪表盘** 页签：把 /stats 的真实调用累计（工作区 × 天滚动）画成纯 SVG 仪表盘——三枚大圆环
+  直读 **ESR 主动性**（与 escalate 阈值 0.34 比对，偏低标橙并提示）、**召回命中率**、**detail 转化**，
+  五张小指标卡（累计调用 / esr / 记忆 / 平均命中每查询 / 失败），近 14 天 mem-vs-esr 堆叠柱状图 +
+  工具调用 Top 8 横向条形图（mem 蓝 / esr 紫，与全文配色一致），20s 自动刷新，样本不足（<10 次）自动标注。
   `POST /api/dsh-engram/tasks` 与 `POST /api/dsh-engram/tasks/close`（与 esr_task / esr_close 同一证据门）。
   模型侧的主动行为由 [ENGRAM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
 
