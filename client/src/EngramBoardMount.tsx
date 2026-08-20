@@ -10,7 +10,7 @@
  *     active ESR tasks (polled from /overview);
  *   - a board container `[data-dsh-engram-board]` appended to the center
  *     column with its own React root; visibility is CSS-driven via
- *     `html[data-dsh-engram-board="on"]` so the conversation subtree stays
+ *     `html[data-dsh-engram-board-active="on"]` so the conversation subtree stays
  *     mounted and stateful underneath;
  *   - cross-panel activation: opening evicts sibling panels (task-board /
  *     ssh), opening a sibling closes ours, and clicking a sidebar row hands
@@ -31,7 +31,7 @@ export const BOARD_SELECTOR = "[data-dsh-engram-board]";
 export const PANEL_NAME = "engram";
 /** Rendered board root also carries a marker for tests/selectors. */
 export const BOARD_ROOT_SELECTOR = "[data-engram-board]";
-const ACTIVE_ATTR = "data-dsh-engram-board";
+const ACTIVE_ATTR = "data-dsh-engram-board-active";
 const ACTIVATE_EVENT = "dsh-panel-activate";
 /** Sibling panels that take over the center column. */
 const OTHER_ACTIVE_ATTRS = ["data-dsh-taskboard-active", "data-dsh-ssh-active"];
@@ -57,9 +57,9 @@ function ensureBoardStyles(): void {
   position: absolute; inset: 0; z-index: 60; display: none;
   background: var(--dsw-alias-bg-base, #ffffff);
 }
-html[data-dsh-engram-board="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [data-dsh-engram-board] { display: block; }
-html[data-dsh-engram-board="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [data-pane='conversation'] > :not([data-dsh-engram-board]),
-html[data-dsh-engram-board="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [class*='centerCol'] > :not([data-dsh-engram-board]) { display: none !important; }
+html[data-dsh-engram-board-active="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [data-dsh-engram-board] { display: block; }
+html[data-dsh-engram-board-active="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [data-pane='conversation'] > :not([data-dsh-engram-board]),
+html[data-dsh-engram-board-active="on"]:not([data-dsh-taskboard-active]):not([data-dsh-ssh-active]) [class*='centerCol'] > :not([data-dsh-engram-board]) { display: none !important; }
 [data-dsh-engram-entry] {
   display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
   padding: 7px 10px; border: none; background: transparent; cursor: pointer;

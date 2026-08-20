@@ -109,7 +109,7 @@ After restart, inside the **native** DSH settings surface:
   re-renders), with cross-panel exclusivity against task-board/ssh (opening one
   evicts the others; clicking a sidebar session/workspace row hands the center
   column back to the conversation). The conversation subtree stays mounted
-  underneath and is hidden by `html[data-dsh-engram-board]`, so toggling loses
+  underneath and is hidden by `html[data-dsh-engram-board-active]`, so toggling loses
   no state.
 
 
