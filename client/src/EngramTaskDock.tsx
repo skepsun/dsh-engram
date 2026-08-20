@@ -650,26 +650,12 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                     >
                       <span style={{ fontSize: 10, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", flex: "none" }}>{expanded ? "▾" : "▸"}</span>
                       <span style={{ color: isStable ? "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" : "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.name}</span>
-                      {/* status lives inline with the content — no separate badge band */}
-                      <span style={{ ...chip, ...statusColor, fontWeight: 700, flex: "none", fontSize: 9.5, padding: "0 5px", lineHeight: "14px" }} title={gaps.length > 0 ? `证据缺口: ${gaps.join(", ")}` : label}>
-                        {isStable ? "STABLE" : gaps.length === 0 ? "READY" : `ACTIVE·${gaps.length}`}
-                      </span>
+                      {/* status as a tiny color dot — full label/missing list lives in the tooltip */}
+                      <span
+                        style={{ flex: "none", width: 7, height: 7, borderRadius: "50%", background: statusColor.fg }}
+                        title={gaps.length > 0 ? `${label} · 证据缺口: ${gaps.join(", ")}` : label}
+                      />
                     </button>
-                    {!isStable && (
-                      <button
-                        type="button"
-                        className="ed-btn"
-                        style={{ ...btn, padding: "3px 8px", fontSize: 11.5, flex: "none" }}
-                        onClick={() => {
-                          setClosingFor(open ? null : task.id);
-                          if (!open) setExpandedId(task.id);
-                          else if (expandedId === task.id) setExpandedId(null);
-                          setCreating(false);
-                        }}
-                      >
-                        {open ? "收起" : "补齐证据"}
-                      </button>
-                    )}
                   </div>
                   {expanded && (
                     <>
@@ -689,6 +675,23 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                           {shortIdS(task.id)} · {fmtD(task.createdAt)}
                         </span>
                       </div>
+                      {!isStable && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <button
+                            type="button"
+                            className="ed-btn"
+                            style={{ ...btn, padding: "3px 8px", fontSize: 11.5 }}
+                            onClick={() => {
+                              setClosingFor(open ? null : task.id);
+                              if (!open) setExpandedId(task.id);
+                              else if (expandedId === task.id) setExpandedId(null);
+                              setCreating(false);
+                            }}
+                          >
+                            {open ? "收起" : "补齐证据"}
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                   {open && (
