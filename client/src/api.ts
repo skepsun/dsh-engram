@@ -36,6 +36,14 @@ export interface TaskRecord {
   updatedAt: number;
 }
 
+export interface ToolStats {
+  days: number;
+  files: number;
+  events: number;
+  tools: Record<string, number>;
+  buckets: Record<string, Record<string, number>>;
+}
+
 export interface LinkRecord {
   id: string;
   workspace: string;
@@ -214,6 +222,11 @@ export class EngramApi {
 
   async tasks(workspace: string, includeStable = false): Promise<{ items: TaskRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/tasks${query({ workspace, includeStable: includeStable ? "1" : undefined })}`));
+  }
+
+  /** Real tool-call rollup over recent session logs (host /toolstats). */
+  async toolStats(days = 14): Promise<ToolStats> {
+    return readJson(await fetch(`${API_PREFIX}/toolstats?days=${days}`));
   }
 
   async createTask(workspace: string, name: string, description = ""): Promise<{ task: TaskRecord }> {

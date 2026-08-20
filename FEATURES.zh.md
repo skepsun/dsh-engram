@@ -29,6 +29,14 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、
 点选节点弹出悬浮面板看全部关系；悬空链接单独计数提示。
 
+### 1aaaaaa. 使用率迷你可视化（todo vs ESR vs 记忆）— 上述之后
+dock 展开态顶部新增行为统计条：host 新端点 `/api/dsh-engram/toolstats?days=14`
+读取会话日志真源（`~/.dsh/sessions/*/*/session.jsonl.zstd`，`type:"tool/call"` 计数，
+60s 缓存、mtime 窗口过滤），返回全工具调用计数——**含原生 todo**（usage 表记不到的）。
+dock 显示「近 14 天 · todo N · ESR M · 记忆 K · 调用 N」，ESR 为零且 todo 大于零时
+附带一行「ESR 为零，todo 可用『沉淀到 ESR』转草稿」提示。注意：该 host 端点需
+`dsh web` 重启一次注册（与 /preview 相同），此前 dock 统计行静默隐藏。
+
 ### 1aaaaa. todo → ESR 一键沉淀 — 上述之后
 计划区新增「**沉淀到 ESR（N 项）**」按钮：把本轮未完成的 todo 项一键转成该工作区的
 ESR 任务草稿（名称=todo 原文，描述标记「源自会话计划」），转完自动刷新 ESR 网格；

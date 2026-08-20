@@ -31,7 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { EngramApi, LinkRecord, TaskRecord, EntityRecord } from "./api";
+import type { EngramApi, LinkRecord, TaskRecord, EntityRecord, ToolStats } from "./api";
 import { useEngramTheme } from "./theme";
 
 /** Status of one built-in plan item (mirrors @deepseek-ai/dsh-tool-todo/client). */
@@ -136,6 +136,15 @@ function IconRefresh({ size = 13 }: { size?: number }) {
   );
 }
 
+const ESR_TOOLS = ["esr_task", "esr_node", "esr_link", "esr_close", "esr_gc"];
+const MEM_TOOLS = ["engram_store", "engram_recall", "engram_detail", "loom_store", "loom_recall", "loom_detail"];
+function esrToolSum(s: ToolStats): number {
+  return ESR_TOOLS.reduce((acc, k) => acc + (s.tools[k] ?? 0), 0);
+}
+function memToolSum(s: ToolStats): number {
+  return MEM_TOOLS.reduce((acc, k) => acc + (s.tools[k] ?? 0), 0);
+}
+
 /* Plan-item status glyphs (mirror the built-in TodoPanel's 14px artboard). */
 function PlanGlyph({ status }: { status: PlanItemStatus }) {
   if (status === "completed") {
@@ -208,6 +217,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   /** todo→ESR promotions done this session (dedupe by plan content). */
   const [promoted, setPromoted] = useState<Set<string>>(new Set());
   const [promoteBusy, setPromoteBusy] = useState(false);
+  /** Real usage rollup (host /toolstats) for the mini behaviour bar. */
+  const [toolStats, setToolStats] = useState<ToolStats | null>(null);
   const [closeArtifact, setCloseArtifact] = useState("");
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
@@ -310,6 +321,12 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [wsOpen]);
+
+  useEffect(() => {
+    let live = true;
+    api.toolStats(14).then((r) => { if (live) setToolStats(r); }).catch(() => { /* offline bar */ });
+    return () => { live = false; };
+  }, [api]);
 
   const activeTasks = useMemo(() => data.tasks.filter((t) => t.state !== "stable"), [data.tasks]);
   const readyTasks = activeTasks.filter((t) => taskGaps(t).length === 0);
@@ -557,6 +574,22 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           {data.denied && (
             <div style={{ fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))", lineHeight: 1.5 }}>
               ESR 工作区数据不可达（loopback-only 守卫）— 本轮计划照常展示；完整任务与关系见 设置 → Engram 记忆。
+            </div>
+          )}
+
+          {toolStats && (
+            <div style={statsRow}>
+              <span>
+                近 {toolStats.days} 天 · todo <strong>{toolStats.tools.todo_write ?? 0}</strong>
+                {" · "}ESR <strong>{esrToolSum(toolStats)}</strong>
+                {" · "}记忆 <strong>{memToolSum(toolStats)}</strong>
+                {" · "}调用 {toolStats.events}
+              </span>
+              {esrToolSum(toolStats) === 0 && toolStats.tools.todo_write > 0 && (
+                <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
+                  — ESR 为零，todo 可用「沉淀到 ESR」转草稿
+                </span>
+              )}
             </div>
           )}
 
@@ -881,6 +914,18 @@ const taskCard: CSSProperties = {
   padding: "6px 9px",
   minHeight: 34,
   background: "var(--dsw-alias-bg-layer-1, transparent)",
+};
+
+const statsRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  fontSize: 11,
+  lineHeight: 1.5,
+  color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))",
+  paddingBottom: 6,
+  borderBottom: "1px dashed var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",
 };
 
 const planBox: CSSProperties = {
