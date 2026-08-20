@@ -220,6 +220,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const [closingFor, setClosingFor] = useState<string | null>(null);
   /** Expanded card detail (description / gaps / memory refs / provenance). */
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Task-card paging: keeps the strip bounded however many ESR tasks exist. */
+  const [taskPage, setTaskPage] = useState(0);
   const [closeArtifact, setCloseArtifact] = useState("");
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
@@ -330,6 +332,13 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const activeTasks = useMemo(() => data.tasks.filter((t) => t.state !== "stable"), [data.tasks]);
   const readyTasks = activeTasks.filter((t) => taskGaps(t).length === 0);
   const gappedTasks = activeTasks.filter((t) => taskGaps(t).length > 0);
+  const TASK_PAGE_SIZE = 9;
+  const totalPages = Math.max(1, Math.ceil(data.tasks.length / TASK_PAGE_SIZE));
+  // Clamp the page when the task set shrinks (poll refresh / close).
+  useEffect(() => {
+    setTaskPage((p) => Math.min(p, totalPages - 1));
+  }, [totalPages]);
+  const pagedTasks = data.tasks.slice(taskPage * TASK_PAGE_SIZE, taskPage * TASK_PAGE_SIZE + TASK_PAGE_SIZE);
   const stableCount = data.tasks.length - activeTasks.length;
 
   // Resolve node/task ids to display names for relation rows.
@@ -649,7 +658,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           )}
           {data.tasks.length > 0 && (
             <div style={taskGrid}>
-          {data.tasks.map((task) => {
+          {pagedTasks.map((task) => {
             const gaps = taskGaps(task);
             const isStable = task.state === "stable";
             const statusColor = isStable ? STATUS.stable : gaps.length === 0 ? STATUS.ready : STATUS.gap;
@@ -665,16 +674,17 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                     <button
                       type="button"
                       className="ed-task-row"
-                      style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 7, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "1px 0", color: "var(--dsw-alias-label-primary, inherit)", fontSize: 12.5, fontWeight: 600, lineHeight: "20px", overflowWrap: "anywhere" }}
+                      style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "1px 0", color: "var(--dsw-alias-label-primary, inherit)", fontSize: 12.5, fontWeight: 600, lineHeight: "20px", overflowWrap: "anywhere" }}
                       onClick={() => setExpandedId(expanded ? null : task.id)}
                       title={expanded ? "收起详情" : "展开详情"}
                     >
                       <span style={{ fontSize: 10, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", flex: "none" }}>{expanded ? "▾" : "▸"}</span>
-                      <span style={{ color: isStable ? "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" : "inherit" }}>{task.name}</span>
+                      <span style={{ color: isStable ? "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" : "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.name}</span>
+                      {/* status lives inline with the content — no separate badge band */}
+                      <span style={{ ...chip, ...statusColor, fontWeight: 700, flex: "none", fontSize: 9.5, padding: "0 5px", lineHeight: "14px" }} title={gaps.length > 0 ? `证据缺口: ${gaps.join(", ")}` : label}>
+                        {isStable ? "STABLE" : gaps.length === 0 ? "READY" : `ACTIVE·${gaps.length}`}
+                      </span>
                     </button>
-                    <span style={{ ...chip, ...statusColor, fontWeight: 700, flex: "none" }} title={gaps.length > 0 ? `证据缺口: ${gaps.join(", ")}` : label}>
-                      {isStable ? "STABLE" : gaps.length === 0 ? "READY" : `ACTIVE·${gaps.length}`}
-                    </span>
                     {!isStable && (
                       <button
                         type="button"
@@ -732,6 +742,17 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           })}
             </div>
           )}
+          {data.tasks.length > TASK_PAGE_SIZE && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))" }}>
+              <span>共 {data.tasks.length} · {taskPage + 1}/{totalPages}</span>
+              <button type="button" className="ed-btn" style={{ ...btn, padding: "2px 8px", fontSize: 11.5 }} disabled={taskPage === 0} onClick={() => setTaskPage((v) => Math.max(0, v - 1))}>
+                ‹ 上一页
+              </button>
+              <button type="button" className="ed-btn" style={{ ...btn, padding: "2px 8px", fontSize: 11.5 }} disabled={taskPage >= totalPages - 1} onClick={() => setTaskPage((v) => Math.min(totalPages - 1, v + 1))}>
+                下一页 ›
+              </button>
+            </div>
+          )}
 
           {/* Relations */}
           {data.links.length > 0 && (
@@ -776,10 +797,11 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
 /* Styles                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Responsive multi-column task grid: 3 cols on a wide strip, 2 on mid, 1 on narrow. */
+/** Fixed-width multi-column task grid: every card gets the same footprint
+    (3 cols on a wide strip, 2 mid, 1 narrow) so rows stay even and compact. */
 const taskGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, 220px)",
   gap: "6px 8px",
   alignItems: "start",
 };
@@ -896,7 +918,8 @@ const taskCard: CSSProperties = {
   gap: 8,
   border: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",
   borderRadius: 10,
-  padding: "7px 9px",
+  padding: "6px 9px",
+  minHeight: 34,
   background: "var(--dsw-alias-bg-layer-1, transparent)",
 };
 
