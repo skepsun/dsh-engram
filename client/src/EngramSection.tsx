@@ -15,6 +15,7 @@ import { EngramGraph } from "./EngramGraph";
 import { EngramPreview } from "./EngramPreview";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramTelemetry } from "./EngramTelemetry";
+import { EngramDetail, type DetailTarget } from "./EngramDetail";
 import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
 import { useEngramTheme } from "./theme";
 
@@ -246,6 +247,8 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [nodes, setNodes] = useState<EntityRecord[]>([]);
   const [usageStats, setUsageStats] = useState<EngramStats | null>(null);
+  const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<string>("");
   const [kind, setKind] = useState<string>("");
@@ -435,6 +438,24 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     }
   };
 
+  const openMemory = (id: string) => {
+    const m = memories.find((mem) => mem.id === id);
+    if (m) {
+      setDetail({ kind: "memory", memory: m });
+      setDetailNotice(null);
+    } else {
+      setDetailNotice(`记忆 ${id} 不在当前加载列表 — 切换到「记忆」页加载后可用`);
+    }
+  };
+  const openTask = (id: string) => {
+    setDetail({ kind: "task", id });
+    setDetailNotice(null);
+  };
+  const openNode = (id: string) => {
+    setDetail({ kind: "node", id });
+    setDetailNotice(null);
+  };
+
   const indexCost = workspace && overview ? overview.indexes[workspace] : null;
   const gc = overview?.gc ?? null;
   const wsCounts = workspace && overview ? overview.workspaces[workspace] ?? null : null;
@@ -456,6 +477,9 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>注入预览</button>
         <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
       </div>
+
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
 
       {view === "mem" && (
         <>
@@ -605,6 +629,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                    <button style={s.linkBtn} title="在侧栏打开详情" onClick={() => { setDetail({ kind: "memory", memory: r.m }); setDetailNotice(null); }}>详情</button>
                     <button style={s.btn} title="归档（TTL/软删，可恢复不载入索引）" onClick={() => void act(() => api.archive(r.m.id, r.m.workspace))}>归档</button>
                     <button style={s.btn} title="永久删除" onClick={() => { if (window.confirm(`删除这条记忆?\n${r.m.text.slice(0, 60)}`)) void act(() => api.remove(r.m.id, r.m.workspace)); }}>删除</button>
                   </div>
@@ -717,6 +742,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                       {closeFor === task.id ? "收起" : "填写证据关闭…"}
                     </button>
                   )}
+                  <button style={s.linkBtn} title="在侧栏打开详情" onClick={() => openTask(task.id)}>详情</button>
                 </div>
                 {!isStable && gaps.length > 0 && (
                   <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
@@ -751,7 +777,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         <Fragment key={ws}>
           {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 个节点</div>}
           {items.map((n: EntityRecord) => (
-            <div key={n.id} style={{ fontSize: 12.5, padding: "2px 0" }}>
+            <div key={n.id} style={{ fontSize: 12.5, padding: "2px 0", cursor: "pointer", borderRadius: 6 }} title="在侧栏打开节点详情" onClick={() => openNode(n.id)}>
               <span className="mono" style={{ ...s.mono, color: "#4338ca" }}>{n.id.slice(0, 24)}</span>{" "}
               <span style={{ fontWeight: 600 }}>{n.name}</span>
               {n.kind && <span style={{ ...s.tag, color: "#4338ca", background: "#eef2ff" }}>{n.kind}</span>}
@@ -767,7 +793,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 条关系</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
             {items.map((l: LinkRecord) => (
-              <div key={l.id} style={s.relRow}>
+              <div key={l.id} style={{ ...s.relRow, cursor: "pointer" }} title="在侧栏打开关系详情" onClick={() => { setDetail({ kind: "link", link: l }); setDetailNotice(null); }}>
                 <span className="mono" style={s.nodePill} title={l.source}>{nameOf(l.source)}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--dsh-color-muted, #6b7280)" }}>
                   <span style={{ border: "1px dashed var(--dsh-color-border, #cbd5e1)", borderRadius: 999, padding: "1px 7px" }}>{l.relation}</span>
@@ -812,6 +838,29 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           <EngramTelemetry api={api} workspace={workspace} />
         </div>
       )}
+
+        </div>
+        {detail && (
+          <div style={{ flex: "0 0 320px", maxWidth: "38%", position: "sticky", top: 8 }}>
+            {detailNotice && (
+              <div style={{ fontSize: 11.5, padding: "6px 10px", marginBottom: 6, borderRadius: 8, background: "rgba(245,158,11,.14)", color: "#b45309", border: "1px solid rgba(245,158,11,.35)" }}>
+                {detailNotice}
+              </div>
+            )}
+            <EngramDetail
+              target={detail}
+              api={api}
+              memories={memories}
+              tasks={tasks}
+              nodes={nodes}
+              links={links}
+              onClose={() => setDetail(null)}
+              onNavigateMemory={openMemory}
+              onChanged={() => void refresh()}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

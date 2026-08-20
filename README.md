@@ -163,7 +163,15 @@ After restart, inside the **native** DSH settings surface:
   follow-through**, five stat cards (total / esr / memory calls, avg hits per
   query, failures), a 14-day mem-vs-esr stacked bar chart and a Top-8 tool
   breakdown (mem blue / esr purple), 20s auto-refresh with an automatic
-  small-sample (<10 calls) warning. And a
+  small-sample (<10 calls) warning. A **details sidebar** (master–detail)
+  opens on the right when you click any task / memory / node / relation
+  row: task cards show state badge, evidence ring, full id + timeline,
+  gap list, clickable memory references and an inline "fill evidence to
+  close" form that refreshes the lists on success; memory cards show full
+  text, tags, signal/hits/TTL and provenance metadata; node cards list all
+  incident relations (typed, colored, with direction + confidence); clicking
+  a task's memory reference jumps straight to that memory, with a hint when
+  it is not in the loaded set. And a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
   create/close use the host's new `POST /api/dsh-engram/tasks` and
   `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven
