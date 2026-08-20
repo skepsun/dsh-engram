@@ -218,6 +218,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [closingFor, setClosingFor] = useState<string | null>(null);
+  /** Expanded card detail (description / gaps / memory refs / provenance). */
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [closeArtifact, setCloseArtifact] = useState("");
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
@@ -638,57 +640,77 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
             </div>
           )}
 
-          {/* Task cards */}
+          {/* Task cards — one-row summaries in a responsive grid so many tasks
+              stay compact instead of stacking into a tall strip. */}
           {activeTasks.length === 0 && data.tasks.length === 0 && (
             <div style={{ fontSize: 12, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", padding: "2px 0" }}>
               暂无活动任务 — 点「新建」或在对话中让 agent 用 esr_task 建任务
             </div>
           )}
+          {data.tasks.length > 0 && (
+            <div style={taskGrid}>
           {data.tasks.map((task) => {
             const gaps = taskGaps(task);
             const isStable = task.state === "stable";
             const statusColor = isStable ? STATUS.stable : gaps.length === 0 ? STATUS.ready : STATUS.gap;
             const label = isStable ? "STABLE" : gaps.length === 0 ? "READY" : "ACTIVE";
             const open = closingFor === task.id;
+            const expanded = expandedId === task.id;
             return (
               <div key={task.id} className="ed-task" style={taskCard}>
                 <span aria-hidden style={{ width: 3, borderRadius: 2, alignSelf: "stretch", background: statusColor.fg }} />
                 <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ flex: "1 1 200px", minWidth: 0, fontSize: 12.5, fontWeight: 600, lineHeight: 1.4, color: "var(--dsw-alias-label-primary, inherit)", overflowWrap: "anywhere" }}>
-                      <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-                        {shortIdS(task.id)}{" "}
-                      </span>
-                      {task.name}
+                  {/* One-row summary — tap the row to expand details (keeps the dock slim). */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="ed-task-row"
+                      style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 7, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "1px 0", color: "var(--dsw-alias-label-primary, inherit)", fontSize: 12.5, fontWeight: 600, lineHeight: "20px", overflowWrap: "anywhere" }}
+                      onClick={() => setExpandedId(expanded ? null : task.id)}
+                      title={expanded ? "收起详情" : "展开详情"}
+                    >
+                      <span style={{ fontSize: 10, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", flex: "none" }}>{expanded ? "▾" : "▸"}</span>
+                      <span style={{ color: isStable ? "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" : "inherit" }}>{task.name}</span>
+                    </button>
+                    <span style={{ ...chip, ...statusColor, fontWeight: 700, flex: "none" }} title={gaps.length > 0 ? `证据缺口: ${gaps.join(", ")}` : label}>
+                      {isStable ? "STABLE" : gaps.length === 0 ? "READY" : `ACTIVE·${gaps.length}`}
                     </span>
-                    <span style={{ ...chip, ...statusColor, fontWeight: 700 }}>{label}</span>
                     {!isStable && (
                       <button
                         type="button"
                         className="ed-btn"
-                        style={{ ...btn, padding: "3px 8px", fontSize: 11.5 }}
-                        onClick={() => { setClosingFor(open ? null : task.id); setCreating(false); }}
+                        style={{ ...btn, padding: "3px 8px", fontSize: 11.5, flex: "none" }}
+                        onClick={() => {
+                          setClosingFor(open ? null : task.id);
+                          if (!open) setExpandedId(task.id);
+                          else if (expandedId === task.id) setExpandedId(null);
+                          setCreating(false);
+                        }}
                       >
                         {open ? "收起" : "补齐证据"}
                       </button>
                     )}
                   </div>
-                  {task.description && (
-                    <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {task.description}
-                    </div>
+                  {expanded && (
+                    <>
+                      {task.description && (
+                        <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))", overflowWrap: "anywhere" }}>
+                          {task.description}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                        {gaps.map((g) => (
+                          <span key={g} style={{ ...chip, ...chipGap }} title="证据缺口">{g} ✗</span>
+                        ))}
+                        {task.memoryRefs.map((r) => (
+                          <span key={r} style={{ ...chip, ...chipRef }} title={`memory_ref ${r}`}>#{r.slice(0, 8)}</span>
+                        ))}
+                        <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
+                          {shortIdS(task.id)} · {fmtD(task.createdAt)}
+                        </span>
+                      </div>
+                    </>
                   )}
-                  <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
-                    {gaps.map((g) => (
-                      <span key={g} style={{ ...chip, ...chipGap }} title="证据缺口">{g} ✗</span>
-                    ))}
-                    {task.memoryRefs.map((r) => (
-                      <span key={r} style={{ ...chip, ...chipRef }} title={`memory_ref ${r}`}>#{r.slice(0, 8)}</span>
-                    ))}
-                    <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
-                      {fmtD(task.createdAt)}
-                    </span>
-                  </div>
                   {open && (
                     <div style={{ border: "1px dashed var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 8, padding: 7, display: "flex", flexDirection: "column", gap: 5, marginTop: 2 }}>
                       <div style={{ fontSize: 10.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
@@ -708,6 +730,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
               </div>
             );
           })}
+            </div>
+          )}
 
           {/* Relations */}
           {data.links.length > 0 && (
@@ -751,6 +775,14 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
 /* ------------------------------------------------------------------ */
 /* Styles                                                              */
 /* ------------------------------------------------------------------ */
+
+/** Responsive multi-column task grid: 3 cols on a wide strip, 2 on mid, 1 on narrow. */
+const taskGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+  gap: "6px 8px",
+  alignItems: "start",
+};
 
 const chip: CSSProperties = {
   display: "inline-flex",
