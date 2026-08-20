@@ -13,6 +13,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { EngramGraph } from "./EngramGraph";
 import { EngramPreview } from "./EngramPreview";
+import { EvidenceRing } from "./EvidenceRing";
 import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
 import { useEngramTheme } from "./theme";
 
@@ -698,6 +699,13 @@ export function EngramSection({ api, t }: EngramSectionFace) {
               <div key={task.id} style={s.subPanel}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>
                   <span style={s.mono}>{task.id.slice(0, 6)}</span>{" "}
+                  <EvidenceRing
+                    artifact={Boolean(task.artifact)}
+                    evaluation={Boolean(task.evaluation)}
+                    refs={(task.memoryRefs?.length ?? 0) > 0}
+                    size={22}
+                  />
+                  {" "}
                   {task.name}{" "}
                   <span style={{ ...s.badge, background: isStable ? "#059669" : gaps.length === 0 ? "#2563eb" : "#d97706" }}>
                     {isStable ? "STABLE" : gaps.length === 0 ? "READY" : "ACTIVE"}

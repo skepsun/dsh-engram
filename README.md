@@ -150,7 +150,13 @@ After restart, inside the **native** DSH settings surface:
   headers, task lines, drill hint, and the data-driven `escalate:` reminder
   highlighted), line/char/~token cost chips plus memory/task/link/node count
   chips, 20s auto-refresh and one-click copy of the raw block text (backed by
-  the new `GET /api/dsh-engram/preview?workspace=…` route), and a
+  the new `GET /api/dsh-engram/preview?workspace=…` route). Every ESR task
+  card (board and ESR tab) carries an **evidence-progress ring** — a small
+  three-arc SVG donut mapping artifact · evaluation · memory_ref, all green
+  when closure-ready, amber while gapped, gray with no evidence yet; the
+  board header adds an **aggregate ring** showing overall evidence
+  completeness (%) plus how many in-progress tasks are closure-ready. Pure
+  SVG, no chart library, bundle stays clean. And a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
   create/close use the host's new `POST /api/dsh-engram/tasks` and
   `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven

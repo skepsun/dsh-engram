@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngramTheme } from "./theme";
+import { EvidenceRing } from "./EvidenceRing";
 import type { LinkRecord, TaskRecord } from "./api";
 
 export interface EngramBoardApi {
@@ -131,6 +132,24 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   );
 
   const allTasks = useMemo(() => Object.values(tasksByWs).flat(), [tasksByWs]);
+  // Evidence gauge across active tasks: fraction of the 3 gates already filled.
+  const evidenceGauge = useMemo(() => {
+    let active = 0;
+    let gateTotal = 0;
+    let gateFilled = 0;
+    let ready = 0;
+    let stable = 0;
+    for (const t of allTasks) {
+      if (t.state === "stable") { stable += 1; continue; }
+      if (t.state === "draft") continue;
+      active += 1;
+      const gates = taskGaps(t);
+      gateTotal += 3;
+      gateFilled += 3 - gates.length;
+      if (gates.length === 0) ready += 1;
+    }
+    return { active, gateTotal, gateFilled, ready, stable, frac: gateTotal > 0 ? gateFilled / gateTotal : 0 };
+  }, [allTasks]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return allTasks.filter((t) => {
@@ -201,6 +220,12 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           <span style={hb.sub}>draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门</span>
           {loading && <span style={hb.loading}>…</span>}
           <span style={{ flex: "1 1 auto" }} />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={`证据完备度 ${Math.round(evidenceGauge.frac * 100)}% · ${evidenceGauge.ready}/${evidenceGauge.active} 个进行中任务证据齐 · ${evidenceGauge.stable} 已闭环`}>
+            <EvidenceRing artifact={false} evaluation={false} refs={false} size={30} showLabel={false} fraction={evidenceGauge.frac} />
+            <span style={{ fontSize: 11.5, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted, #6b7280))", fontWeight: 600 }}>
+              {evidenceGauge.active === 0 ? "无进行中" : `${evidenceGauge.ready} 就绪 · 完备 ${Math.round(evidenceGauge.frac * 100)}%`}
+            </span>
+          </span>
           <select style={hb.select} value={ws} onChange={(e) => setWs(e.target.value)} title="工作区筛选">
             <option value="">全部工作区 · {totalActive} 进行中</option>
             {workspaces.map(([w, c]) => (
@@ -262,6 +287,13 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 12.5, lineHeight: "17px", overflowWrap: "anywhere" }}>{t.name}</div>
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3, alignItems: "center" }}>
+                        <EvidenceRing
+                          artifact={Boolean(t.artifact)}
+                          evaluation={Boolean(t.evaluation)}
+                          refs={(t.memoryRefs?.length ?? 0) > 0}
+                          size={20}
+                          showLabel={false}
+                        />
                         <span style={hb.meta}>{shortId(t.id)}</span>
                         {ws === "" && <span style={hb.meta}>{t.workspace.replace(/^.*[\\/]/, "")}</span>}
                         {(col.key === "gapped" || col.key === "ready") && taskGaps(t).map((g) => (

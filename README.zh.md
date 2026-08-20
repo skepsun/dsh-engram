@@ -105,6 +105,10 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   块头/任务行/drill 行/escalate 提醒高亮），附行数·字符·~tokens 成本与记忆/任务/关系/节点计数芯片，
   每 20s 自动刷新、可一键复制注入块原文（新增 `GET /api/dsh-engram/preview?workspace=…`）。
   以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
+  任务卡片（看板与 ESR 页）都带 **证据进度环**：一个三弧 SVG 圆环对应
+  artifact · evaluation · memory_ref 三道闭环门——全绿=证据齐可闭环、琥珀=有缺口、灰=尚无证据；
+  看板头部还有一个**聚合环**，显示全部进行中任务的证据完备度（%）与就绪数，一次看清整盘闭环进度。
+  纯 SVG 实现（无图表库，保持 bundle 纯净）。
   `POST /api/dsh-engram/tasks` 与 `POST /api/dsh-engram/tasks/close`（与 esr_task / esr_close 同一证据门）。
   模型侧的主动行为由 [ENGRAM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
 
