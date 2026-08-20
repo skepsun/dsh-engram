@@ -122,7 +122,12 @@ After restart, inside the **native** DSH settings surface:
   node → relation → node chips with entity/task names resolved. It only shows
   while there is something to show, stays live with 15s polling, and the built-in
   plan still renders (without the ESR parts) if the loopback-fenced API is
-  unreachable.
+  unreachable. A **workspace-switcher chip** leads the strip: it defaults to
+  following the current session (the tooltip says so), and its dropdown pins the
+  ESR task/relation source to any workspace (✓ marks the active pin; the × or
+  "follow session" entry reverts). Switching refetches immediately and is a pure
+  UI focus change — the model's session context and the per-session frozen
+  injection blocks are untouched.
 
 - **Settings → Engram Memory** — a standalone first-class settings section
   (right after the Plugins section, not a child tab of it). Default

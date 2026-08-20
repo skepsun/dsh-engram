@@ -223,6 +223,9 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const [closeRefs, setCloseRefs] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [focusWs, setFocusWs] = useState("");
+  const [wsOpen, setWsOpen] = useState(false);
+  const wsMenuRef = useRef<HTMLDivElement | null>(null);
   const pollRef = useRef<number | null>(null);
 
   // Current session workspace cwd (the engram workspace key), resolved from
@@ -253,8 +256,22 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     return ws ? normalizeWs(ws.path) : "";
   }, [sessionId, sessionsState, workspacesState]);
 
+  /** Workspace focus: "" follows the session; otherwise a pinned workspace. */
+  const effWs = focusWs || cwd;
+  const wsOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ path: string; label: string }> = [];
+    for (const w of workspacesState?.items ?? []) {
+      const p = normalizeWs(w.path);
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      out.push({ path: p, label: p.split(/[/\\]/).filter(Boolean).pop() ?? p });
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [workspacesState]);
+
   const load = useCallback(async () => {
-    if (!cwd) {
+    if (!effWs) {
       setData({ ...EMPTY, loading: false });
       setTouched(true);
       return;
@@ -262,9 +279,9 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     setData((prev) => ({ ...prev, loading: true }));
     try {
       const [tasks, links, nodes] = await Promise.all([
-        api.tasks(cwd, true),
-        api.links(cwd),
-        api.nodes(cwd),
+        api.tasks(effWs, true),
+        api.links(effWs),
+        api.nodes(effWs),
       ]);
       setData({ tasks: tasks.items, links: links.items, nodes: nodes.items, denied: false, error: null, loading: false });
     } catch (e) {
@@ -274,7 +291,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     } finally {
       setTouched(true);
     }
-  }, [cwd, api]);
+  }, [effWs, api]);
 
   // (Re)load whenever the workspace changes; light polling keeps the strip
   // current while the agent works. Polling pauses under a loopback deny so a
@@ -289,14 +306,24 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   }, [load]);
 
   useEffect(() => {
-    if (!cwd || data.denied) return;
+    if (!effWs || data.denied) return;
     if (pollRef.current !== null) window.clearInterval(pollRef.current);
     pollRef.current = window.setInterval(() => void load(), 15000);
     return () => {
       if (pollRef.current !== null) window.clearInterval(pollRef.current);
       pollRef.current = null;
     };
-  }, [cwd, data.denied, load]);
+  }, [effWs, data.denied, load]);
+
+  // close the workspace menu on outside click
+  useEffect(() => {
+    if (!wsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wsMenuRef.current && !wsMenuRef.current.contains(e.target as Node)) setWsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [wsOpen]);
 
   const activeTasks = useMemo(() => data.tasks.filter((t) => t.state !== "stable"), [data.tasks]);
   const readyTasks = activeTasks.filter((t) => taskGaps(t).length === 0);
@@ -318,7 +345,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const planVisible = planItems.length > 0;
   const esrVisible = touched && !data.loading && !data.denied
     && (activeTasks.length > 0 || data.links.length > 0);
-  if (!cwd || (!planVisible && !esrVisible)) return null;
+  if (!effWs || (!planVisible && !esrVisible)) return null;
 
   const refreshNow = () => void load();
   const toggle = () => setCollapsed((v) => !v);
@@ -328,7 +355,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     if (!name) return;
     setActionBusy(true);
     try {
-      await api.createTask(cwd, name, newDesc);
+      await api.createTask(effWs, name, newDesc);
       setNewName("");
       setNewDesc("");
       setCreating(false);
@@ -370,6 +397,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   };
 
   const wsBasename = cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
+  const following = focusWs === "";
+  const effLabel = (effWs.split(/[/\\]/).filter(Boolean).pop() ?? effWs) || "—";
 
   return (
     <div
@@ -439,8 +468,48 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           任务
           <span style={{ ...chip, ...chipNeutral, fontSize: 9.5, padding: "0 6px", lineHeight: "15px", fontWeight: 700, letterSpacing: ".02em" }}>ESR</span>
         </span>
-        <span style={{ flex: "none", fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-          {wsBasename}
+        <span ref={wsMenuRef} onClick={(e) => e.stopPropagation()} style={{ position: "relative", display: "inline-flex", flex: "none", alignItems: "center" }}>
+          <span
+            role="button"
+            tabIndex={0}
+            title={following ? `跟随当前会话 · 工作区 ${wsBasename || "—"}（点击切换 ESR 任务来源）` : `已固定到 ${effLabel}（点击切换）`}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setWsOpen((v) => !v); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setWsOpen((v) => !v); } }}
+            style={wsChip}
+          >
+            {effLabel}
+            <span style={{ fontSize: 8, opacity: 0.75, marginLeft: 3 }}>{wsOpen ? "▲" : "▼"}</span>
+          </span>
+          {!following && (
+            <span
+              role="button"
+              tabIndex={0}
+              title="恢复跟随当前会话"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFocusWs(""); setWsOpen(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); setFocusWs(""); setWsOpen(false); } }}
+              style={wsClear}
+            >
+              ×
+            </span>
+          )}
+          {wsOpen && (
+            <div style={wsMenu} role="menu">
+              <div role="menuitem" style={wsItem(following)} onClick={() => { setFocusWs(""); setWsOpen(false); }}>
+                跟随会话 · {wsBasename || "—"}{following ? " ✓" : ""}
+              </div>
+              {wsOptions.length === 0 && (
+                <div style={{ ...wsItem(false), cursor: "default", color: "var(--dsh-color-muted-weak, #9ca3af)" }}>暂无其他工作区</div>
+              )}
+              {wsOptions.map((o) => (
+                <div key={o.path} role="menuitem" style={wsItem(effWs === o.path && !following)} onClick={() => { setFocusWs(o.path); setWsOpen(false); }}>
+                  {o.label}{effWs === o.path && !following ? " ✓" : ""}
+                </div>
+              ))}
+              <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid var(--dsh-color-border, #e5e7eb)", fontSize: 10.5, color: "var(--dsh-color-muted-weak, #9ca3af)", padding: "3px 9px" }}>
+                仅切换 ESR 任务/关系来源；内置 todo 仍属本会话
+              </div>
+            </div>
+          )}
         </span>
         <span
           style={{
@@ -679,6 +748,63 @@ const chipNeutral: CSSProperties = {
   background: "var(--dsw-alias-bg-layer-2, var(--dsh-color-hover-bg, #f3f4f6))",
   color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))",
 };
+
+const wsChip: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 2,
+  fontSize: 11,
+  lineHeight: "18px",
+  fontWeight: 600,
+  cursor: "pointer",
+  padding: "1px 7px",
+  borderRadius: 999,
+  color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))",
+  background: "var(--dsw-alias-bg-layer-2, var(--dsh-color-hover-bg, #f3f4f6))",
+  border: "1px solid var(--dsh-color-border, #e5e7eb)",
+  maxWidth: 150,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const wsClear: CSSProperties = {
+  cursor: "pointer",
+  marginLeft: 2,
+  padding: "0 4px",
+  fontSize: 12,
+  lineHeight: "16px",
+  color: "var(--dsh-color-muted, #6b7280)",
+  borderRadius: 6,
+  userSelect: "none",
+};
+
+const wsMenu: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 6px)",
+  left: 0,
+  zIndex: 60,
+  minWidth: 190,
+  maxHeight: 260,
+  overflowY: "auto",
+  background: "var(--dsw-specific-tip, var(--dsh-color-surface, #ffffff))",
+  border: "1px solid var(--dsh-color-border, #d1d5db)",
+  borderRadius: 10,
+  boxShadow: "0 8px 24px rgba(15,23,42,.14)",
+  padding: 4,
+};
+
+const wsItem = (active: boolean): CSSProperties => ({
+  fontSize: 12,
+  padding: "5px 9px",
+  borderRadius: 7,
+  cursor: "pointer",
+  color: active ? "var(--dsh-color-primary, #2563eb)" : "var(--dsh-color-muted-strong, #374151)",
+  background: active ? "rgba(37,99,235,.08)" : "transparent",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+});
 
 const chipError: CSSProperties = {
   background: "rgba(220,38,38,.10)",
