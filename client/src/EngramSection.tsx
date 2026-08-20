@@ -5,11 +5,13 @@
  *   - overview stat cards (counts, capture totals, per-workspace index cost)
  *   - memory search/filter table with archive/delete actions
  *   - the ESR task board (state + evidence gaps) and the relation list
+ *   - the interactive force-directed relation graph (EngramGraph)
  *
  * Plain React + inline styles — no UI-primitives import (bundle-purity gate).
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { EngramGraph } from "./EngramGraph";
 import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
 import { useEngramTheme } from "./theme";
 
@@ -447,6 +449,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       <div style={s.tabBar}>
         <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>记忆</button>
         <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
+        <button style={view === "graph" ? s.tabActive : s.tab} onClick={() => setView("graph")}>关系图谱</button>
       </div>
 
       {view === "mem" && (
@@ -766,6 +769,24 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         </Fragment>
       ))}
         </>
+      )}
+
+      {view === "graph" && (
+        <div style={s.subPanel}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_link 力导向图）</span>
+            <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}>
+              {workspace === "" ? "全部工作区" : `工作区：${workspace}`} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
+            </span>
+          </div>
+          <EngramGraph
+            workspace={workspace}
+            entities={nodes}
+            tasks={tasks}
+            links={links}
+            nameOf={nameOf}
+          />
+        </div>
       )}
     </div>
   );

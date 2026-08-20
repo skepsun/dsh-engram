@@ -122,7 +122,13 @@ After restart, inside the **native** DSH settings surface:
   with an inline "new task" form and a per-task "fill evidence to close"
   (artifact / evaluation / memory_ref → STABLE, same gates as esr_close),
   a node + relation list (nodes are domain objects the model registers via
-  esr_node — package/service/repo/concept; relations via esr_link), and a
+  esr_node — package/service/repo/concept; relations via esr_link), a separate
+  **relation-graph** tab (hand-rolled force-directed SVG, no chart library so
+  the bundle stays pure: entities as circles, tasks as check badges, relations
+  colored per type with direction arrows; drag nodes, pan, wheel-zoom, re-layout,
+  hover highlights the neighborhood, clicking a node pops a floating panel with
+  its incident relations and linked objects; dangling links are counted and
+  warned about), and a
   memory-GC panel (dry-run toggle + run button + pointer report). The GUI
   create/close use the host's new `POST /api/dsh-engram/tasks` and
   `POST /api/dsh-engram/tasks/close` routes. Model-side proactivity is driven

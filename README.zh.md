@@ -95,7 +95,10 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   token 估算、GC 累计统计）、可搜索/可过滤的记忆表格（含归档与删除操作）、ESR 任务看板（「新建任务」
   表单 + 点击「填写证据关闭…」补 artifact/evaluation/memory_ref 转 STABLE）、节点与关系清单
   （节点 = 模型用 esr_node 登记的领域对象，如包/服务/仓库/概念；关系 = esr_link），
-  以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。ESR 的 GUI 新建/关闭走宿主新增的
+  以及一个独立的 **关系图谱** 页签：手写 SVG 力导向图（无第三方图库，保持 bundle 纯净），
+  实体为圆形节点、任务为勾选徽标、关系按类型着色带方向箭头；支持拖拽节点/平移/滚轮缩放/重组，
+  悬停高亮邻域、点选节点在悬浮面板查看其全部关系与关联对象，悬空链接（端点缺失）单独计数提示。
+  以及记忆 GC 面板（dry-run 开关 + 运行按钮 + 指针报告）。
   `POST /api/dsh-engram/tasks` 与 `POST /api/dsh-engram/tasks/close`（与 esr_task / esr_close 同一证据门）。
   模型侧的主动行为由 [ENGRAM]/[ESR] 注入块驱动：多步工作即时建任务、反复出现的领域对象即时登记节点、相关任务/节点即时互连。
 
