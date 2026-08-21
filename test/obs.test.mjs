@@ -1,23 +1,16 @@
 /**
- * Observation layer tests — Hindsight-inspired evidence confinement with zero
- * LLM: bucketing (anchor + bigram Jaccard), merge-not-overwrite semantics,
- * negation weakening, algorithmic trend, per-workspace cap, and the store
- * write-path integration.
+ * Observation VIEW tests — evidence-grounded beliefs, DERIVED not persisted
+ * (assessment P2): a memory with hits>=2 IS an observation; proof = hits;
+ * span = created→updated; trend from recency. Nothing is written anywhere.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  charBigrams,
-  jaccardSim,
-  bucketDecision,
-  mergeObservation,
-  negateObservation,
-  createObservation,
+  OBSERVATION_MIN_PROOF,
   computeTrend,
-  capObservations,
-  integrateObservation,
+  deriveObservations,
 } from "../lib/obs.js";
 import { openEngramDomain } from "../lib/store.js";
 
@@ -25,9 +18,8 @@ const CONFIG = {
   maxMemoryChars: 1600,
   maxMemoriesPerWorkspace: 2000,
   expireDays: 180,
+  promoteHits: 3,
 };
-
-const DAY = 86400000;
 
 function fakeFacility() {
   const tables = new Map();
@@ -51,121 +43,85 @@ function fakeFacility() {
 }
 
 const mem = (over = {}) => ({
-  id: `mem_${Math.random().toString(36).slice(2, 8)}`,
-  workspace: "/ws/A",
-  text: "deploy pipeline broke on the staging host",
+  id: "mem_1",
+  workspace: "/w",
   kind: "error",
+  text: "deploy pipeline broke",
   tags: ["fail"],
-  entity: "ent_deploy",
-  createdAt: Date.now() - DAY,
+  entity: null,
+  hits: 2,
+  createdAt: 1000,
+  updatedAt: 1000,
   ...over,
 });
 
-test("charBigrams is CJK-friendly", () => {
-  assert.deepEqual(charBigrams("排队重来"), ["排队", "队重", "重来"]);
-  assert.deepEqual(charBigrams("a b"), ["ab"]);
+test("deriveObservations: hits>=2 memories ARE beliefs, proof = hits", () => {
+  const out = deriveObservations([
+    mem({ id: "a", hits: 3, kind: "error" }),
+    mem({ id: "b", hits: 1, kind: "error" }),
+    mem({ id: "c", hits: 2, kind: "decision" }),
+    mem({ id: "d", hits: 0, kind: "fact" }),
+  ]);
+  assert.equal(out.length, 2, "b and d (hits<2) are not observations");
+  const ids = out.map((o) => o.id);
+  assert.deepEqual(ids, ["a", "c"], "best-proof first");
+  assert.equal(out[0].proof.count, 3);
+  assert.equal(out[1].proof.count, 2);
+  assert.equal(out[0].kind, "pattern", "error → pattern");
+  assert.equal(out[1].kind, "belief", "non-error → belief");
 });
 
-test("jaccardSim rises with overlap, 0 on disjoint", () => {
-  assert.equal(jaccardSim("abc def", "abc def"), 1);
-  assert.ok(jaccardSim("排队重试失败", "排队重试又失败") > 0.5);
-  assert.ok(jaccardSim("远程调用超时重试策略", "用户登录界面布局调整") < 0.3, "unrelated CJK topics share few bigrams");
-  assert.equal(jaccardSim("", ""), 0);
+test("deriveObservations: stable consumer shape (id/proof/negations/updated_at)", () => {
+  const out = deriveObservations([mem({ id: "x", hits: 4, createdAt: 500, updatedAt: 2000 })], { now: 10000 });
+  assert.equal(out.length, 1);
+  const o = out[0];
+  assert.equal(o.id, "x");
+  assert.equal(o.proof.count, 4);
+  assert.deepEqual(o.proof.sources, ["x"]);
+  assert.equal(o.negations, 0, "derived view has no negation channel");
+  assert.equal(o.updated_at, 2000, "dirty-hash key stays stable");
+  assert.equal(o.span.first_seen_at, 500);
+  assert.equal(o.span.last_seen_at, 2000);
+  assert.equal(o.trend, "new", "both edges within 30d");
 });
 
-test("bucketDecision: no anchor shared -> create (conservative)", () => {
-  const obs = [createObservation(mem({ text: "rotate api keys", tags: ["security"], entity: null }))];
-  const d = bucketDecision(mem({ text: "rotate api keys again please", tags: ["ops"], entity: null }), { observations: obs });
-  assert.equal(d.action, "create"); // text is similar but no anchor (tag/entity) = new bucket
+test("computeTrend windows (new/stale/weakening/strengthening)", () => {
+  const DAY = 86400000;
+  const now = 1000 * DAY;
+  const at = (daysAgo) => now - daysAgo * DAY;
+  const span = (first, last) => ({ first_seen_at: first, last_seen_at: last });
+  assert.equal(computeTrend(span(at(5), at(1)), now), "new", "all recent");
+  assert.equal(computeTrend(span(at(100), at(40)), now), "weakening", "history + no recent evidence");
+  assert.equal(computeTrend(span(at(200), at(150)), now), "stale", "all old");
+  assert.equal(computeTrend(span(at(60), at(5)), now), "strengthening", "30<first<=90, last recent");
+  assert.equal(computeTrend(null, now), "new", "no span");
 });
 
-test("bucketDecision: anchor + similar -> merge", () => {
-  const obs = [createObservation(mem({ tags: ["fail"], entity: "ent_deploy" }))];
-  const d = bucketDecision(mem({ text: "deploy pipeline broke on the staging host again" }), { observations: obs });
-  assert.equal(d.action, "merge");
+test("store integration: no observations on create; revive-twice surfaces one", async () => {
+  const d = await openEngramDomain(fakeFacility());
+  const store = (text, seq) => d.storeMemory({ workspace: "/w", kind: "error", text, tags: [], sessionId: "s", seq }, CONFIG);
+  const first = await store("deploy pipeline broke", 1);
+  assert.equal(d.listObservations("/w").length, 0, "single write is not evidence");
+  const revived = await store("deploy pipeline broke again", 2);
+  assert.equal(revived.revived, true);
+  assert.equal(d.listObservations("/w").length, 0, "first revival → hits=1, still under the bar");
+  await store("deploy pipeline down now", 3);
+  const obs = d.listObservations("/w");
+  assert.equal(obs.length, 1, "revived twice → hits=2 → one belief");
+  assert.equal(obs[0].id, first.id, "belief reuses the memory id");
+  assert.equal(obs[0].proof.count, 2);
+  assert.equal(obs[0].text, "deploy pipeline broke", "row text unchanged by revival");
+  await d.close();
 });
 
-test("bucketDecision: anchor + opposite polarity -> negate", () => {
-  const obs = [createObservation(mem({ text: "the staging deploy is stable and green" }))];
-  const d = bucketDecision(mem({ text: "the staging deploy is not stable, broke again" }), { observations: obs });
-  assert.equal(d.action, "negate");
-});
-
-test("mergeObservation: unique sources climb the count, re-support only refreshes", () => {
-  const now = Date.now();
-  const obs = createObservation(mem(), { now });
-  const m2 = mem({ text: "deploy pipeline broke on the staging host once more" });
-  const merged = mergeObservation(obs, m2, { now });
-  assert.equal(merged.proof.count, 2);
-  assert.deepEqual(merged.proof.sources, [obs.proof.sources[0], m2.id]);
-  const again = mergeObservation(merged, m2, { now });
-  assert.equal(again.proof.count, 2, "same source must not inflate the count");
-  assert.equal(again.span.last_seen_at, now);
-});
-
-test("negateObservation bumps negations and keeps count", () => {
-  const obs = createObservation(mem(), { now: Date.now() });
-  const n = negateObservation(obs, { now: Date.now() });
-  assert.equal(n.negations, 1);
-  assert.equal(n.proof.count, 1);
-});
-
-test("computeTrend covers the five windows", () => {
-  const now = Date.now();
-  assert.equal(computeTrend({ first_seen_at: now - DAY * 5, last_seen_at: now - DAY * 5 }, now), "new");
-  assert.equal(computeTrend({ first_seen_at: now - DAY * 60, last_seen_at: now - 1e8 }, now), "strengthening");
-  assert.equal(computeTrend({ first_seen_at: now - DAY * 80, last_seen_at: now - DAY * 40 }, now), "weakening");
-  assert.equal(computeTrend({ first_seen_at: now - DAY * 200, last_seen_at: now - DAY * 150 }, now), "stale");
-});
-
-test("capObservations evicts lowest proof, oldest first", () => {
-  const now = Date.now();
-  const obs = [
-    createObservation(mem({ text: "a" }), { now }),
-    createObservation(mem({ text: "b" }), { now: now - DAY }),
-    createObservation(mem({ text: "c" }), { now: now - DAY * 2 }),
-    createObservation(mem({ text: "d" }), { now: now - DAY * 3 }),
-  ];
-  obs[0].proof.count = 5;
-  obs[1].proof.count = 2;
-  const kept = capObservations(obs, "/ws/A", { cap: 2 });
-  assert.equal(kept.length, 2);
-  assert.deepEqual(kept.map((o) => o.text), ["a", "b"], "highest proof kept; lowest & oldest evicted");
-});
-
-test("integrateObservation persists create then merge via the table", async () => {
-  const store = await openEngramDomain(fakeFacility());
-  const table = { entries: () => [], put: async () => {}, delete: async () => {} };
-  // harness-style: use the real opened table handle through a wrapped domain write
-  const domain = await openEngramDomain(fakeFacility());
-  // store integration happens through storeMemory (next test); here just wire the table
-  const m = mem();
-  await domain.storeMemory(m, CONFIG);
-  const list = domain.listObservations("/ws/A");
-  assert.equal(list.length, 1, "storing a memory buckets a fresh observation");
-  assert.equal(list[0].proof.count, 1);
-  await domain.storeMemory(mem({ text: "deploy pipeline broke on the staging host again" }), CONFIG);
-  const list2 = domain.listObservations("/ws/A");
-  assert.equal(list2.length, 1, "similar repeat merges into the same bucket");
-  assert.equal(list2[0].proof.count, 2);
-});
-
-test("store write path: exact duplicate refreshes time, not observation count", async () => {
-  const domain = await openEngramDomain(fakeFacility());
-  const m = mem();
-  await domain.storeMemory(m, CONFIG);
-  const first = domain.listObservations("/ws/A")[0];
-  await domain.storeMemory(m, CONFIG); // exact dup: same backing row, new error-signal hits only
-  const list = domain.listObservations("/ws/A");
-  assert.equal(list.length, 1);
-  assert.equal(list[0].proof.count, 1, "same source must not inflate the observation count");
-  assert.ok(list[0].span.last_seen_at >= first.span.last_seen_at, "time span refreshes");
-});
-
-test("summarize includes observations", async () => {
-  const domain = await openEngramDomain(fakeFacility());
-  await domain.storeMemory(mem(), CONFIG);
-  const sum = domain.summarize();
+test("summarize counts observations from the derived projection", async () => {
+  const d = await openEngramDomain(fakeFacility());
+  const store = (text, seq) => d.storeMemory({ workspace: "/w", kind: "error", text, tags: [], sessionId: "s", seq }, CONFIG);
+  await store("tsc exploded on build", 1);
+  await store("tsc exploded on build again", 2);
+  await store("tsc exploded during npm build", 3);
+  const sum = d.summarize();
   assert.equal(sum.totals.observations, 1);
-  assert.equal(sum.workspaces["/ws/A"].observations, 1);
+  assert.equal(sum.workspaces["/w"].observations, 1);
+  await d.close();
 });

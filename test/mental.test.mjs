@@ -51,6 +51,7 @@ async function seed(now = Date.now()) {
   const domain = await openEngramDomain(fakeFacility());
   await domain.storeMemory({ workspace: "/ws/A", kind: "error", text: "deploy pipeline broke", tags: ["fail"], sessionId: "s", seq: 1 }, CONFIG);
   await domain.storeMemory({ workspace: "/ws/A", kind: "error", text: "deploy pipeline broke again", tags: ["fail"], sessionId: "s", seq: 2 }, CONFIG);
+  await domain.storeMemory({ workspace: "/ws/A", kind: "error", text: "deploy pipeline is down", tags: ["fail"], sessionId: "s", seq: 4 }, CONFIG);
   await domain.storeMemory({ workspace: "/ws/A", kind: "decision", text: "chose pgvector-free design", tags: ["deploy"], sessionId: "s", seq: 3 }, CONFIG);
   await domain.putTask({
     id: "tsk_1",
@@ -76,9 +77,9 @@ test("compileSummary covers tasks / graph / observations / memory kinds", async 
   const content = compileSummary(domain, "/ws/A", { now: Date.now() });
   assert.match(content, /任务：1 进行中（0 就绪）/);
   assert.match(content, /实体图：1 节点 · 0 链接/);
-  // two error memories near-repeat (D2 revival: one row, proof climbs) and the
-  // decision fact forms its own bucket — both surface as observations.
-  assert.match(content, /观测：2 条信念（累计 3 证据）/);
+  // observations are DERIVED (P2): an error revived twice over is one row with
+  // hits=2 → one proven belief. A single write is not yet evidence.
+  assert.match(content, /观测：1 条信念（累计 2 证据）/);
   assert.match(content, /记忆：2 条/);
   assert.match(content, /重点信念/);
   assert.match(content, /deploy pipeline broke — ×2/, "repeated failure is a proven belief");
