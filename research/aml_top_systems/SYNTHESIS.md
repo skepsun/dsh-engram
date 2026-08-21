@@ -81,3 +81,11 @@
 ## 待办映射
 - 把 1/2 的实证写回 `PROPOSAL-agentmemory.zh.md`（候选② retention、候选③ supersedes 的外部证据）。
 - 可选：在 PersonaMem/真实库 bench 上原型「时序意图门控 + supersession」，重测 R@K 验证。
+
+## MemoraX Code（榜首产品开源客户端，2026-08-22 补）
+
+见 `research/aml_top_systems/memorax-code.md`。关键结论：榜首检索引擎在**闭源云端**
+（memory.memorax HTTP API），开源仓库为多 harness 客户端——工程纪律（9k 注入预算、
+`-[time]` 时间前缀 + memory_type 分桶、重叠滑窗切块写回、idempotencyKey 幂等、
+baseline 祖先校验防回退的更新节流）全可借鉴；**其分数不可复现**，但「证据组织与纪律
+> 检索魔法」的判断被榜首自己的架构再次确证。
