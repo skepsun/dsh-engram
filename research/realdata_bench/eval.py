@@ -21,6 +21,7 @@ the evidenceBoost direction on real texts.
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../personamem_bench"))
 import math, json, re, subprocess, time, random, copy
+from subprocess import run as _run
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENG = os.environ.get("DSH_ENGINE_JSON", os.path.expanduser("~/.dsh/storages/dsh_engram.json"))
@@ -80,6 +81,16 @@ def bm25_rank(rows, query, now, recency=False, evidence=False):
     scored.sort(key=lambda x:-x[0])
     return [i for _,i in scored]
 
+CORE_RANK = os.path.join(os.path.dirname(HERE), "bench_core", "rank.mjs")
+
+def node_variant(variant, docs, query, now, limit=20):
+    payload = json.dumps({"variant": variant, "now": now, "limit": limit,
+                          "queries": [{"cid": "x", "q": query, "docs": docs}]})
+    p = _run(["node", CORE_RANK], input=payload, capture_output=True, text=True, timeout=120)
+    if p.returncode != 0:
+        raise RuntimeError(f"rank.mjs {variant}: {p.stderr[-500:]}")
+    return json.loads(p.stdout)["results"][0]["ids"]
+
 def engram_rank(rows, query, limit=20, now=None):
     payload = json.dumps({"records":[{"id":r["id"],"text":r["text"],"tags":r["tags"],"updatedAt":r["updatedAt"],"hits":r["hits"]} for r in rows],
                           "query":query,"limit":limit,"now":now})
@@ -98,9 +109,11 @@ def recall_pos(ids, gid):
 def main():
     rows = load(); now = time.time()*1000.0
     gold = [r for r in rows if r.get("entity")]
-    backends = {"bm25-raw": lambda q: bm25_rank(rows,q,now,recency=False,evidence=False),
-                "bm25-recency": lambda q: bm25_rank(rows,q,now,recency=True,evidence=False),
-                "engram-full": lambda q: engram_rank(rows,q,now=now),
+    node_docs = [{"id": r["id"], "text": r["text"], "tags": r["tags"],
+                   "updatedAt": r["updatedAt"], "hits": r["hits"]} for r in rows]
+    backends = {"bm25-raw": lambda q: node_variant("plain", node_docs, q, now),
+                "bm25-recency": lambda q: node_variant("recency", node_docs, q, now),
+                "engram-full": lambda q: node_variant("full", node_docs, q, now),
                 "last-16": lambda q: lastk_rank(rows,16)}
     stats = {b:{"mrr":0.0,"r1":0,"r3":0,"r5":0,"n":0,"bykind":{}} for b in backends}
     for g in gold:
@@ -156,8 +169,10 @@ def main():
                 "createdAt":r["createdAt"],"updatedAt":r["updatedAt"],"hits":3,"blob":r["blob"]}
         corpus=[twin,gold_c]
         q=" ".join(tokenize(r["text"])[:4])
-        ids_rec = bm25_rank(corpus,q,now,recency=True,evidence=False)
-        ids_eng = engram_rank(corpus,q,limit=2,now=now)
+        docs_n = [{"id": d["id"], "text": d["text"], "tags": d["tags"],
+                    "updatedAt": d["updatedAt"], "hits": d["hits"]} for d in corpus]
+        ids_rec = node_variant("recency", docs_n, q, now, 2)
+        ids_eng = node_variant("full", docs_n, q, now, 2)
         # both have identical updatedAt/createdAt so recency cancels; evidence decides in engram
         if ids_eng[0]==r["id"]: win_eng+=1
         if ids_rec[0]==r["id"]: win_rec+=1
