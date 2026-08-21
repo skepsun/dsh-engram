@@ -158,6 +158,7 @@ test("engram_recall: max_per_session arg & config default appear in header + lim
   const out3 = await tools.get("engram_recall").execute({ query: "ci failed" }, { agent, signal: undefined });
   assert.match(out3, /≤3\/session/);
   assert.match(out3, /ci failed/);
+  assert.match(out3, /## error \(5\)/, "hits grouped by kind by default");
 
   // config default 1 → capped; header advertises it; only s1.s/2/3 survive as 3 rows.
   const service1 = makeService(domain, { ...cfg, maxRecallPerSession: 1 });
@@ -166,12 +167,16 @@ test("engram_recall: max_per_session arg & config default appear in header + lim
   registerTools(ctx1, service1);
   const out1 = await tools1.get("engram_recall").execute({ query: "ci failed" }, { agent, signal: undefined });
   assert.match(out1, /≤1\/session/);
+  assert.match(out1, /## error \(3\)/, "grouped cap rows still grouped");
   assert.equal((out1.match(/^- /gm) ?? []).length, 3);
 
   // explicit arg overrides config.
   const out2 = await tools1.get("engram_recall").execute({ query: "ci failed", max_per_session: 2 }, { agent, signal: undefined });
   assert.match(out2, /≤2\/session/);
   assert.equal((out2.match(/^- /gm) ?? []).length, 4);
+  // flat mode keeps one list, no kind sections
+  const outFlat = await tools1.get("engram_recall").execute({ query: "ci failed", max_per_session: 1, group_by_kind: false }, { agent, signal: undefined });
+  assert.ok(!outFlat.includes("## "), "group_by_kind:false renders a flat list");
 
   await domain.close();
 });
