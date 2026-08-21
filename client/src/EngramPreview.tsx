@@ -22,6 +22,10 @@ interface EngramPreviewFace {
   workspaces: string[];
 }
 
+/** Converged palette (assessment follow-up): the block reads as ONE body of
+ *  text — only the block header gets the accent+bold, the automatic escalate
+ *  reminder keeps its amber so it stands out, everything else shares one
+ *  body color for easy scanning. */
 function lineColor(line: string, dark: boolean): React.CSSProperties {
   if (line.startsWith("[ENGRAM]") || line.startsWith("[ESR]")) {
     return { color: dark ? "#7aa2ff" : "#3b5bdb", fontWeight: 700 };
@@ -29,19 +33,7 @@ function lineColor(line: string, dark: boolean): React.CSSProperties {
   if (line.startsWith("escalate:")) {
     return { color: "#d97706", fontWeight: 600 };
   }
-  if (line.startsWith("drill:")) {
-    return { color: dark ? "#6b7280" : "#9ca3af" };
-  }
-  if (line.startsWith("nodes:")) {
-    return { color: dark ? "#8b93a7" : "#6b7280" };
-  }
-  if (line.startsWith("- ")) {
-    return { color: dark ? "#c9d0dc" : "#4b5563" };
-  }
-  if (line.startsWith("[T]")) {
-    return { color: dark ? "#f0ab6a" : "#b45309" };
-  }
-  return {};
+  return { color: dark ? "#cbd2de" : "#374151" };
 }
 
 export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: EngramPreviewFace) {
@@ -105,17 +97,6 @@ export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: 
     head: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
     title: { fontWeight: 700, fontSize: 13 },
     sub: { fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)" },
-    pick: {
-      marginLeft: "auto",
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-      fontSize: 12,
-      padding: "4px 8px",
-      borderRadius: 7,
-      border: "1px solid var(--dsh-color-border, #d1d5db)",
-      background: "var(--dsh-color-surface, #fafafa)",
-      color: "var(--dsh-color-text, #1f2937)",
-      outline: "none",
-    },
     meta: { display: "flex", gap: 6, flexWrap: "wrap" },
     chip: {
       display: "inline-flex", alignItems: "center", gap: 4,
@@ -193,9 +174,6 @@ export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: 
         <span style={hb.sub}>
           每个会话实际注入的提示块 · 会话内冻结一次（order 40/41，前缀稳定复用 KV 缓存）
         </span>
-        {ws && (
-          <span style={hb.pick} title="跟随面板「工作区」选择">{ws}</span>
-        )}
       </div>
 
       <div style={hb.meta}>
