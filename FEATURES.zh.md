@@ -29,6 +29,18 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、
 点选节点弹出悬浮面板看全部关系；悬空链接单独计数提示。
 
+### 1aaaaaaaaaaa. Beads 三连：依赖图 + 可逆压缩 + 预算注入 — 上述之后
+借鉴 https://github.com/gastownhall/beads（Go+Dolt 的分布式图式 issue tracker），纯规则落地：
+- **依赖图 + ready 队列 + 原子 claim**：tasks 加 deps[{id,kind}]/assignee/claimedAt；addDep 防自引用与
+  有向环；blocked 状态**纯派生**（blocks/parent-of 目标未闭环即阻塞，relates-to 不阻塞），关闭即解锁；
+  `esr_ready` 列出无 blocker 未认领的可认领队列；`esr_claim`/`esr_unclaim` 带 anti-yank fence
+  （他人持有需 force 才能抢/放）；board 卡显示 🔒 blocker 计数与 @assignee。
+- **可逆压缩**：esr_close 闭环长描述（>240 字符）自动规则 summary（首行≤140）+ snapshot 存全文快照
+  （零 LLM，先归档再覆盖同序）；board 显示 🗜 摘要；原文保留可回看。
+- **预算注入（prime 模式）**：esr_model 加 mode=full|brief（brief≈50-token 单行摘要，从 full 派生
+  永不漂移）+ max_chars 截断；会话开始建议用 brief，按需用 full。
+host 侧随下次重启生效；board 三处 client-hmr 即时。宿主 84/84、dock 63/63、board 59/59。
+
 ### 1aaaaaaaaaa. Hindsight 三连：证据观测 + 常驻摘要 + 证据重排 — 上述之后
 借鉴 vectorize-io/hindsight（https://github.com/vectorize-io/hindsight）三个概念，全部
 纯规则 / 零向量 / 零 LLM：

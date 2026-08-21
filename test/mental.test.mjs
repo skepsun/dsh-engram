@@ -137,3 +137,65 @@ test("/model route renders the summary", async () => {
   assert.ok(route, "/model route registered");
   assert.equal(route.method, "GET");
 });
+
+test("briefify folds the standing answer into a one-liner", async () => {
+  const { briefify } = await import("../lib/mental.js");
+  const full = [
+    "## A · 常驻摘要",
+    "- 任务：3 进行中（1 就绪）· 1 已闭环",
+    "- 实体图：5 节点 · 6 链接",
+    "- 观测：4 条信念（累计 9 证据）",
+    "- 记忆：12 条",
+    "",
+    "重点信念：",
+    "- deploy broke — ×2",
+    "",
+    "未闭环风险：",
+    "- 看板闭环 · artifact/evaluation/memory_ref · 5天",
+  ].join("\n");
+  const brief = briefify(full);
+  assert.match(brief, /任务：3 进行中（1 就绪）/);
+  assert.match(brief, /实体图：5 节点/);
+  assert.match(brief, /观测：4 条信念/);
+  assert.match(brief, /风险 1/);
+  assert.ok(brief.length <= 240, "brief stays within a token budget");
+  const noRisks = briefify(full.split("\n未闭环风险：")[0]);
+  assert.match(noRisks, /无未闭环风险/);
+});
+
+test("getModel mode=brief serves a derived one-liner without corrupting the cache", async () => {
+  const domain = await seed();
+  const now = Date.now();
+  const full = await getModel(domain, "/ws/A", { now });
+  assert.equal(full.fresh, true);
+  const brief = await getModel(domain, "/ws/A", { now: now + 1000, mode: "brief" });
+  assert.equal(brief.fresh, false, "cache hit shares the same generated_at");
+  assert.match(brief.content, /^任务：/);
+  assert.ok(brief.content.length < full.content.length, "brief is shorter than full");
+  const again = await getModel(domain, "/ws/A", { now: now + 2000 });
+  assert.equal(again.content, full.content, "full cache content untouched by brief reads");
+});
+
+test("esr_model tool parses mode + max_chars", async () => {
+  const { registerTools } = await import("../lib/tools.js");
+  const tools = [];
+  const ctx = {
+    tools: { register: (t) => { tools.push(t); return () => {}; } },
+    effect: (fn) => fn(),
+  };
+  const domain = await seed();
+  const service = { config: CONFIG, getDomain: async () => domain };
+  registerTools(ctx, service);
+  const tool = tools.find((t) => t.name === "esr_model");
+  assert.ok(tool);
+  const params = tool.parameters.properties;
+  assert.ok(params.mode && params.mode.enum.includes("brief"));
+  assert.ok(params.max_chars);
+  const execCtx = { agent: { session: { id: "s", header: { cwd: "/ws/A" }, events: [] } } };
+  const brief = await tool.execute({ mode: "brief", max_chars: 60 }, execCtx);
+  assert.ok(brief.length <= 260, "bounded output");
+  assert.match(brief, /mode=brief/);
+  const full = await tool.execute({}, execCtx);
+  assert.match(full, /## A · 常驻摘要/);
+  assert.ok(full.length > brief.length, "full is the detailed markdown");
+});

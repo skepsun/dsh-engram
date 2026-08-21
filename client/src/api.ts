@@ -34,6 +34,14 @@ export interface TaskRecord {
   memoryRefs: string[];
   createdAt: number;
   updatedAt: number;
+  /** Beads-style dependency edges; blocks = waits on target. */
+  deps: { id: string; kind: "blocks" | "relates-to" | "parent-of" }[];
+  /** Claimer (agent id); non-null means someone owns the task. */
+  assignee: string | null;
+  claimedAt: number | null;
+  /** Reversible compaction: rule summary + pre-compaction snapshot. */
+  summary: string | null;
+  snapshot: { description: string; artifact: string | null; evaluation: string | null; memoryRefs: string[] } | null;
 }
 
 export interface ToolStats {

@@ -74,6 +74,18 @@ function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
 
+/** Beads-inspired derived blocked state: open (non-stable) blocks/parent-of deps. */
+function blockedBy(t: TaskRecord, all: TaskRecord[]): number {
+  if (t.state === "stable") return 0;
+  const open = new Set(all.filter((x) => x.state !== "stable").map((x) => x.id));
+  return (t.deps ?? []).filter((d) => d.kind !== "relates-to" && open.has(d.id)).length;
+}
+function shortAgent(a: string | null): string {
+  if (!a) return "";
+  const bare = a.split(/[@#/:\\]+/).pop()!;
+  return bare.replace(/^session[-_]/i, "").replace(/^agent[-_]/i, "").slice(0, 14);
+}
+
 const TREND_LABEL: Record<string, string> = {
   new: "新",
   strengthening: "增强",
@@ -483,6 +495,9 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                     <span style={{ ...hb.state, background: col.color }}>{col.key === "stable" ? "✓" : "●"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 12.5, lineHeight: "17px", overflowWrap: "anywhere" }}>{t.name}</div>
+                      {t.summary && (
+                        <div style={hb.compacted} title="已压缩 · 原文保留在快照中（可回看）">🗜 {t.summary}</div>
+                      )}
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3, alignItems: "center" }}>
                         <EvidenceRing
                           artifact={Boolean(t.artifact)}
@@ -493,6 +508,10 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                         />
                         <span style={hb.meta}>{shortId(t.id)}</span>
                         {ws === "" && <span style={hb.meta}>{t.workspace.replace(/^.*[\\/]/, "")}</span>}
+                        {blockedBy(t, allTasks) > 0 && (
+                          <span style={hb.lock} title={`被 ${blockedBy(t, allTasks)} 个未闭环任务阻塞，先完成它们的 deps`}>🔒 {blockedBy(t, allTasks)}</span>
+                        )}
+                        {t.assignee && <span style={hb.meta} title={`claimed by ${t.assignee}`}>@{shortAgent(t.assignee)}</span>}
                         {(col.key === "gapped" || col.key === "ready") && taskGaps(t).map((g) => (
                           <span key={g} style={hb.gap}>{g} ✗</span>
                         ))}
@@ -736,6 +755,8 @@ const hb = {
     color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   },
+  lock: { fontSize: 10, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", fontWeight: 600, letterSpacing: 0.5 },
+  compacted: { fontSize: 11, lineHeight: "15px", marginTop: 3, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted, #6b7280))", overflowWrap: "anywhere" },
   gap: {
     fontSize: 10,
     fontWeight: 700,
