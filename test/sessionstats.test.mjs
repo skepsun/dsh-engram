@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { collectToolCounts } from "../lib/sessionstats.js";
+import { collectToolCounts } from "../lib/usage.js";
 import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
 
 const DAY = 86_400_000;
