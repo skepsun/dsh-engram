@@ -495,6 +495,18 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
       </div>
 
+      <div style={{ ...s.row, marginTop: 2 }}>
+        <span style={{ fontWeight: 700, fontSize: 13 }}>工作区：</span>
+        <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+          <option value="">全部工作区</option>
+          {workspaces.map((ws) => (
+            <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} 条）</option>
+          ))}
+        </select>
+        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(-1)}>‹ 上一工作区</button>
+        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(1)}>下一工作区 ›</button>
+      </div>
+
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
 
@@ -565,14 +577,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       </div>
 
       <div style={s.row}>
-        <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
-          <option value="">全部工作区</option>
-          {workspaces.map((ws) => (
-            <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} 条）</option>
-          ))}
-        </select>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(-1)}>‹ 上一工作区</button>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(1)}>下一工作区 ›</button>
         <select style={s.input} value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="">全部类型</option>
           {kindsPresent.map((k) => (
