@@ -33,6 +33,7 @@ export interface EngramConfigValue {
   promoteHits?: number;
   expireDays?: number;
   maxMemoriesPerWorkspace?: number;
+  maxRecallPerSession?: number;
   gcEnabled?: boolean;
   gcStableRetentionDays?: number;
   /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
@@ -67,34 +68,38 @@ export interface EngramConfigGroup {
  * A setting group rendered inside the card's disclosure. Reading the ~12
  * knobs as four labelled units is easier than one flat list.
  */
-export const GROUPS: EngramConfigGroup[] = [
+export const COMMON_FIELDS: EngramConfigField[] = [
+  { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
+  { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
+  { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
+  { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
+];
+
+export const ADVANCED_GROUPS: EngramConfigGroup[] = [
   {
-    id: "capture",
-    title: "捕获与检索",
-    description: "零 LLM 自动捕获与跨会话搜索",
+    id: "capture-adv",
+    title: "捕获与检索（高级）",
+    description: "其余捕获/搜索旋钮",
     fields: [
-      { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
       { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
       { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
     ],
   },
   {
-    id: "index",
-    title: "索引",
-    description: "[ENGRAM] 块的内容预算与晋升规则",
+    id: "index-adv",
+    title: "索引（高级）",
+    description: "行数、入索引信号与晋升规则",
     fields: [
       { key: "indexMaxLines", label: "索引最大行数", hint: "[ENGRAM] 块最多显示的条目行数", kind: "num", min: 0, max: 50 },
-      { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
       { key: "minIndexSignal", label: "入索引信号阈值", hint: "signal ≥ 此值的自动捕获才进索引", kind: "num", min: 0, max: 1, step: 0.05 },
       { key: "promoteHits", label: "晋升命中数", hint: "hit 数达此值的低信号条目进索引", kind: "num", min: 0, max: 20 },
     ],
   },
   {
-    id: "retention",
-    title: "生命周期与 GC",
-    description: "过期、容量上限与定期回收",
+    id: "retention-adv",
+    title: "生命周期与 GC（高级）",
+    description: "容量上限与定期回收",
     fields: [
-      { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
       { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
       { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
@@ -112,7 +117,7 @@ export const GROUPS: EngramConfigGroup[] = [
 ];
 
 /** Flat field ledger — save/reset iterate every group's fields in order. */
-export const FIELDS: EngramConfigField[] = GROUPS.flatMap((group) => group.fields);
+export const FIELDS: EngramConfigField[] = [...COMMON_FIELDS, ...ADVANCED_GROUPS.flatMap((group) => group.fields)];
 
 /** One-line description under the card's name, mirroring the built-in cards. */
 const CARD_DESCRIPTION = "控制 engram 记忆的捕获、索引、保留与隧道访问";
@@ -246,6 +251,24 @@ const s = {
   disabled: { opacity: 0.4, cursor: "default" },
   failed: { flex: 1, minWidth: 0, margin: 0, fontSize: 12, lineHeight: 1.5, color: "#dc2626" },
   note: { fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, #9ca3af)", marginTop: 8 },
+  advHead: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
+    appearance: "none",
+    background: "none",
+    border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)",
+    borderRadius: 10,
+    padding: "8px 12px",
+    marginTop: 10,
+    font: "inherit",
+    cursor: "pointer",
+    color: "var(--dsw-alias-label-secondary, #4b5563)",
+    textAlign: "left" as const,
+  },
+  advHeadLabel: { fontSize: 12.5, fontWeight: 600, letterSpacing: 0.2, color: "var(--dsw-alias-label-secondary, #4b5563)" },
 };
 
 /** Chevron mirroring IconChevronDownOutline14 (bundle-purity: inline SVG). */
@@ -281,6 +304,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     void scope.load();
@@ -345,34 +369,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
   const writable = snap?.writable !== false && snap?.status !== "unavailable";
   const available = snap?.status === "ready";
   const { vars } = useEngramTheme();
-
-  return (
-    <div style={vars}>
-      <div style={available ? { ...s.card, ...(open ? s.cardOpen : undefined) } : { display: "none" }}>
-        <button
-          type="button"
-          style={s.header}
-          aria-expanded={open}
-          aria-label={`${open ? "收起" : "展开"} dsh-engram 设置`}
-          onClick={() => setOpen((prev) => !prev)}
-        >
-          <span style={s.headText}>
-            <span style={s.name}>dsh-engram</span>
-            <span style={s.description}>{CARD_DESCRIPTION}</span>
-          </span>
-          {anyDirty && <span style={s.pending}>未保存</span>}
-          <Chevron open={open} />
-        </button>
-        {open && (
-          <div style={s.body}>
-            {!writable && <p style={s.readOnly}>本部署的设置为只读（宿主未授权写入或需重启应用）。</p>}
-            {GROUPS.map((group) => (
-              <div key={group.id} style={s.groupPanel}>
-                <div style={s.groupHead}>
-                  <div style={s.groupTitle}>{group.title}</div>
-                  {group.description && <div style={s.groupDesc}>{group.description}</div>}
-                </div>
-                {group.fields.map((field) => {
+  const renderField = (field) => {
                   const raw = value[field.key];
                   const overridden = snap?.user !== undefined && field.key in (snap.user as object);
                   return (
@@ -432,9 +429,55 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
                       </div>
                     </div>
                   );
-                })}
+  };
+  const renderGroup = (group) => (
+    <div key={group.id} style={s.groupPanel}>
+      <div style={s.groupHead}>
+        <div style={s.groupTitle}>{group.title}</div>
+        {group.description && <div style={s.groupDesc}>{group.description}</div>}
+      </div>
+      {group.fields.map(renderField)}
+    </div>
+  );
+
+
+  return (
+    <div style={vars}>
+      <div style={available ? { ...s.card, ...(open ? s.cardOpen : undefined) } : { display: "none" }}>
+        <button
+          type="button"
+          style={s.header}
+          aria-expanded={open}
+          aria-label={`${open ? "收起" : "展开"} dsh-engram 设置`}
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          <span style={s.headText}>
+            <span style={s.name}>dsh-engram</span>
+            <span style={s.description}>{CARD_DESCRIPTION}</span>
+          </span>
+          {anyDirty && <span style={s.pending}>未保存</span>}
+          <Chevron open={open} />
+        </button>
+        {open && (
+          <div style={s.body}>
+            {!writable && <p style={s.readOnly}>本部署的设置为只读（宿主未授权写入或需重启应用）。</p>}
+            <div style={s.groupPanel}>
+              <div style={s.groupHead}>
+                <div style={s.groupTitle}>常用</div>
+                <div style={s.groupDesc}>每天会碰到的旋钮 · 其余收在下方高级设置</div>
               </div>
-            ))}
+              {COMMON_FIELDS.map(renderField)}
+            </div>
+            <button
+              type="button"
+              style={{ ...s.advHead, ...(advancedOpen ? { borderColor: "var(--dsw-alias-label-dimmed, #9ca3af)" } : undefined) }}
+              aria-expanded={advancedOpen}
+              onClick={() => setAdvancedOpen((v) => !v)}
+            >
+              <span style={s.advHeadLabel}>高级设置（{ADVANCED_GROUPS.reduce((n, g) => n + g.fields.length, 0)} 项）</span>
+              <Chevron open={advancedOpen} />
+            </button>
+            {advancedOpen && ADVANCED_GROUPS.map(renderGroup)}
             <div style={s.note}>
               设置对新建会话即时生效；已冻结的 [ENGRAM] 块保持前缀稳定。
             </div>
