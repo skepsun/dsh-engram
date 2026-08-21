@@ -47,6 +47,29 @@ const COLUMNS = [
 
 const fmtDate = (ts: number) => (ts ? new Date(ts).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) : "–");
 
+/** Compose per-task close evidence from bulk form values + existing task gates. */
+export function buildCloseEvidence(bulkArtifact: string, bulkEval: string, bulkRefs: string, task: TaskRecord): { artifact?: string; evaluation?: string; memoryRefs?: string[] } {
+  const refs = bulkRefs.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+  return {
+    artifact: bulkArtifact.trim() || task.artifact || undefined,
+    evaluation: bulkEval.trim() || task.evaluation || undefined,
+    memoryRefs: refs.length > 0 ? refs : task.memoryRefs,
+  };
+}
+
+/** Rendering-agnostic markdown export of the current task view (unit-testable). */
+export function buildTasksMarkdown(tasks: TaskRecord[]): string {
+  const esc = (s: string) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+  const rows = tasks
+    .slice()
+    .sort((a, b) => a.state.localeCompare(b.state) || (a.createdAt ?? 0) - (b.createdAt ?? 0))
+    .map((t) => {
+      const ev = `${t.artifact ? "artifact✓" : "artifact✗"} · ${t.evaluation ? "eval✓" : "eval✗"} · ${(t.memoryRefs?.length ?? 0) > 0 ? "ref✓" : "ref✗"}`;
+      return `| ${t.state} | ${esc(t.name)} | ${esc(t.workspace.replace(/^.*[\\/]/, ""))} | ${esc(taskGaps(t).join(", ") || "—")} | ${ev} | ${fmtDate(t.createdAt ?? 0)} |`;
+    });
+  return `# ESR 任务导出 · ${new Date().toISOString().slice(0, 10)}\n\n| 状态 | 任务 | 工作区 | 证据缺口 | 证据 | 创建 |\n|---|---|---|---|---|---|\n${rows.join("\n") || "(无任务)"}`;
+}
+
 function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
@@ -69,6 +92,13 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const [closeArtifact, setCloseArtifact] = useState("");
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkArtifact, setBulkArtifact] = useState("");
+  const [bulkEval, setBulkEval] = useState("");
+  const [bulkRefs, setBulkRefs] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const loadedWs = useRef(new Set<string>());
 
   const refresh = useCallback(async () => {
@@ -194,6 +224,56 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  /** Batch-close every selected active task with one set of evidence. */
+  const closeSelected = async () => {
+    if (bulkBusy) return;
+    const closable = filtered.filter((t) => selectedIds.has(t.id) && t.state === "active");
+    if (closable.length === 0) return;
+    setBulkBusy(true);
+    setBulkMsg(null);
+    let ok = 0;
+    let fail = 0;
+    for (const t of closable) {
+      try {
+        const out = await api.closeTask(t.workspace, t.id, buildCloseEvidence(bulkArtifact, bulkEval, bulkRefs, t));
+        if (out?.state === "stable") ok += 1; else fail += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    setBulkMsg(ok > 0 ? `批量完成：${ok} 个任务已闭环${fail > 0 ? ` · ${fail} 个未达证据门（见单卡表单补）` : ""}` : `未闭环：${fail} 个未达证据门（见单卡表单补）`);
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    setBulkOpen(false);
+    void refresh();
+  };
+
+  /** Download the filtered view as markdown. */
+  const exportMd = () => {
+    try {
+      const md = buildTasksMarkdown(filtered);
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `esr-tasks-${new Date().toISOString().slice(0, 10)}.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch {
+      /* download API unavailable in this host — export is a no-op */
+    }
+  };
+
   const submitClose = async (t: TaskRecord) => {
     setBusy(true);
     try {
@@ -249,6 +329,14 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
+          {selectedIds.size > 0 && (
+            <button type="button" style={{ ...hb.btn, background: "var(--dsw-alias-state-business-tertiary, rgba(99,102,241,.12))" }} onClick={() => { setBulkOpen(true); setCreating(false); }}>
+              批量闭环（{selectedIds.size}）
+            </button>
+          )}
+          <button type="button" style={hb.btn} onClick={exportMd} title="导出当前筛选为 markdown">
+            导出
+          </button>
           <button type="button" style={hb.btn} onClick={() => { setCreating((v) => !v); setClosingFor(null); }}>
             ＋ 新建
           </button>
@@ -300,6 +388,22 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             <button type="button" style={hb.btn} onClick={() => setCreating(false)}>取消</button>
           </div>
         )}
+
+        {bulkOpen && (
+          <div style={hb.createForm}>
+            <div style={{ fontSize: 11, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
+              批量闭环 {selectedIds.size} 个任务 — 三项证据应用到所有选中项（单卡已有的证据自动保留）
+            </div>
+            <input style={hb.input} placeholder="产物 artifact（文件/PR/路径）" value={bulkArtifact} onChange={(e) => setBulkArtifact(e.target.value)} />
+            <input style={hb.input} placeholder="评估 evaluation（测试/评审/分数）" value={bulkEval} onChange={(e) => setBulkEval(e.target.value)} />
+            <input style={hb.input} placeholder="记忆引用 memory_refs（#id, 逗号分隔）" value={bulkRefs} onChange={(e) => setBulkRefs(e.target.value)} />
+            {bulkMsg && <div style={{ fontSize: 11, color: bulkMsg.startsWith("批量完成") ? "#059669" : "#b45309" }}>{bulkMsg}</div>}
+            <div style={{ display: "flex", gap: 6 }}>
+              <button type="button" style={hb.btnSolid} disabled={bulkBusy || selectedIds.size === 0} onClick={() => void closeSelected()}>{bulkBusy ? "…" : "按证据批量闭环"}</button>
+              <button type="button" style={hb.btn} onClick={() => { setBulkOpen(false); setBulkMsg(null); }}>取消</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Columns */}
@@ -315,6 +419,14 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
               {filtered.filter(col.match).slice(0, 20).map((t) => (
                 <div key={t.id} style={hb.card}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`选择 ${t.name}`}
+                      checked={selectedIds.has(t.id)}
+                      disabled={col.key === "stable" || col.key === "draft"}
+                      onChange={() => toggleSelect(t.id)}
+                      style={{ margin: "2px 0 0 0", flex: "none", accentColor: col.color, cursor: col.key === "stable" || col.key === "draft" ? "not-allowed" : "pointer" }}
+                    />
                     <span style={{ ...hb.state, background: col.color }}>{col.key === "stable" ? "✓" : "●"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 12.5, lineHeight: "17px", overflowWrap: "anywhere" }}>{t.name}</div>

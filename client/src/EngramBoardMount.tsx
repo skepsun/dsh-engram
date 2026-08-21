@@ -25,6 +25,7 @@ import type { EngramApi } from "./api";
 import { EngramBoard } from "./EngramBoard";
 
 export { EngramBoard } from "./EngramBoard";
+export { buildTasksMarkdown, buildCloseEvidence } from "./EngramBoard";
 
 export const ENTRY_SELECTOR = "[data-dsh-engram-entry]";
 export const BOARD_SELECTOR = "[data-dsh-engram-board]";

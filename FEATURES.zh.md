@@ -29,6 +29,13 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、
 点选节点弹出悬浮面板看全部关系；悬空链接单独计数提示。
 
+### 1aaaaaaaaa. 看板批量闭环 + markdown 导出 — 上述之后
+全屏看板：每张非 draft/stable 卡头加勾选框，选中后工具栏出现「批量闭环（N）」——
+一次填 artifact/evaluation/memory_refs 应用到所有选中任务（单卡已有证据自动保留）。
+「导出」把当前筛选视图（含搜索/工作区过滤）生成 markdown 表（状态/任务/工作区/证据缺口/
+证据/创建），下载 `esr-tasks-YYYY-MM-DD.md`。传参逻辑抽成纯函数 buildCloseEvidence、
+导出抽成 buildTasksMarkdown，可单测。client-hmr 即时生效。
+
 ### 1aaaaaaaa. 实体建模引导（node/link 全零的解药）— 上述之后
 针对 esr_node/esr_link 从没被调用过：agent 侧 `esr_task`/`esr_close`/`esr_node`
 返回统一追加一行 `modeling:` 提示——无实体图时引导「用 esr_node 建模反复出现的领域对象、
