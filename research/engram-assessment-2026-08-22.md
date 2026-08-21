@@ -1,7 +1,7 @@
 # dsh-engram 全局再评估 · 2026-08-22（手动重启后）
 
 > 视角：**极简 / 零 LLM / 对编程有益 / 节省 token**。
-> 现状：host 源码 ~3,730 行（不含 build 产物 client.js 4,925）；14 个工具；
+> 现状：host 源码 ~3,730 行（不含 build 产物 client.js 4,925）；13 个工具；
 > 12 个设置键；7 张数据表（memories/tasks/links/entities/usage/observations/models）；
 > 全链路零 LLM 调用（已 grep 确认，仅客户端文案出现"LLM"字样）。
 
@@ -22,7 +22,7 @@
 
 ## 1. 过度设计（按收敛收益排序）
 
-1. **工具 description 过肥（最大的 token 漏点）**——14 工具 description 合计 ≈4,950 字符
+1. **工具 description 过肥（最大的 token 漏点）**——13 工具 description 合计 ≈4,950 字符
    ≈1.3–1.7k token，**每次模型请求都随 schema 进入上下文**。最肥：esr_close 642、
    esr_model 553、esr_node 510、engram_recall 481、esr_gc 427。
    → 压到一句话（≤200 字符/工具）可省 ~700+ token/请求，agent 高频 loop 收益直给。
