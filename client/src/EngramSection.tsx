@@ -16,7 +16,7 @@ import { EngramPreview } from "./EngramPreview";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramTelemetry } from "./EngramTelemetry";
 import { EngramDetail, type DetailTarget } from "./EngramDetail";
-import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, EngramStats } from "./api";
+import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
 import { useEngramTheme } from "./theme";
 
 export interface EngramSectionFace {
@@ -200,7 +200,6 @@ function fmtDate(ts: number): string {
 const MEM_PAGE_SIZE = 10;
 
 /** 0.123 -> "12.3%"; null -> "–"（无样本）。 */
-const pct = (n: number | null | undefined) => (n === null || n === undefined ? "–" : `${(n * 100).toFixed(1)}%`);
 
 type MemRow = { kind: "head"; ws: string; count: number } | { kind: "row"; m: MemoryRecord };
 
@@ -246,7 +245,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [nodes, setNodes] = useState<EntityRecord[]>([]);
-  const [usageStats, setUsageStats] = useState<EngramStats | null>(null);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -291,13 +289,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         Promise.all(wsList.map((w) => api.tasks(w, true))),
         Promise.all(wsList.map((w) => api.links(w))),
         Promise.all(wsList.map((w) => api.nodes(w))),
-        api.stats(workspace || undefined),
       ]);
       setMemories(mem.items);
       setTasks(taskGroups.flatMap((x) => x.items));
       setLinks(linkGroups.flatMap((x) => x.items));
       setNodes(nodeGroups.flatMap((x) => x.items));
-      setUsageStats(st);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -676,47 +672,8 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       {view === "esr" && (
         <>
-      <div style={s.stats}>
-        <StatCard num={String(wsCounts ? wsCounts.tasks : (overview?.totals.tasks ?? 0))} label={wsCounts ? "任务 (active)" : "任务 (active, 全局)"} />
-        <StatCard num={String(wsCounts ? wsCounts.links : (overview?.totals.links ?? 0))} label={wsCounts ? "关系" : "关系 (全局)"} />
-        <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview?.totals.nodes ?? 0))} label={wsCounts ? "节点" : "节点 (全局)"} />
-      </div>
-
-      <div style={s.subPanel}>
-        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-          agent 行为观测
-          <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}> · 每次 engram_*/esr_* 工具调用实时累计（真实数据，按工作区/天滚动）</span>
-        </div>
-        {!usageStats ? (
-          <div style={s.mono}>…</div>
-        ) : (
-          <>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span style={s.tag}>ESR 主动性 {pct(usageStats.ratios.esrRatio)}（{usageStats.ratios.esrCalls}/{usageStats.ratios.calls} 次）</span>
-              <span style={s.tag}>召回命中率 {pct(usageStats.ratios.recallHitRate)}</span>
-              <span style={s.tag}>平均命中 {usageStats.ratios.recallHitsPerQuery ?? "–"}/查询</span>
-              <span style={s.tag}>detail 转化 {pct(usageStats.ratios.detailFollowRate)}</span>
-              <span style={s.tag}>失败 {usageStats.totals.failures}</span>
-              {usageStats.ratios.calls < 10 && <span style={s.tag}>样本不足（{usageStats.ratios.calls} 次），比例仅供参考</span>}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-              ESR 主动性过低时，下一个会话的 [ESR] 注入块会附加一行基于真实数据的 escalate 提醒，引导模型当场补建任务/节点/关系——比例回升后提醒自动消失。
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)", marginTop: 5, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-              工具调用：
-              {Object.entries(usageStats.totals.counts).map(([k, v]) => (
-                <span key={k} style={s.tag}>{k} ×{v}</span>
-              ))}
-            </div>
-            {usageStats.byDay.length > 0 && (
-              <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {usageStats.byDay.map((d) => (
-                  <span key={d.day}>{d.day} · 调用 {Object.values(d.counts).reduce((a, b) => a + b, 0)} · 失败 {d.failures}</span>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+      <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>
+        工具调用与命中统计见「遥测」tab；[ESR] 注入块的 escalate 提醒依据真实数据动态出现。
       </div>
 
       <div style={s.panelTitle}>ESR 任务（证据闭环）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
