@@ -126,6 +126,12 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     () => (overview ? Object.entries(overview.workspaces).sort((a, b) => b[1].tasks - a[1].tasks) : []),
     [overview],
   );
+  // Modeling nudge: when the filtered workspace has no entity graph at all.
+  const wsNodesCount =
+    overview === null ? 0
+      : ws === "" ? Object.values(overview.workspaces).reduce((acc, w) => acc + (w.nodes ?? 0), 0)
+      : (overview.workspaces[ws]?.nodes ?? 0);
+  const showModelHint = overview !== null && wsNodesCount === 0;
   const totalActive = useMemo(
     () => workspaces.reduce((a, [, w]) => a + (w.tasks ?? 0), 0),
     [workspaces],
@@ -264,6 +270,16 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         </span>
       </div>
 
+      {showModelHint && (
+        <div style={hb.modelHint}>
+          <span style={hb.partitionTagEsr}>实体建模</span>
+          <span>
+            该范围还没有实体图 — 用 <strong>esr_node</strong> 建模反复出现的领域对象（包/服务/文档/概念），
+            再用 <strong>esr_link</strong> 关联到任务与节点；完整图形见 设置 → Engram 记忆。
+          </span>
+        </div>
+      )}
+
       <div style={{ padding: "0 14px" }}>
         {denied && (
           <div style={hb.warn}>
@@ -398,6 +414,13 @@ const hb = {
     color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
     background: "rgba(99,102,241,.12)",
     whiteSpace: "nowrap",
+  },
+  modelHint: {
+    display: "flex", gap: 6, alignItems: "flex-start",
+    fontSize: 11.5, lineHeight: 1.55, padding: "6px 14px",
+    color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))",
+    borderBottom: "1px dashed var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",
+    background: "var(--dsw-alias-bg-layer-2, rgba(127,127,127,.04))",
   },
   loading: { fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))" },
   select: {

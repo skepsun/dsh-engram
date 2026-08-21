@@ -29,6 +29,13 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、
 点选节点弹出悬浮面板看全部关系；悬空链接单独计数提示。
 
+### 1aaaaaaaa. 实体建模引导（node/link 全零的解药）— 上述之后
+针对 esr_node/esr_link 从没被调用过：agent 侧 `esr_task`/`esr_close`/`esr_node`
+返回统一追加一行 `modeling:` 提示——无实体图时引导「用 esr_node 建模反复出现的领域对象、
+再 esr_link 关联」；有图时展示 `entities x… / links y` 并提示可把新任务/节点并入。
+web 看板头部在该范围实体数为 0 时显示「实体建模」引导条（同样指向 设置 → Engram 记忆 的
+实体图）。host 部分随下次 `dsh web` 重启生效；看板条 client-hmr 即时生效。
+
 ### 1aaaaaa. 使用率迷你可视化（todo vs ESR vs 记忆）— 上述之后
 dock 展开态顶部新增行为统计条：host 新端点 `/api/dsh-engram/toolstats?days=14`
 读取会话日志真源（`~/.dsh/sessions/*/*/session.jsonl.zstd`，`type:"tool/call"` 计数，
