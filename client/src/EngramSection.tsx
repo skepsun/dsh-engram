@@ -197,7 +197,7 @@ function fmtDate(ts: number): string {
 }
 
 /** Memories per page in the memory table (workspace pager stays separate). */
-const MEM_PAGE_SIZE = 10;
+const MEM_PAGE_SIZE = 20;
 
 /** 0.123 -> "12.3%"; null -> "–"（无样本）。 */
 
@@ -373,15 +373,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   };
 
   /** Page through workspaces one at a time (prev/next pager, 按工作区分页). */
-  const goWorkspace = (dir: 1 | -1) => {
-    if (!overview || workspace === "") return;
-    const list = Object.keys(overview.workspaces);
-    if (list.length === 0) return;
-    const idx = list.indexOf(workspace);
-    const next = list[(idx + dir + list.length) % list.length];
-    setWorkspace(next);
-  };
-
   /** Table rows: grouped by workspace in the 全部工作区 view, flat otherwise. */
   const groupedRows: Array<[string, MemoryRecord[]]> =
     workspace === "" ? groupByWorkspace(memories) : [[workspace, memories]];
@@ -499,8 +490,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
             <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} 条）</option>
           ))}
         </select>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(-1)}>‹ 上一工作区</button>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(1)}>下一工作区 ›</button>
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -662,9 +651,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           <button style={s.btn} disabled={memPageSafe === 0} onClick={() => setMemPage(memPageSafe - 1)}>‹ 上一页</button>
           <span>第 {memPageSafe + 1} / {memPageCount} 页 · 共 {flatRows.length} 条</span>
           <button style={s.btn} disabled={memPageSafe >= memPageCount - 1} onClick={() => setMemPage(memPageSafe + 1)}>下一页 ›</button>
-          <select style={s.input} value={memPageSafe} onChange={(e) => setMemPage(Number(e.target.value))} title="跳页">
-            {Array.from({ length: memPageCount }, (_, i) => <option key={i} value={i}>第 {i + 1} 页</option>)}
-          </select>
         </div>
       )}
         </>
