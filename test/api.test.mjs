@@ -389,3 +389,57 @@ test("api: preview route returns exact [ENGRAM]+[ESR] blocks + cost meta", async
 });
 
 
+
+// ── model / observations regression (ws param misuse → URLSearchParams object) ──
+
+test("api: /model serves a global model for an EMPTY workspace (ws normalize)", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = {
+    config: CONFIG,
+    captureStats: { total: 0, git: 0, file: 0, error: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+  };
+  const routes = makeEngramRoutes(service);
+  const route = routes.find((r) => r.path === `${API_PREFIX}/model`);
+  assert.ok(route, "/model route");
+  // workspace param present but EMPTY — the old readQuery(req, "workspace")
+  // misuse returned a URLSearchParams object for ws and wrote ws:{} rows.
+  const r = res();
+  await route.handler(req({ url: `${API_PREFIX}/model?workspace=` }), r);
+  assert.equal(r._out.status, 200);
+  const body = JSON.parse(r._out.body);
+  assert.ok(body.model, "global model served");
+  assert.equal(typeof body.model.ws, "string", "ws stored as a string, never an object");
+  assert.equal(body.model.ws, "", "empty ws = the global model row");
+});
+
+test("api: /observations with no workspace returns [] (not a URLSearchParams)", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = {
+    config: CONFIG,
+    captureStats: { total: 0, git: 0, file: 0, error: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+  };
+  const routes = makeEngramRoutes(service);
+  const route = routes.find((r) => r.path === `${API_PREFIX}/observations`);
+  assert.ok(route, "/observations route");
+  const r = res();
+  await route.handler(req({ url: `${API_PREFIX}/observations` }), r);
+  assert.equal(r._out.status, 200);
+  const body = JSON.parse(r._out.body);
+  assert.deepEqual(body.items, [], "empty items; ws must be a string not a searchParams object");
+});
+
+test("store: putModel normalizes a non-string ws to the global key instead of corrupting", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  // Simulate the historical misuse at the domain boundary.
+  const bad = { content: "x", generated_at: 1, dirty: false, sources_hash: "" };
+  const rec = await domain.putModel({ toString: () => "[object Object]" }, bad);
+  assert.equal(rec.ws, "", "normalized to global workspace");
+  assert.equal(domain.getModel("").ws, "", "row reachable under '' key, schema-clean");
+  const listed = domain.getModel(undefined);
+  assert.equal(listed, domain.getModel(""), "undefined ws reads the global row too");
+  await domain.close();
+});
