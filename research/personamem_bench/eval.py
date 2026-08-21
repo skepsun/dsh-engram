@@ -39,7 +39,7 @@ def node_rank_variant(variant, groups, now):
 
 def main():
     ctxs, rows = load()
-    backends = ["bm25-raw", "bm25-recency", "engram-full", "sqlite-fts", "last-k"]
+    backends = ["bm25-raw", "bm25-recency", "recency-gated", "engram-full", "full-gated", "sqlite-fts", "last-k"]
     stats = {b: {"hit": {1: 0, 3: 0, 5: 0}, "n": 0,
                  "qtypes": defaultdict(lambda: {"hit": {1:0,3:0,5:0}, "n": 0}),
                  "dist": {"near": {"hit": {1:0,3:0,5:0}, "n": 0},
@@ -68,7 +68,7 @@ def main():
 
     # one batched node call per variant
     variant_res = {}
-    for v in ("plain", "recency", "full"):
+    for v in ("plain", "recency", "recency-gated", "full", "full-gated"):
         groups = [{"cid": g["cid"], "q": g["q"], "docs": corpora[g["cid"]]} for g in group_queries]
         variant_res[v] = node_rank_variant(v, groups, now)
 
@@ -87,7 +87,9 @@ def main():
         ids = {
             "bm25-raw": variant_res["plain"][(cid, q)],
             "bm25-recency": variant_res["recency"][(cid, q)],
+            "recency-gated": variant_res["recency-gated"][(cid, q)],
             "engram-full": variant_res["full"][(cid, q)],
+            "full-gated": variant_res["full-gated"][(cid, q)],
             "sqlite-fts": [str(i) for i in fts_rank(corpora[cid + "_fts"], q, limit=5)[0][:5]],
             "last-k": [str(i) for i in lastk_rank(
                 [{"updatedAt": corpora[cid][i]["updatedAt"], "id": str(i)} for i in range(N)],
@@ -110,8 +112,10 @@ def main():
     L.append("# PersonaMem 32k — retrieval-only Recall@K（内核对齐版）")
     L.append("")
     L.append(f"- questions: {len(rows)} · contexts: {len(ctxs)} · unit: message-level segment")
-    L.append("- 四个词法检索器共用同一内核 rank.mjs（复刻 lib/util.js bm25Rank，已验证与真身逐位一致）：")
-    L.append("  `bm25-raw`=纯 BM25 · `bm25-recency`=+recency 因子 · `engram-full`=lib/util.js 真身（tag/短语/recency/evidence）")
+    L.append("- 所有词法变体共用同一内核 rank.mjs（复刻 lib/util.js bm25Rank，已验证 full 与真身逐位一致）：")
+    L.append("  `bm25-raw`=纯 BM25 · `bm25-recency`=+无条件 recency · `recency-gated`=仅查询带时间意图才 recency")
+    L.append("  `engram-full`=lib/util.js 真身 · `full-gated`=真身但 recency 意图门控 · `sqlite-fts`=FTS5 原生 · `last-k`=最近 64 条")
+    L.append("- 时间意图标记沿用 FlowGrid(#8) `has_temporal_intent` 中英词表（now/current/latest/recently/最近/目前…）")
     L.append("- PersonaMem 无时间戳：按消息序号映射（1 块≈20 条≈1 天），使 recency 真实生效；`sqlite-fts` 为 FTS5 原生内核；`last-k`=最近 64 条")
     L.append("")
     L.append("| retriever | R@1 | R@3 | R@5 |")

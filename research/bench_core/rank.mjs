@@ -7,7 +7,9 @@
  * the boost layers only:
  *   plain    — lexical BM25, no boosts
  *   recency  — lexical * (1 + 0.5*exp(-ageDays/14))          [updatedAt ?? createdAt]
+ *   recency-gated — recency ONLY when the query carries temporal intent (now/latest/current/最近…)
  *   full     — + tag boost(+2/+1) + phrase(+3) + recency + evidenceBoost
+ *   full-gated — full with temporal-intent-gated recency
  *
  * stdin:  {"variant":"plain|recency|full","now":ms,"limit":N,
  *          "queries":[{"cid":"x","q":"...","docs":[{id,text,tags,updatedAt,hits}]}]}
@@ -17,6 +19,15 @@ import { tokenize } from "../../lib/util.js";
 
 const DAY = 86400000;
 export const evidenceBoost = (hits) => 1 + 0.1 * Math.min(Math.max(0, hits || 0), 5);
+
+// Temporal-intent markers (mirrors FlowGrid（#8）has_temporal_intent: EN + CJK).
+const TEMP_CN = ["现在","目前","当前","如今","最近","最新","眼下","这个月","这周","今天","近期","改成","换成","还是","已经"];
+const TEMP_EN = ["now","current","currently","latest","recent","recently","today","these days","nowadays","at present","up to date","still"];
+export function hasTemporalIntent(query) {
+  const q = String(query ?? "");
+  const l = q.toLowerCase();
+  return TEMP_CN.some((m) => q.includes(m)) || TEMP_EN.some((m) => l.includes(m));
+}
 
 function lexicalCore(records, query) {
   const trimmed = String(query ?? "").trim().toLowerCase();
@@ -55,7 +66,7 @@ function lexicalCore(records, query) {
   });
 }
 
-function fullScore(row, trimmed, now, tokens) {
+function fullScore(row, trimmed, now, tokens, gated = false, query = "") {
   let s = row.score;
   const { tags, text, record } = row;
   for (const token of tokens) {
@@ -63,8 +74,10 @@ function fullScore(row, trimmed, now, tokens) {
     else if (tags.some((t) => t.includes(token) || token.includes(t))) s += 1;
   }
   if (/\s/.test(trimmed) && trimmed.length > 1 && text.includes(trimmed)) s += 3;
-  const age = Math.max(0, (now - (record.updatedAt ?? record.createdAt ?? 0))) / DAY;
-  s *= 1 + 0.5 * Math.exp(-age / 14);
+  if (!gated || hasTemporalIntent(query)) {
+    const age = Math.max(0, (now - (record.updatedAt ?? record.createdAt ?? 0))) / DAY;
+    s *= 1 + 0.5 * Math.exp(-age / 14);
+  }
   s *= evidenceBoost(record.hits ?? 0);
   return s;
 }
@@ -77,11 +90,15 @@ function rankVariant(records, query, variant, now) {
   const ranked = core
     .map((row) => {
       let s = row.score;
-      if (variant === "recency" || variant === "full") {
+      const recencyActive =
+        variant === "recency" || variant === "recency-gated" ||
+        variant === "full" || variant === "full-gated";
+      const gated = variant === "recency-gated" || variant === "full-gated";
+      if (recencyActive && (!gated || hasTemporalIntent(query))) {
         const age = Math.max(0, (now - (row.record.updatedAt ?? row.record.createdAt ?? 0))) / DAY;
         s *= 1 + 0.5 * Math.exp(-age / 14);
       }
-      if (variant === "full") s = fullScore(row, trimmed, now, tokens) ;
+      if (variant === "full" || variant === "full-gated") s = fullScore(row, trimmed, now, tokens, gated, query) ;
       return { s, id: row.record.id ?? row.record.i };
     })
     .filter((x) => x.s > 0)   // mirror bm25Rank: zero-scored records are dropped

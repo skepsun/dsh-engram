@@ -1,34 +1,38 @@
 # PersonaMem 32k — retrieval-only Recall@K（内核对齐版）
 
 - questions: 589 · contexts: 37 · unit: message-level segment
-- 四个词法检索器共用同一内核 rank.mjs（复刻 lib/util.js bm25Rank，已验证与真身逐位一致）：
-  `bm25-raw`=纯 BM25 · `bm25-recency`=+recency 因子 · `engram-full`=lib/util.js 真身（tag/短语/recency/evidence）
+- 所有词法变体共用同一内核 rank.mjs（复刻 lib/util.js bm25Rank，已验证 full 与真身逐位一致）：
+  `bm25-raw`=纯 BM25 · `bm25-recency`=+无条件 recency · `recency-gated`=仅查询带时间意图才 recency
+  `engram-full`=lib/util.js 真身 · `full-gated`=真身但 recency 意图门控 · `sqlite-fts`=FTS5 原生 · `last-k`=最近 64 条
+- 时间意图标记沿用 FlowGrid(#8) `has_temporal_intent` 中英词表（now/current/latest/recently/最近/目前…）
 - PersonaMem 无时间戳：按消息序号映射（1 块≈20 条≈1 天），使 recency 真实生效；`sqlite-fts` 为 FTS5 原生内核；`last-k`=最近 64 条
 
 | retriever | R@1 | R@3 | R@5 |
 |---|---|---|---|
 | bm25-raw | 23.6% | 26.7% | 29.4% |
 | bm25-recency | 23.8% | 29.9% | 32.1% |
+| recency-gated | 23.6% | 27.2% | 30.2% |
 | engram-full | 23.8% | 29.9% | 32.1% |
+| full-gated | 23.6% | 27.2% | 30.2% |
 | sqlite-fts | 23.9% | 27.7% | 31.2% |
 | last-k | 65.9% | 68.8% | 71.0% |
 
 ## By reference distance (R@3)
-| bucket | bm25-raw | bm25-recency | engram-full | sqlite-fts | last-k |
-|---|---|---|---|---|---|
-| near | 34% (n=269) | 39% (n=269) | 39% (n=269) | 37% (n=269) | 54% (n=269) |
-| far | 20% (n=320) | 22% (n=320) | 22% (n=320) | 20% (n=320) | 81% (n=320) |
+| bucket | bm25-raw | bm25-recency | recency-gated | engram-full | full-gated | sqlite-fts | last-k |
+|---|---|---|---|---|---|---|---|
+| near | 34% (n=269) | 39% (n=269) | 35% (n=269) | 39% (n=269) | 35% (n=269) | 37% (n=269) | 54% (n=269) |
+| far | 20% (n=320) | 22% (n=320) | 21% (n=320) | 22% (n=320) | 21% (n=320) | 20% (n=320) | 81% (n=320) |
 
 ## By question type (R@5)
-| type | bm25-raw | bm25-recency | engram-full | sqlite-fts | last-k |
-|---|---|---|---|---|---|
-| generalizing_to_new_scenarios | 0% | 2% | 2% | 4% | 100% |
-| provide_preference_aligned_recommendations | 0% | 2% | 2% | 0% | 100% |
-| recall_user_shared_facts | 2% | 2% | 2% | 3% | 100% |
-| recalling_facts_mentioned_by_the_user | 0% | 0% | 0% | 0% | 100% |
-| recalling_the_reasons_behind_previous_updates | 30% | 41% | 41% | 36% | 47% |
-| suggest_new_ideas | 2% | 4% | 4% | 3% | 100% |
-| track_full_preference_evolution | 100% | 100% | 100% | 100% | 14% |
+| type | bm25-raw | bm25-recency | recency-gated | engram-full | full-gated | sqlite-fts | last-k |
+|---|---|---|---|---|---|---|---|
+| generalizing_to_new_scenarios | 0% | 2% | 0% | 2% | 0% | 4% | 100% |
+| provide_preference_aligned_recommendations | 0% | 2% | 2% | 2% | 2% | 0% | 100% |
+| recall_user_shared_facts | 2% | 2% | 2% | 2% | 2% | 3% | 100% |
+| recalling_facts_mentioned_by_the_user | 0% | 0% | 0% | 0% | 0% | 0% | 100% |
+| recalling_the_reasons_behind_previous_updates | 30% | 41% | 34% | 41% | 34% | 36% | 47% |
+| suggest_new_ideas | 2% | 4% | 2% | 4% | 2% | 3% | 100% |
+| track_full_preference_evolution | 100% | 100% | 100% | 100% | 100% | 100% | 14% |
 
 ## 关于此前『engram 比基线低』的归因
 
@@ -41,3 +45,22 @@ recency/tag/phrase 全部失效。本次已统一内核并验证 `full` 与 `bm2
 - PersonaMem 全部 589 个 gold 位于会话尾 1/3 → `last-k` 高 Recall 是数据构造特性，非检索质量
 - retrieval-only 分数不可与 AML 官方 0-100 对比（官方 gpt-4o-mini Answer/Eval 全流程）；本表只作检索器相对对比
 - 时间戳映射（1 块≈1 天）是建模选择：PersonaMem 本身无真实时序
+
+## 时序意图门控实验结论（2026-08-22 追加）
+
+新增 `recency-gated` / `full-gated` 变体（时间意图标记沿用 FlowGrid #8 `has_temporal_intent` 中英词表；
+仅查询含 now/current/latest/recently/最近/目前… 等词才启用 recency）。
+
+| retriever | R@1 | R@3 | R@5 |
+|---|---|---|---|
+| bm25-raw | 23.6 | 26.7 | 29.4 |
+| bm25-recency（无条件） | 23.8 | 29.9 | **32.1** |
+| recency-gated | 23.6 | 27.2 | 30.2 |
+| engram-full（真身=无条件） | 23.8 | 29.9 | **32.1** |
+| full-gated | 23.6 | 27.2 | 30.2 |
+
+- 589 问句中仅 149（25%）带时间意图词 → 门控在 75% 查询上退回纯词法。
+- PersonaMem 的 gold 全部铆在会话尾 1/3（数据构造特性），「无条件 recency」在这里吃到
+  **数据红利**（+3.2pp R@3）；门控主动放弃该红利（仅 30.2 R@5）。
+- 该数据集正是 FlowGrid 说「门控防止把非时间查询答案抬错」的另一种极端：gold 可预期在尾部时，
+  无条件更优。**结论：门控适合"高频模板化重复陈述"的对话记忆；对"gold 随会话推进"的语料反而是亏**。

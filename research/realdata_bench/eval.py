@@ -113,7 +113,9 @@ def main():
                    "updatedAt": r["updatedAt"], "hits": r["hits"]} for r in rows]
     backends = {"bm25-raw": lambda q: node_variant("plain", node_docs, q, now),
                 "bm25-recency": lambda q: node_variant("recency", node_docs, q, now),
+                "recency-gated": lambda q: node_variant("recency-gated", node_docs, q, now),
                 "engram-full": lambda q: node_variant("full", node_docs, q, now),
+                "full-gated": lambda q: node_variant("full-gated", node_docs, q, now),
                 "last-16": lambda q: lastk_rank(rows,16)}
     stats = {b:{"mrr":0.0,"r1":0,"r3":0,"r5":0,"n":0,"bykind":{}} for b in backends}
     for g in gold:
@@ -132,11 +134,12 @@ def main():
     L=[]; L.append("# dsh-engram 真实记忆 self-recall 评测"); L.append("")
     L.append(f"- 语料：真实存储 {os.path.basename(ENG)}（{len(rows)} 条记忆，真实 createdAt/updatedAt/hits/entity）")
     L.append(f"- 金标：{len(gold)} 条带 entity 的记忆；查询=自身 entity 名（self-recall），目标=把它排过同工作区其余记忆（含同 entity 记忆）")
-    L.append(f"- 检索器：bm25-raw（纯 BM25）· bm25-recency（+recency 因子）· engram-full（lib/util.js 真身：tag/短语/recency/evidence）· last-16（最近窗口）")
+    L.append(f"- 检索器：bm25-raw（纯 BM25）· bm25-recency（+无条件 recency）· recency-gated（仅时间意图查询启用）· engram-full（真身）· full-gated（真身但 recency 门控）· last-16（窗口）")
     L.append("")
     L.append("| retriever | MRR | R@1 | R@3 | R@5 |")
     L.append("|---|---|---|---|---|")
-    for b in ("bm25-raw","bm25-recency","engram-full","last-16"):
+    order = ["bm25-raw","bm25-recency","recency-gated","engram-full","full-gated","last-16"]
+    for b in order:
         s=stats[b]; nn=max(1,s["n"])
         L.append(f"| {b} | {s['mrr']/nn:.3f} | {100*s['r1']/nn:.1f}% | {100*s['r3']/nn:.1f}% | {100*s['r5']/nn:.1f}% |")
     L.append("")
@@ -145,7 +148,7 @@ def main():
     kinds = sorted({k for b in stats for k in stats[b]["bykind"]})
     for kd in kinds:
         cell=[f"{kd}", f"{stats['bm25-raw']['bykind'][kd]['n']}"]
-        for b in ("bm25-raw","bm25-recency","engram-full","last-16"):
+        for b in ("bm25-raw","bm25-recency","recency-gated","engram-full","full-gated","last-16"):
             v=stats[b]["bykind"][kd]; cell.append(f"{100*v['r3']/max(1,v['n']):.0f}%")
         L.append("| "+" | ".join(cell)+" |")
 
