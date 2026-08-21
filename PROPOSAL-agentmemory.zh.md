@@ -71,3 +71,38 @@ CJK segmenter。
 - 相邻证据加成（FlowGrid：同会话 seq±1 也在候选 → +6；Chrono context 通道）。
 - 日期/数字精确命中加成（FlowGrid W_DATE=45 / W_NUMBER=25 同级）。
 - 时间戳/role 烘焙进证据文本（episodic，表示层，我们记忆已带 createdAt 可复用到 evidence 视图）。
+
+---
+
+## AML 编程榜启示与实施顺序（2026-08-22 追加）
+
+来源：`research/AML-coding-2026-08-21.md` + `research/aml-coding-2026-08-21.json`（58 条全量）。
+
+### 榜单事实
+- academic coding 43 条：**峰值 52.67 = 官方 `aml-memory-baseline` 自身**（8 个并列，疑似
+  baseline 模板克隆），**0 个提交超过**；其余 35 条在 46.00–52.33。industry 峰值 MemoraX 62.00
+  （返回量全榜最小 ~6K、搜索最快 1.8s）。官方对照 `no-memory-8000`（无记忆+8k 上下文）数值仅在网页端。
+- 词法/简单方法全程不落下风：SQLite-FTS 50.00、Refind 50.00、FlowGrid 49.33 vs Mem0 48.67、
+  Hindsight 46.67；returnSize 与解决率无单调关系，但「返回极少+快」的 MemoraX 登顶、几乎不返回的
+  反而垫底。
+
+### 对三候选的启示（证据纪律 > 检索魔法）
+1. **① 会话去重 recall 升为最高优先级**：coding 榜最强提交「返回极少而准」+ textual 榜 RRF/去噪
+   惯例 →「少而准」是当前评测范式下的正收益；engram_recall 的会话去重直接落实这一纪律，成本最低。
+2. **返回策略做成显式约束**：默认 topK/返回大小可控；证据带 provenance/时间/状态（episodic 烘焙
+   思路），服务下游"判断新旧"，这是③的治理面，比 supersede 判定更优先。
+3. **② retention 保持轻量化**：不改 recency 公式（实测无条件轻微更优）；重心在 GC 逐出按
+   retention 排序 + lastAccessAt 访问强化（确定性收益面）。
+4. **③ supersedes 维持门控规格且默认关**：真实库场景不足（27 对候选/4 对 cue），等积累；实施时
+   按 FlowGrid 门控规格（temporal-intent 门控 + require_update_cue + 链中间态中性）。
+5. **不做向量/重排/复杂融合**：编码榜证明简单方法与复杂系统同带，增强预算花在证据组织上。
+
+### 实施顺序（更新）
+| 序 | 项 | 状态 |
+|---|---|---|
+| 1 | ① 会话去重 recall（每会话≤3，可配）| **下一实施项** |
+| 2 | 返回控制 + 证据字段（provenance/时间戳）显式化 | 随①一并落地 |
+| 3 | ② GC 按 retention 排序 + lastAccessAt 访问强化 | 之后 |
+| 4 | ③ supersedes 门控规格（默认关）| 场景积累后评估 |
+
+> 决策依据：不追榜单分数（coding 赛道区分度不足）；以自建 bench（PersonaMem/真实库）为增强度量尺。
