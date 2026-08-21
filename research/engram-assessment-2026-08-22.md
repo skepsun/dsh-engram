@@ -78,8 +78,8 @@
 
 | P | 项 | 收益 | 成本 |
 |---|---|---|---|
-| P0 | 工具 description 瘦身 + 主/辅分层 | 省 ~700 token/请求 | ~1h |
-| P1 | filePath 锚（schema+capture+recall+revive） | 编程受益最大 | ~1h |
-| P2 | observations 派生化（去表/去副作用） | 减复杂度 ~150 行 | ~1.5h |
-| P3 | usage 合并按需 | 减复杂度 | ~0.5h |
-| P4 | 设置 UI 收敛 4 调点 | 极简 | ~0.5h |
+| P0 | 工具 description 瘦身 + 主/辅分层（schema −55%） | 省 ~700 token/请求 | ✅ `4608318` |
+| P1 | filePath 锚（schema+capture+recall+revive+capture error-first） | 编程受益最大 | ✅ `76de2ad` |
+| P2 | observations 派生化（去副作用/派生视图，−180 行） | 减复杂度 | ✅ `ed9d0fa` |
+| P3 | 统计合并为单一日志模块（热路径零写入） | 减复杂度 | ✅ `b3e4a74` |
+| P4 | 设置 UI 收敛 4 调点（常用+高级折叠） | 极简 | ✅ `9693900` |
