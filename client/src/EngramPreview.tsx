@@ -193,12 +193,9 @@ export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: 
         <span style={hb.sub}>
           每个会话实际注入的提示块 · 会话内冻结一次（order 40/41，前缀稳定复用 KV 缓存）
         </span>
-        <select style={hb.pick} value={ws} onChange={(e) => setWs(e.target.value)}>
-          {workspaces.map((w) => (
-            <option key={w} value={w}>{w}</option>
-          ))}
-          {workspaces.length === 1 && <option value={ws}>{ws}</option>}
-        </select>
+        {ws && (
+          <span style={hb.pick} title="跟随面板「工作区」选择">{ws}</span>
+        )}
       </div>
 
       <div style={hb.meta}>
