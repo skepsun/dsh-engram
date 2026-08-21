@@ -44,6 +44,14 @@ export interface ToolStats {
   buckets: Record<string, Record<string, number>>;
 }
 
+export interface MentalModelRecord {
+  ws: string;
+  content: string;
+  generated_at: number;
+  dirty: boolean;
+  sources_hash: string;
+}
+
 export interface ObservationRecord {
   id: string;
   workspace: string;
@@ -283,6 +291,10 @@ export class EngramApi {
 
   async observations(workspace: string): Promise<{ items: ObservationRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/observations${query({ workspace })}`));
+  }
+
+  async model(workspace = ""): Promise<{ model: MentalModelRecord }> {
+    return readJson(await fetch(`${API_PREFIX}/model${query({ workspace })}`));
   }
 
   async stats(workspace?: string): Promise<EngramStats> {

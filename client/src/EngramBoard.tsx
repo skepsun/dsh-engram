@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
-import type { LinkRecord, ObservationRecord, TaskRecord } from "./api";
+import type { LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
 
 export interface EngramBoardApi {
   overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> }>;
@@ -110,6 +110,8 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const loadedWs = useRef(new Set<string>());
   const [obsItems, setObsItems] = useState<ObservationRecord[] | null>(null);
   const [obsOpen, setObsOpen] = useState(false);
+  const [model, setModel] = useState<MentalModelRecord | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -133,6 +135,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       // Evidence-grounded beliefs (endpoint may be pending a dsh web restart;
       // failures stay silent so the rest of the board keeps working).
       api.observations(ws).then((r) => setObsItems(r.items)).catch(() => {});
+      api.model(ws).then((r) => setModel(r.model)).catch(() => {});
       setError(null);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -378,6 +381,22 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             该范围还没有实体图 — 用 <strong>esr_node</strong> 建模反复出现的领域对象（包/服务/文档/概念），
             再用 <strong>esr_link</strong> 关联到任务与节点；完整图形见 设置 → Engram 记忆。
           </span>
+        </div>
+      )}
+
+      {model && (
+        <div style={hb.obsBar}>
+          <button type="button" style={hb.obsHead} onClick={() => setModelOpen((v) => !v)} aria-expanded={modelOpen} aria-label="切换常驻摘要">
+            <span style={hb.partitionTagEsr}>常驻摘要 · {String(model.ws || "全部工作区").replace(/^.*[\\/]/, "") || "全部"}</span>
+            <span style={hb.obsMeta}>
+              生成于 {Math.max(0, Math.floor((Date.now() - model.generated_at) / 60000))} 分钟前 {modelOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {modelOpen && (
+            <div style={{ ...hb.obsBody, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 11, lineHeight: "16px" }}>
+              {model.content}
+            </div>
+          )}
         </div>
       )}
 

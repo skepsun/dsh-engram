@@ -29,6 +29,22 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、
 点选节点弹出悬浮面板看全部关系；悬空链接单独计数提示。
 
+### 1aaaaaaaaaa. Hindsight 三连：证据观测 + 常驻摘要 + 证据重排 — 上述之后
+借鉴 vectorize-io/hindsight（https://github.com/vectorize-io/hindsight）三个概念，全部
+纯规则 / 零向量 / 零 LLM：
+- **观测（observations）**：esr_* 记忆写入后自动浓缩 — 同锚点（entity/共享 tag）+ 字符
+  bigram Jaccard≥0.45 才并桶；merge 而非覆盖（proof 计数=唯一来源条数，失败复活视为新
+  发生 → forceEvidence 爬 proof，exact 重复只刷时间）；反证计数削弱；趋势 30/90 天窗口
+  算法算（new/strengthening/stable/weakening/stale）；每 ws 上限 50 逐出低证据。engram_recall
+  注入 proof≥2 的观测段；board 可折叠「观测 · 信念 N」条。
+- **常驻摘要（mental model）**：`esr_model` 工具 + `/model` 端点返回工作区预计算 markdown
+  摘要（任务/实体图/观测/记忆种类/风险），零 LLM；esr_* 写操作置 dirty → 读时重算，
+  10 分钟强制兜底 + 输入 hash 校验；board 顶部「常驻摘要 · 生成于 N 分钟前」可折叠条。
+- **证据重排**：bm25Rank 词法分上乘 evidenceBoost（1+0.1·min(hits,5)）——被证明过 N 次的
+  记忆同词频下排前；hits 由失败复活路径供给，失败记忆更容易被召回。
+host 部分（rerank、/observations、/model、esr_model、dirty 钩子、观测浓缩）随下次重启生效；
+board 两条（观测/常驻摘要）client-hmr 即时生效。宿主 67/67（新增 rerank 5 + obs 12 + mental 6）。
+
 ### 1aaaaaaaaa. 看板批量闭环 + markdown 导出 — 上述之后
 全屏看板：每张非 draft/stable 卡头加勾选框，选中后工具栏出现「批量闭环（N）」——
 一次填 artifact/evaluation/memory_refs 应用到所有选中任务（单卡已有证据自动保留）。

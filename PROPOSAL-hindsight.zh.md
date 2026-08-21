@@ -16,7 +16,14 @@
 | B | **Mental model 预计算**：常驻答案读零计算 + 水印刷新（mental_models + last_memory_seen_at） | 每次会话现查照样费 tokens；dock/board 每次重算 | `lib/mental.js` + 新工具 `esr_model` + board 常驻条 | host ~200 行 | 依赖 A 提供的 observation 汇总 |
 | C | **召回重排信号**：proof_count boost × recency 半衰期（reranking.py） | 现行排序只有 recency+精确匹配；失败复活性差 | `lib/rerank.js` 纯函数 + bm25Rank 接入 | host ~80 行 | 无 |
 
-状态：C ✅（7093fb5）/ A ✅ / B ⏳。建议实施顺序：**C → A → B**。
+状态：C ✅（7093fb5）/ A ✅（7103a22）/ B ✅。建议实施顺序：**C → A → B**。
+B 落地要点：`models` 表注册（ws/content/generated_at/dirty/sources_hash）；
+`lib/mental.js` 纯函数 compileSummary（任务/实体/观测/记忆种类聚合 → markdown）、
+computeSourcesHash、modelStale（dirty ∨ 超 10min ∨ 输入 hash 变）、getModel（冷缓存重算并持久化）；
+esr_* 六个写工具成功路径统一 `markModelDirty`；agent 工具 `esr_model`（返回常驻摘要+生成分钟数）
+与 `/model` 端点；board 顶部可折叠「常驻摘要 · 生成于 N 分钟前」。新测试 6 个（宿主 67/67）。
+C/A/B 的 host 部分（rerank、/observations、/model、esr_model、dirty 钩子）随下次 `dsh web` 重启生效；
+board 观测条/常驻条 client-hmr 即时生效。
 A 落地要点（相对本稿）：`observations` 表注册进 `engramDomainSpec`；
 `storeMemory` 三路（新建/exact-dup/失败复活）均触发 `integrateObservation`，其中
 **失败复活（revive）是「新发生」→ forceEvidence 爬 proof**，exact-dup（同源）只刷
