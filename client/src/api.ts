@@ -44,6 +44,20 @@ export interface ToolStats {
   buckets: Record<string, Record<string, number>>;
 }
 
+export interface ObservationRecord {
+  id: string;
+  workspace: string;
+  text: string;
+  kind: "belief" | "pattern";
+  proof: { count: number; sources: string[] };
+  span: { first_seen_at: number; last_seen_at: number };
+  negations: number;
+  trend: "new" | "strengthening" | "stable" | "weakening" | "stale";
+  tags: string[];
+  entity: string | null;
+  updated_at: number;
+}
+
 export interface LinkRecord {
   id: string;
   workspace: string;
@@ -265,6 +279,10 @@ export class EngramApi {
 
   async nodes(workspace: string): Promise<{ items: EntityRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/nodes${query({ workspace })}`));
+  }
+
+  async observations(workspace: string): Promise<{ items: ObservationRecord[] }> {
+    return readJson(await fetch(`${API_PREFIX}/observations${query({ workspace })}`));
   }
 
   async stats(workspace?: string): Promise<EngramStats> {

@@ -14,9 +14,14 @@
 |---|---|---|---|---|---|
 | A | **Observation 范式**：证据引用 + proof_count + refine-not-overwrite（consolidator.py） | 71 条扁平记忆无从浓缩；失败/成功经验被覆盖不保留证据链 | `lib/store.js` 写入侧 + `lib/obs.js` 新模块 + board 观测区 | host ~250 行 | 无 |
 | B | **Mental model 预计算**：常驻答案读零计算 + 水印刷新（mental_models + last_memory_seen_at） | 每次会话现查照样费 tokens；dock/board 每次重算 | `lib/mental.js` + 新工具 `esr_model` + board 常驻条 | host ~200 行 | 依赖 A 提供的 observation 汇总 |
-| C | **召回重排信号**：proof_count boost × recency 半衰期（reranking.py） | 现行排序只有 recency+精确匹配；失败复活性差 | `lib/rerank.js` 纯函数 + esr_recall 接入 | host ~80 行 | 无 |
+| C | **召回重排信号**：proof_count boost × recency 半衰期（reranking.py） | 现行排序只有 recency+精确匹配；失败复活性差 | `lib/rerank.js` 纯函数 + bm25Rank 接入 | host ~80 行 | 无 |
 
-建议实施顺序：**C → A → B**（C 最小且立即见效 → A 核心价值 → B 消费 A 的产出）。
+状态：C ✅（7093fb5）/ A ✅ / B ⏳。建议实施顺序：**C → A → B**。
+A 落地要点（相对本稿）：`observations` 表注册进 `engramDomainSpec`；
+`storeMemory` 三路（新建/exact-dup/失败复活）均触发 `integrateObservation`，其中
+**失败复活（revive）是「新发生」→ forceEvidence 爬 proof**，exact-dup（同源）只刷
+span；`engram_recall` 尾部注入 proof≥2 的观测段；board 加可折叠「观测 · 信念 N」条；
+`/observations` 端点与 /toolstats 同批等重启；新测试 12 个（宿主 61/61）。
 
 ---
 

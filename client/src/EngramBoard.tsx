@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
-import type { LinkRecord, TaskRecord } from "./api";
+import type { LinkRecord, ObservationRecord, TaskRecord } from "./api";
 
 export interface EngramBoardApi {
   overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> }>;
@@ -74,6 +74,14 @@ function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
 }
 
+const TREND_LABEL: Record<string, string> = {
+  new: "新",
+  strengthening: "增强",
+  stable: "稳定",
+  weakening: "减弱",
+  stale: "陈旧",
+};
+
 export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const { vars } = useEngramTheme();
   const [overview, setOverview] = useState<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> } | null>(null);
@@ -100,6 +108,8 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const loadedWs = useRef(new Set<string>());
+  const [obsItems, setObsItems] = useState<ObservationRecord[] | null>(null);
+  const [obsOpen, setObsOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -120,6 +130,9 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         for (const [w, items] of entries) if (items !== null) next[w] = items;
         return next;
       });
+      // Evidence-grounded beliefs (endpoint may be pending a dsh web restart;
+      // failures stay silent so the rest of the board keeps working).
+      api.observations(ws).then((r) => setObsItems(r.items)).catch(() => {});
       setError(null);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -368,6 +381,27 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         </div>
       )}
 
+      {obsItems && obsItems.length > 0 && (
+        <div style={hb.obsBar}>
+          <button type="button" style={hb.obsHead} onClick={() => setObsOpen((v) => !v)} aria-expanded={obsOpen} aria-label="切换观测列表">
+            <span style={hb.partitionTagEsr}>观测 · 信念 {obsItems.length}</span>
+            <span style={hb.obsMeta}>
+              累计 {obsItems.reduce((sum, o) => sum + (o.proof?.count ?? 0), 0)} 条证据 · {TREND_LABEL[obsItems[0]?.trend ?? "new"]} {obsOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {obsOpen && (
+            <div style={hb.obsBody}>
+              {obsItems.slice(0, 20).map((o) => (
+                <div key={o.id} style={hb.obsRow} title={`证据 ${o.proof.count} 条：${(o.proof.sources ?? []).join(", ")}`}>
+                  <span>{(o.negations ?? 0) > 0 ? "¬ " : ""}{o.text}</span>
+                  <span style={hb.obsMeta}>×{o.proof.count} · {TREND_LABEL[o.trend] ?? o.trend}{(o.negations ?? 0) > 0 ? ` · 反证${o.negations}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ padding: "0 14px" }}>
         {denied && (
           <div style={hb.warn}>
@@ -526,6 +560,47 @@ const hb = {
     color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
     background: "rgba(99,102,241,.12)",
     whiteSpace: "nowrap",
+  },
+  obsBar: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    margin: "0 14px 10px",
+    border: "1px solid var(--dsw-alias-divider, rgba(120,130,160,.18))",
+    borderRadius: 8,
+    background: "var(--dsw-alias-surface-elevated, rgba(255,255,255,.5))",
+    padding: "4px 8px",
+  },
+  obsHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left",
+    padding: "2px 0",
+    font: "inherit",
+    width: "100%",
+  },
+  obsMeta: {
+    fontSize: 10.5,
+    color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))",
+  },
+  obsBody: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    padding: "2px 0 4px",
+  },
+  obsRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    fontSize: 11.5,
+    lineHeight: "16px",
+    borderBottom: "1px dashed var(--dsw-alias-divider, rgba(120,130,160,.14))",
+    paddingBottom: 3,
   },
   modelHint: {
     display: "flex", gap: 6, alignItems: "flex-start",
