@@ -255,7 +255,8 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [busy, setBusy] = useState(false);
   const [memPage, setMemPage] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"mem" | "esr" | "graph" | "preview" | "telemetry">("mem");
+  const [view, setView] = useState<"mem" | "esr" | "preview" | "telemetry">("mem");
+  const [esrGraph, setEsrGraph] = useState(false);
   const [gcDryRun, setGcDryRun] = useState(true);
   const [gcReport, setGcReport] = useState<GcReport | null>(null);
   const [gcRunning, setGcRunning] = useState(false);
@@ -477,7 +478,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       <div style={s.tabBar}>
         <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>记忆</button>
         <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
-        <button style={view === "graph" ? s.tabActive : s.tab} onClick={() => setView("graph")}>关系图谱</button>
         <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>注入预览</button>
         <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
       </div>
@@ -658,10 +658,33 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       {view === "esr" && (
         <>
-      <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>
-        工具调用与命中统计见「遥测」tab；[ESR] 注入块的 escalate 提醒依据真实数据动态出现。
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+        <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)" }}>
+          工具调用与命中统计见「遥测」tab；[ESR] 注入块的 escalate 提醒依据真实数据动态出现。
+        </span>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+          <button type="button" style={esrGraph ? s.tab : s.tabActive} onClick={() => setEsrGraph(false)}>列表</button>
+          <button type="button" style={esrGraph ? s.tabActive : s.tab} onClick={() => setEsrGraph(true)}>图谱</button>
+        </span>
       </div>
-
+      {esrGraph ? (
+        <div style={s.subPanel}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_link 力导向图）</span>
+            <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}>
+              {workspace === "" ? "全部工作区" : `工作区：${workspace}`} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
+            </span>
+          </div>
+          <EngramGraph
+            workspace={workspace}
+            entities={nodes}
+            tasks={tasks}
+            links={links}
+            nameOf={nameOf}
+          />
+        </div>
+      ) : (
+        <>
       <div style={s.panelTitle}>ESR 任务（证据闭环）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
 
       {/* GUI 新建任务：把 esr_task 触发器直接放到面板里 */}
@@ -772,23 +795,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       ))}
         </>
       )}
-
-      {view === "graph" && (
-        <div style={s.subPanel}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_link 力导向图）</span>
-            <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}>
-              {workspace === "" ? "全部工作区" : `工作区：${workspace}`} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
-            </span>
-          </div>
-          <EngramGraph
-            workspace={workspace}
-            entities={nodes}
-            tasks={tasks}
-            links={links}
-            nameOf={nameOf}
-          />
-        </div>
+        </>
       )}
 
       {view === "preview" && (
