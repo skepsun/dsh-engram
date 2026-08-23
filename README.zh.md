@@ -88,7 +88,7 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
 
 重启后，全部落在 **DSH 原生**设置界面里：
 
-- **侧边栏「ESR 看板」入口 + 全屏看板** — 侧栏（New Session 下方）新增一行 `ESR 看板` 入口，右侧带**实时活动任务数徽标**（30s 轮询 /overview 汇总各工作区 active 任务）。点击在中间列打开全屏看板：**草稿 / 进行中(证据缺口) / 就绪(证据齐) / 已闭环** 四列 + 工作区筛选 + 搜索 + 内联新建表单 + 每张卡片的「补齐证据 → 关闭」表单（与 esr_close 同一证据门：artifact + evaluation + memory_refs）。入口与看板按 task-board 的 DOM 级挂载惯例自愈（MutationObserver 重插/重挂），并与 task-board / ssh 面板做跨面板互斥（打开本面板会关掉对方，点侧栏会话/项目行自动回到对话）。对话子树始终挂载在下方、由 `html[data-dsh-engram-board-active]` 控制显隐，切换零状态丢失。
+- **侧边栏「ESR 看板」入口 + 全屏看板** — 侧栏（New Session 下方）新增一行 `ESR 看板` 入口，右侧带**实时活动任务数徽标**（30s 轮询 /overview 汇总各工作区 active 任务）。点击在中间列打开全屏看板：**草稿 / 进行中(证据缺口) / 就绪(证据齐) / 已闭环** 四列 + 工作区筛选 + 搜索 + 内联新建表单 + 每张卡片的「补齐证据 → 关闭」表单（与 esr_close 同一证据门：artifact + evaluation + memory_refs）。头部带「**看板 / 图谱**」切换：图谱视图复用完整的关系图谱（esr_node/esr_link 力导向图，实体圆节点 + 任务勾选徽标，支持拖拽/缩放/点选查看关系明细），跟随工作区筛选，20s 轮询保持实时。入口与看板按 task-board 的 DOM 级挂载惯例自愈（MutationObserver 重插/重挂），并与 task-board / ssh 面板做跨面板互斥（打开本面板会关掉对方，点侧栏会话/项目行自动回到对话）。对话子树始终挂载在下方、由 `html[data-dsh-engram-board-active]` 控制显隐，切换零状态丢失。
 
 - **输入框上方的「任务」统一条** — 接管 DSH 内建 todo 工具的自己同款 dock 槽位
   （同一个 `conversation.input.dock` 单元格 / `id: todo`、更低 `priority`，从而遮蔽内建

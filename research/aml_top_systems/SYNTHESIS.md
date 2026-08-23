@@ -79,7 +79,7 @@
 3. **多粒度证据组织**（消息/窗口/会话）+ 相邻加成，比单粒度检索强（FlowGrid #8、Chrono #5 均含）。
 
 ## 待办映射
-- 把 1/2 的实证写回 `PROPOSAL-agentmemory.zh.md`（候选② retention、候选③ supersedes 的外部证据）。
+- 把 1/2 的实证写回 `docs/PROPOSAL-agentmemory.zh.md`（候选② retention、候选③ supersedes 的外部证据）。
 - 可选：在 PersonaMem/真实库 bench 上原型「时序意图门控 + supersession」，重测 R@K 验证。
 
 ## MemoraX Code（榜首产品开源客户端，2026-08-22 补）

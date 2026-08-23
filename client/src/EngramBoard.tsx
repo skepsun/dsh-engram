@@ -13,12 +13,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
-import type { LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
+import { EngramGraph } from "./EngramGraph";
+import type { EntityRecord, LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
 
 export interface EngramBoardApi {
   overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> }>;
   tasks(workspace: string, includeStable?: boolean): Promise<{ items: TaskRecord[] }>;
   links(workspace: string): Promise<{ items: LinkRecord[] }>;
+  nodes(workspace: string): Promise<{ items: EntityRecord[] }>;
+  observations(workspace: string): Promise<{ items: ObservationRecord[] }>;
+  model(workspace?: string): Promise<{ model: MentalModelRecord }>;
   createTask(workspace: string, name: string, description?: string): Promise<unknown>;
   closeTask(workspace: string, id: string, evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] }): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[]; artifactReason?: string }>;
 }
@@ -98,6 +102,9 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const { vars } = useEngramTheme();
   const [overview, setOverview] = useState<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> } | null>(null);
   const [tasksByWs, setTasksByWs] = useState<Record<string, TaskRecord[]>>({});
+  const [nodesByWs, setNodesByWs] = useState<Record<string, EntityRecord[]>>({});
+  const [linksByWs, setLinksByWs] = useState<Record<string, LinkRecord[]>>({});
+  const [viewMode, setViewMode] = useState<"board" | "graph">("board");
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,13 +142,25 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         wsList.map(async (w) => {
           const shouldLoad = !loadedWs.current.has(w);
           if (shouldLoad) loadedWs.current.add(w);
-          const res = shouldLoad ? await api.tasks(w, true) : null;
-          return [w, res ? res.items : (null as TaskRecord[] | null)] as const;
+          const res = shouldLoad
+            ? await Promise.all([api.tasks(w, true), api.nodes(w), api.links(w)])
+            : null;
+          return [w, res ? { tasks: res[0].items, nodes: res[1].items, links: res[2].items } : null] as const;
         }),
       );
       setTasksByWs((prev) => {
         const next: Record<string, TaskRecord[]> = { ...prev };
-        for (const [w, items] of entries) if (items !== null) next[w] = items;
+        for (const [w, items] of entries) if (items !== null) next[w] = items.tasks;
+        return next;
+      });
+      setNodesByWs((prev) => {
+        const next: Record<string, EntityRecord[]> = { ...prev };
+        for (const [w, items] of entries) if (items !== null) next[w] = items.nodes;
+        return next;
+      });
+      setLinksByWs((prev) => {
+        const next: Record<string, LinkRecord[]> = { ...prev };
+        for (const [w, items] of entries) if (items !== null) next[w] = items.links;
         return next;
       });
       // Evidence-grounded beliefs (endpoint may be pending a dsh web restart;
@@ -171,8 +190,10 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     const id = setInterval(() => {
       const fetchWs = async () => {
         try {
-          const res = await api.tasks(ws, true);
+          const [res, nodeRes, linkRes] = await Promise.all([api.tasks(ws, true), api.nodes(ws), api.links(ws)]);
           setTasksByWs((prev) => ({ ...prev, [ws]: res.items }));
+          setNodesByWs((prev) => ({ ...prev, [ws]: nodeRes.items }));
+          setLinksByWs((prev) => ({ ...prev, [ws]: linkRes.items }));
         } catch { /* polling errors are surface-level; full refresh handles them */ }
       };
       void fetchWs();
@@ -196,6 +217,15 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   );
 
   const allTasks = useMemo(() => Object.values(tasksByWs).flat(), [tasksByWs]);
+  const allNodes = useMemo(() => Object.values(nodesByWs).flat(), [nodesByWs]);
+  const allLinks = useMemo(() => Object.values(linksByWs).flat(), [linksByWs]);
+  // Resolve node/task ids to display names for the graph.
+  const nameOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of allNodes) map.set(n.id, n.name);
+    for (const t of allTasks) map.set(t.id, t.name);
+    return (id: string) => map.get(id) ?? id;
+  }, [allNodes, allTasks]);
   // Evidence gauge across active tasks: fraction of the 3 gates already filled.
   const evidenceGauge = useMemo(() => {
     let active = 0;
@@ -337,6 +367,10 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           <span style={hb.title}>ESR 任务看板</span>
           <span style={hb.sub}>draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门</span>
           <span style={hb.legendChip}>仅 ESR · 会话内 todo 见输入框上方任务条</span>
+          <span style={hb.seg}>
+            <button type="button" style={viewMode === "board" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("board")} title="四列任务看板">看板</button>
+            <button type="button" style={viewMode === "graph" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("graph")} title="实体关系图谱（esr_node / esr_link）">图谱</button>
+          </span>
           {loading && <span style={hb.loading}>…</span>}
           <span style={{ flex: "1 1 auto" }} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={`证据完备度 ${Math.round(evidenceGauge.frac * 100)}% · ${evidenceGauge.ready}/${evidenceGauge.active} 个进行中任务证据齐 · ${evidenceGauge.stable} 已闭环`}>
@@ -357,17 +391,21 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          {selectedIds.size > 0 && (
-            <button type="button" style={{ ...hb.btn, background: "var(--dsw-alias-state-business-tertiary, rgba(99,102,241,.12))" }} onClick={() => { setBulkOpen(true); setCreating(false); }}>
-              批量闭环（{selectedIds.size}）
-            </button>
+          {viewMode === "board" && (
+            <>
+              {selectedIds.size > 0 && (
+                <button type="button" style={{ ...hb.btn, background: "var(--dsw-alias-state-business-tertiary, rgba(99,102,241,.12))" }} onClick={() => { setBulkOpen(true); setCreating(false); }}>
+                  批量闭环（{selectedIds.size}）
+                </button>
+              )}
+              <button type="button" style={hb.btn} onClick={exportMd} title="导出当前筛选为 markdown">
+                导出
+              </button>
+              <button type="button" style={hb.btn} onClick={() => { setCreating((v) => !v); setClosingFor(null); }}>
+                ＋ 新建
+              </button>
+            </>
           )}
-          <button type="button" style={hb.btn} onClick={exportMd} title="导出当前筛选为 markdown">
-            导出
-          </button>
-          <button type="button" style={hb.btn} onClick={() => { setCreating((v) => !v); setClosingFor(null); }}>
-            ＋ 新建
-          </button>
           <button type="button" style={hb.btn} onClick={() => void refresh()} disabled={loading} title="刷新">
             刷新
           </button>
@@ -375,6 +413,8 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         </div>
       </div>
 
+      {viewMode === "board" ? (
+      <>
       {/* 分栏说明：原生 todo（会话内）与 ESR（跨会话闭环）不是同一平面 */}
       <div style={hb.partition}>
         <span style={hb.partitionTag}>原生 todo · 会话内</span>
@@ -391,7 +431,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           <span style={hb.partitionTagEsr}>实体建模</span>
           <span>
             该范围还没有实体图 — 用 <strong>esr_node</strong> 建模反复出现的领域对象（包/服务/文档/概念），
-            再用 <strong>esr_link</strong> 关联到任务与节点；完整图形见 设置 → Engram 记忆。
+            再用 <strong>esr_link</strong> 关联到任务与节点，上方切到「图谱」即可查看完整实体关系图。
           </span>
         </div>
       )}
@@ -555,8 +595,33 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           </div>
         ))}
       </div>
+      </>
+      ) : (
+        <div style={hb.graphWrap}>
+          {denied && (
+            <div style={hb.warn}>
+              ESR 看板数据不可达（loopback-only 守卫）— 任务/关系/图谱将无法加载；请通过本机访问 GUI，或放入受信网络访问。
+            </div>
+          )}
+          {error && <div style={hb.error}>⚠ {error}</div>}
+          <div style={hb.graphPanel}>
+            <div style={hb.graphHead}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_node / esr_link 力导向图）</span>
+              <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
+                {ws === "" ? "全部工作区" : ws.replace(/^.*[\\/]/, "")} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
+              </span>
+            </div>
+            <EngramGraph workspace={ws} entities={allNodes} tasks={allTasks} links={allLinks} nameOf={nameOf} />
+          </div>
+        </div>
+      )}
+
       <div style={hb.footer}>
-        <span>{columnCounts.all} 个任务（当前筛选）· 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json</span>
+        <span>
+          {viewMode === "board"
+            ? `${columnCounts.all} 个任务（当前筛选）· 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json`
+            : `${allNodes.length} 个实体 · ${allLinks.length} 条关系 · ${allTasks.length} 个任务 · 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json`}
+        </span>
       </div>
     </div>
   );
@@ -576,6 +641,37 @@ const hb = {
     padding: "0 7px", borderRadius: 999, whiteSpace: "nowrap",
     color: "var(--dsw-alias-label-tertiary, #9ca3af)",
     border: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #d1d5db))",
+  },
+  /** 看板 / 图谱 segmented toggle. */
+  seg: {
+    display: "inline-flex",
+    gap: 2,
+    padding: 2,
+    background: "var(--dsw-alias-bg-multi-select, var(--dsh-color-hover-bg, #f3f4f6))",
+    borderRadius: 999,
+  },
+  segBtn: {
+    border: "none",
+    background: "none",
+    borderRadius: 999,
+    padding: "3px 10px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))",
+    whiteSpace: "nowrap",
+  },
+  segActive: {
+    border: "none",
+    background: "var(--dsw-alias-bg-layer-1, var(--dsh-color-surface, #fff))",
+    borderRadius: 999,
+    padding: "3px 10px",
+    fontSize: 11.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    color: "var(--dsw-alias-label-primary-bluish, #4338ca)",
+    whiteSpace: "nowrap",
+    boxShadow: "0 1px 3px rgba(15,23,42,.10)",
   },
   /** Explanation bar partitioning the native todo plane from the ESR kanban. */
   partition: {
@@ -720,6 +816,26 @@ const hb = {
     padding: "12px 14px",
     overflow: "auto",
     alignItems: "start",
+  },
+  /** Graph view fills the center column, scrolling only when it overflows. */
+  graphWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    padding: "12px 14px",
+  },
+  graphPanel: {
+    border: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",
+    borderRadius: 12,
+    padding: "10px 12px",
+    background: "var(--dsw-alias-bg-layer-1, var(--dsh-color-surface, #fff))",
+  },
+  graphHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 6,
   },
   column: {
     borderRadius: 12,

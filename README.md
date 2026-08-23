@@ -117,7 +117,11 @@ After restart, inside the **native** DSH settings surface:
   center column: **草稿 / 进行中(gaps) / 就绪(evidence ready) / 已闭环** columns,
   workspace filter + search, an inline create form, and per-card
   "补齐证据 → 关闭" closure forms sharing the esr_close gates (artifact +
-  evaluation + memory_refs). Following the task-board precedent, the entry and
+  evaluation + memory_refs). A **看板 / 图谱 (board/graph)** toggle in the
+  header reuses the full relation graph (esr_node/esr_link force-directed SVG:
+  entity circles + task check badges, drag/zoom/select for relation details),
+  following the workspace filter and refreshed by the same 20s polling.
+  Following the task-board precedent, the entry and
   the board are DOM-mounted and self-heal (MutationObserver re-inserts on shell
   re-renders), with cross-panel exclusivity against task-board/ssh (opening one
   evicts the others; clicking a sidebar session/workspace row hands the center
