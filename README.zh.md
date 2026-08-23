@@ -1,6 +1,6 @@
 # dsh-engram
 
-> **[中文](README.zh.md) · [English](README.md)**
+> **[English](README.md) · [中文](README.zh.md) · [Русский](README.ru.md)**
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 设计的极简长期记忆插件，融合了
 [symbolic-index](https://github.com/skepsun/symbolic-index) 与 [pi-esr](https://github.com/skepsun/pi-esr) 的思想——

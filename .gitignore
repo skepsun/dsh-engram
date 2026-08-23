@@ -6,3 +6,6 @@ node_modules/
 .esr/
 .pi-esr-memory/
 .pi-loom/
+
+.idea/
+.vscode/

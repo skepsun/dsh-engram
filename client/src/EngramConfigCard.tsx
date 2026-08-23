@@ -1,5 +1,5 @@
 /**
- * dsh-engram client: the Plugins → 配置 card (settings.plugin.item, keyed by the
+ * dsh-engram client: the Plugins → configuration card (settings.plugin.item, keyed by the
  * `dsh-engram` namespace the host registers). Reads/writes the namespace through
  * EngramScope — a self-sufficient transport over the connection's settings RPCs
  * that keeps working when the GUI is reached through an operator-authorized
@@ -70,42 +70,42 @@ export interface EngramConfigGroup {
 export const GROUPS: EngramConfigGroup[] = [
   {
     id: "capture",
-    title: "捕获与检索",
-    description: "零 LLM 自动捕获与跨会话搜索",
+    title: "Capture & Search",
+    description: "Zero-LLM auto capture and cross-session search",
     fields: [
-      { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
-      { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
-      { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
+      { key: "autoCapture", label: "Auto capture", hint: "Zero LLM extracts memories from tool results (git/key files/errors)", kind: "bool" },
+      { key: "autoCapturePerSession", label: "Per-session capture cap", hint: "Maximum number of auto-captured memories per session", kind: "num", min: 0, max: 1000 },
+      { key: "sessionSearch", label: "Session-history search", hint: "engram_recall FTS fallback across past sessions", kind: "bool" },
     ],
   },
   {
     id: "index",
-    title: "索引",
-    description: "[ENGRAM] 块的内容预算与晋升规则",
+    title: "Index",
+    description: "[ENGRAM] block content budget and promotion rules",
     fields: [
-      { key: "indexMaxLines", label: "索引最大行数", hint: "[ENGRAM] 块最多显示的条目行数", kind: "num", min: 0, max: 50 },
-      { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
-      { key: "minIndexSignal", label: "入索引信号阈值", hint: "signal ≥ 此值的自动捕获才进索引", kind: "num", min: 0, max: 1, step: 0.05 },
-      { key: "promoteHits", label: "晋升命中数", hint: "hit 数达此值的低信号条目进索引", kind: "num", min: 0, max: 20 },
+      { key: "indexMaxLines", label: "Max index entries", hint: "Max number of visible memory entries in the [ENGRAM] block", kind: "num", min: 0, max: 50 },
+      { key: "indexMaxChars", label: "Index char cap", hint: "[ENGRAM] block token budget", kind: "num", min: 0, max: 4000 },
+      { key: "minIndexSignal", label: "Index signal threshold", hint: "Only auto-captures with signal ≥ this value enter the index", kind: "num", min: 0, max: 1, step: 0.05 },
+      { key: "promoteHits", label: "Promotion hits", hint: "Low-signal entries are promoted into the index once hits reach this value", kind: "num", min: 0, max: 20 },
     ],
   },
   {
     id: "retention",
-    title: "生命周期与 GC",
-    description: "过期、容量上限与定期回收",
+    title: "Lifecycle & GC",
+    description: "Expiry, capacity cap, and scheduled sweep",
     fields: [
-      { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
-      { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
-      { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
-      { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
+      { key: "expireDays", label: "TTL (days)", hint: "0 = never expires", kind: "num", min: 0, max: 3650 },
+      { key: "maxMemoriesPerWorkspace", label: "Memories per workspace cap", kind: "num", min: 0, max: 10000 },
+      { key: "gcEnabled", label: "Memory GC", hint: "Scheduled sweep (expired/over-cap/stable past window/dangling links)", kind: "bool" },
+      { key: "gcStableRetentionDays", label: "Stable task retention (days)", hint: "After the window, GC archives stable tasks and removes them from the [ESR] surface", kind: "num", min: 0, max: 3650 },
     ],
   },
   {
     id: "security",
-    title: "安全",
-    description: "访问围栏与隧道授权",
+    title: "Security",
+    description: "Access fence and tunnel authorization",
     fields: [
-      { key: "trustedHosts", label: "受信隧道域名", hint: "允许经隧道访问记忆查看器的域名，逗号分隔；留空 = 仅本机。改后需重启 dsh web 生效", kind: "text", width: 260 },
+      { key: "trustedHosts", label: "Trusted tunnel domains", hint: "Comma-separated domains allowed past the tunnel to reach the memory viewer; leave blank = localhost only. After a change, restart dsh web to apply", kind: "text", width: 260 },
     ],
   },
 ];
@@ -114,7 +114,7 @@ export const GROUPS: EngramConfigGroup[] = [
 export const FIELDS: EngramConfigField[] = GROUPS.flatMap((group) => group.fields);
 
 /** One-line description under the card's name, mirroring the built-in cards. */
-const CARD_DESCRIPTION = "控制 engram 记忆的捕获、索引、保留与隧道访问";
+const CARD_DESCRIPTION = "Control engram-memory capture, index, retention, and tunnel access";
 
 // The built-in plugin cards are styled with the platform's dsw-alias design
 // tokens; mirroring them here makes dsh-engram read as a sibling of the Shell /
@@ -352,19 +352,19 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
           type="button"
           style={s.header}
           aria-expanded={open}
-          aria-label={`${open ? "收起" : "展开"} dsh-engram 设置`}
+          aria-label={`${open ? "Collapse" : "Expand"} dsh-engram settings`}
           onClick={() => setOpen((prev) => !prev)}
         >
           <span style={s.headText}>
             <span style={s.name}>dsh-engram</span>
             <span style={s.description}>{CARD_DESCRIPTION}</span>
           </span>
-          {anyDirty && <span style={s.pending}>未保存</span>}
+          {anyDirty && <span style={s.pending}>Unsaved</span>}
           <Chevron open={open} />
         </button>
         {open && (
           <div style={s.body}>
-            {!writable && <p style={s.readOnly}>本部署的设置为只读（宿主未授权写入或需重启应用）。</p>}
+            {!writable && <p style={s.readOnly}>This deployment's settings are read-only (host not authorized to write or the app needs a restart).</p>}
             {GROUPS.map((group) => (
               <div key={group.id} style={s.groupPanel}>
                 <div style={s.groupHead}>
@@ -394,7 +394,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
                             style={{ ...s.input, width: field.width ?? 180 }}
                             value={Array.isArray(raw) ? raw.join(", ") : raw === undefined ? "" : String(raw)}
                             disabled={!writable}
-                            placeholder="host.domain, 另一域名…"
+                            placeholder="host.domain, another domain…"
                             onChange={(e) => {
                               const tokens = e.target.value
                                 .split(/[,\s]+/)
@@ -422,11 +422,11 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
                               ? { ...s.reset, color: "var(--dsw-alias-brand-primary, #2563eb)" }
                               : { ...s.reset, cursor: "default", opacity: 0.55 }
                           }
-                          title="重置为默认"
+                          title="Reset to default"
                           disabled={!writable || !overridden}
                           onClick={() => void resetField(field.key)}
                         >
-                          重置
+                          Reset
                         </button>
                       </div>
                     </div>
@@ -435,7 +435,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
               </div>
             ))}
             <div style={s.note}>
-              设置对新建会话即时生效；已冻结的 [ENGRAM] 块保持前缀稳定。
+              Settings take effect on new sessions immediately; frozen [ENGRAM] blocks keep a stable prefix.
             </div>
             {error && <div style={s.failed}>{error}</div>}
             <div style={s.footer}>

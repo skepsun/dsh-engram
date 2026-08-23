@@ -1,5 +1,5 @@
 /**
- * dsh-engram client: the Settings → "Engram 记忆" page (settings.section).
+ * dsh-engram client: the Settings → "Engram Memory" page (settings.section).
  *
  * Reads the real store through the /api/dsh-engram route family and renders:
  *   - overview stat cards (counts, capture totals, per-workspace index cost)
@@ -29,13 +29,13 @@ const KIND_COLORS: Record<string, string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
-  decision: "决定",
-  error: "错误",
-  procedure: "流程",
-  fact: "事实",
-  insight: "洞察",
-  handoff: "交接",
-  task: "任务",
+  decision: "Decision",
+  error: "Error",
+  procedure: "Procedure",
+  fact: "Fact",
+  insight: "Insight",
+  handoff: "Handoff",
+  task: "Task",
 };
 
 const s = {
@@ -129,7 +129,7 @@ function fmtDate(ts: number): string {
 /** Memories per page in the memory table (workspace pager stays separate). */
 const MEM_PAGE_SIZE = 10;
 
-/** 0.123 -> "12.3%"; null -> "–"（无样本）。 */
+/** 0.123 -> "12.3%"; null -> "–" (no sample). */
 const pct = (n: number | null | undefined) => (n === null || n === undefined ? "–" : `${(n * 100).toFixed(1)}%`);
 
 type MemRow = { kind: "head"; ws: string; count: number } | { kind: "row"; m: MemoryRecord };
@@ -189,7 +189,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [gcDryRun, setGcDryRun] = useState(true);
   const [gcReport, setGcReport] = useState<GcReport | null>(null);
   const [gcRunning, setGcRunning] = useState(false);
-  // ESR GUI 新建 / 关闭表单
+  // ESR gui: new-task / close-task forms
   const [newTaskWs, setNewTaskWs] = useState("");
   const [newTaskName, setNewTaskName] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -206,8 +206,9 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     try {
       const ov = await api.overview();
       setOverview(ov);
-      // workspace === "" → 全部工作区：stat 卡显示全局总数，表格按工作区分组
-      // 完整展示所有记忆（默认视图）；选中某个工作区时各卡片与表格跟随该工作区。
+      // workspace === "" → all workspaces: stat cards show global totals, table groups by workspace
+      // Full display of all memories (default view); selecting a workspace makes every card and
+      // table follow that workspace.
       const wsList = workspace ? [workspace] : Object.keys(ov.workspaces);
       const [mem, taskGroups, linkGroups, nodeGroups, st] = await Promise.all([
         api.memories({
@@ -240,7 +241,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const workspaces = useMemo(() => (overview ? Object.keys(overview.workspaces) : []), [overview]);
   const kindsPresent = useMemo(() => (overview ? Object.keys(overview.kinds) : []), [overview]);
 
-  // 新建任务的默认工作区：未选具体工作区且未手动选过时，取第一个。
+  // Default workspace for a new task: take the first when none specific is selected and no manual pick.
   useEffect(() => {
     if (!newTaskWs && workspaces.length > 0 && !workspace) setNewTaskWs(workspaces[0]);
   }, [newTaskWs, workspaces, workspace]);
@@ -279,7 +280,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     }
   };
 
-  /** Page through workspaces one at a time (prev/next pager, 按工作区分页). */
+  /** Page through workspaces one at a time (prev/next pager, paged per workspace) */
   const goWorkspace = (dir: 1 | -1) => {
     if (!overview || workspace === "") return;
     const list = Object.keys(overview.workspaces);
@@ -289,7 +290,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     setWorkspace(next);
   };
 
-  /** Table rows: grouped by workspace in the 全部工作区 view, flat otherwise. */
+  /** Table rows: grouped by workspace in the all-workspaces view, flat otherwise. */
   const groupedRows: Array<[string, MemoryRecord[]]> =
     workspace === "" ? groupByWorkspace(memories) : [[workspace, memories]];
   const taskGroups: Array<[string, TaskRecord[]]> = workspace === "" ? groupByWorkspace(tasks) : [[workspace, tasks]];
@@ -306,7 +307,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const memPageSafe = Math.min(memPage, memPageCount - 1);
   const memPageRows = flatRows.slice(memPageSafe * MEM_PAGE_SIZE, (memPageSafe + 1) * MEM_PAGE_SIZE);
 
-  // 记忆分页：筛选条件变化回到第 1 页；数据变化后越界则收拢到最后一页。
+  // Memory paging: back to page 1 when filters change; clamp to the last page once data breaks the bounds.
   useEffect(() => {
     setMemPage(0);
   }, [workspace, status, kind, q]);
@@ -314,7 +315,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     if (memPage >= memPageCount) setMemPage(Math.max(0, memPageCount - 1));
   }, [memPage, memPageCount]);
 
-  /** GUI 新建任务（POST /api/dsh-engram/tasks），默认落到当前选中的工作区。 */
+  /** GUI new task (POST /api/dsh-engram/tasks), defaults to the currently-selected workspace. */
   const createNewTask = async () => {
     const ws = newTaskWs || workspace || workspaces[0] || "";
     if (!ws || newTaskName.trim() === "") return;
@@ -332,7 +333,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     }
   };
 
-  /** GUI 关闭任务：填 artifact/evaluation/memory_refs 后交给宿主证据门。 */
+  /** GUI close task: fill artifact/evaluation/memory_refs, then hand off to the host evidence gate. */
   const submitClose = async (task: TaskRecord) => {
     setCloseBusy(true);
     setError(null);
@@ -344,7 +345,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         memoryRefs: refs,
       });
       if (out.state === "active") {
-        setError(`证据仍有缺口：${(out.gaps ?? []).join(", ")} — 任务保持 ACTIVE，补齐后再提交`);
+        setError(`Evidence gaps remain: ${(out.gaps ?? []).join(", ")} — the task stays ACTIVE, submit again once filled`);
       }
       setCloseFor(null);
       setCloseArtifact("");
@@ -365,16 +366,16 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
   return (
     <div style={{ ...s.root, ...vars }}>
-      <h1 style={s.h1}>Engram 记忆</h1>
+      <h1 style={s.h1}>Engram Memory</h1>
       <p style={s.sub}>
-        跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_engram.json
+        Cross-session memory · zero-LLM auto capture · symbolic-index progressive disclosure — data source ~/.dsh/storages/dsh_engram.json
       </p>
 
       {error && <div style={s.error}>{t("error")}: {error}</div>}
 
       <div style={s.tabBar}>
-        <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>记忆</button>
-        <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
+        <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>Memory</button>
+        <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR (tasks · nodes · relations)</button>
       </div>
 
       {view === "mem" && (
@@ -387,20 +388,20 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         const linkNum = wsCounts ? wsCounts.links : overview.totals.links;
         return (
         <div style={s.stats}>
-          <StatCard num={String(memNum)} label={wsCounts ? "记忆 (active)" : "记忆 (active, 全局)"} />
-          <StatCard num={String(taskNum)} label={wsCounts ? "任务 (active)" : "任务 (active, 全局)"} />
-          <StatCard num={String(linkNum)} label={wsCounts ? "关系" : "关系 (全局)"} />
-          <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview.totals.nodes ?? 0))} label={wsCounts ? "节点" : "节点 (全局)"} />
-          <StatCard num={String(workspaces.length)} label="工作区" />
-          <StatCard num={String(overview.captures.total)} label="自动捕获" />
+          <StatCard num={String(memNum)} label={wsCounts ? "Memories (active)" : "Memories (active, global)"} />
+          <StatCard num={String(taskNum)} label={wsCounts ? "Tasks (active)" : "Tasks (active, global)"} />
+          <StatCard num={String(linkNum)} label={wsCounts ? "Relations" : "Relations (global)"} />
+          <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview.totals.nodes ?? 0))} label={wsCounts ? "Nodes" : "Nodes (global)"} />
+          <StatCard num={String(workspaces.length)} label="Workspaces" />
+          <StatCard num={String(overview.captures.total)} label="Auto captures" />
           <StatCard
             num={indexCost ? `~${indexCost.tokens}` : "–"}
-            label="[ENGRAM] 索引 token / 工作区"
+            label="[ENGRAM] index tokens / workspace"
           />
           {gc && (
             <StatCard
               num={String(gc.archivedMemories + gc.archivedTasks)}
-              label={`GC 已归档 · 链接-${gc.removedLinks}`}
+              label={`GC archived · links-${gc.removedLinks}`}
             />
           )}
         </div>
@@ -409,26 +410,26 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       <div style={s.subPanel}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>记忆 GC（pi-esr 约束）</span>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>Memory GC (pi-esr constraints)</span>
           <label style={{ fontSize: 12, display: "inline-flex", gap: 4, alignItems: "center" }}>
             <input type="checkbox" checked={gcDryRun} onChange={(e) => setGcDryRun(e.target.checked)} />
-            仅预览（dry run）
+            Preview only (dry run)
           </label>
           <button style={s.btnPrimary} onClick={() => void runGc()} disabled={gcRunning || !workspace}>
-            {gcRunning ? "…" : "运行 GC"}
+            {gcRunning ? "…" : "Run GC"}
           </button>
           {gc && gc.lastRun > 0 && (
-            <span style={s.mono}>上次 {fmtDate(gc.lastRun)}</span>
+            <span style={s.mono}>Last run: {fmtDate(gc.lastRun)}</span>
           )}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-          工作集（active 任务引用 / 任务记忆 / 已入索引命中）永不驱逐；TTL 过期归档、超容量淘汰、stable 任务超窗归档、悬空链接清理。只归档不硬删——条目 id 保持可重取。
+          The working set (active task refs / task memories / already-indexed hits) is never evicted; TTL-expired entries are archived, over-cap entries pruned, stable tasks past-window archived, dangling links dropped. Archive-only, never hard-delete — entry ids stay re-fetchable.
         </div>
         {gcReport && (
           <div style={{ marginTop: 8, fontSize: 12.5 }}>
             <div>
-              {gcReport.dryRun ? "dry-run 预览：" : "已执行："}
-              {" "}归档记忆 <b>{gcReport.archivedMemories.length}</b> · 归档任务 <b>{gcReport.archivedTasks.length}</b> · 清理链接 <b>{gcReport.removedLinks.length}</b> · 保护 <b>{gcReport.protectedMemories}</b>
+              {gcReport.dryRun ? "Dry-run preview:" : "Executed:"}
+              {" "}archived memories <b>{gcReport.archivedMemories.length}</b> · archived tasks <b>{gcReport.archivedTasks.length}</b> · cleaned links <b>{gcReport.removedLinks.length}</b> · protected <b>{gcReport.protectedMemories}</b>
             </div>
             {gcReport.archivedMemories.slice(0, 5).map((e) => (
               <div key={e.id} style={s.mono}>- {e.id.slice(0, 8)} {e.reason}: {e.text}</div>
@@ -445,27 +446,27 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       <div style={s.row}>
         <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
-          <option value="">全部工作区</option>
+          <option value="">All workspaces</option>
           {workspaces.map((ws) => (
-            <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} 条）</option>
+            <option key={ws} value={ws}>{ws} ({overview?.workspaces[ws]?.memories ?? 0} memories)</option>
           ))}
         </select>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(-1)}>‹ 上一工作区</button>
-        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(1)}>下一工作区 ›</button>
+        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(-1)}>‹ Previous workspace</button>
+        <button style={s.btn} disabled={workspace === "" || workspaces.length === 0} onClick={() => goWorkspace(1)}>Next workspace ›</button>
         <select style={s.input} value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="">全部类型</option>
+          <option value="">All kinds</option>
           {kindsPresent.map((k) => (
             <option key={k} value={k}>{KIND_LABEL[k] ?? k}</option>
           ))}
         </select>
         <select style={s.input} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="active">仅活动</option>
-          <option value="all">全部状态</option>
-          <option value="archived">已归档</option>
+          <option value="active">Active only</option>
+          <option value="all">All states</option>
+          <option value="archived">Archived</option>
         </select>
         <input
           style={{ ...s.input, width: 180 }}
-          placeholder="搜索记忆…"
+          placeholder="Search memories…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void refresh(); }}
@@ -480,7 +481,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           <span style={s.tag}>autoCapture {cfg.autoCapture ? "on" : "off"}</span>
           <span style={s.tag}>sessionSearch {cfg.sessionSearch ? "on" : "off"}</span>
           <span style={s.tag}>TTL {cfg.expireDays}d</span>
-          <span style={s.tag}>index {cfg.indexMaxLines} 行 / {cfg.indexMaxChars} 字符</span>
+          <span style={s.tag}>index {cfg.indexMaxLines} lines / {cfg.indexMaxChars} chars</span>
           <span style={s.tag}>promote ≥{cfg.promoteHits} hits</span>
         </div>
       )}
@@ -493,18 +494,18 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         </colgroup>
         <thead>
           <tr>
-            <th style={s.th}>类型</th>
-            <th style={s.th}>内容</th>
+            <th style={s.th}>Type</th>
+            <th style={s.th}>Content</th>
             <th style={s.th} />
           </tr>
         </thead>
         <tbody>
           {flatRows.length === 0 && (
-            <tr><td colSpan={3} style={s.empty}>暂无记忆 — 使用 engram_store 显式记录，或让自动捕获工作（git 提交 / 关键文件编辑 / 工具错误）</td></tr>
+            <tr><td colSpan={3} style={s.empty}>No memories yet — record one explicitly with engram_store, or let auto-capture run (git commit / significant file edit / tool error)</td></tr>
           )}
           {memPageRows.map((r) =>
             r.kind === "head" ? (
-              <tr key={`h-${r.ws}`}><td colSpan={3} style={s.wsHead}>{r.ws} · {r.count} 条</td></tr>
+              <tr key={`h-${r.ws}`}><td colSpan={3} style={s.wsHead}>{r.ws} · {r.count} memories</td></tr>
             ) : (
               <tr key={r.m.id}>
                 <td style={{ ...s.td, whiteSpace: "nowrap" }}>
@@ -517,7 +518,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                     <div style={{ ...s.mono, ...s.ellipsis, flex: "1 1 160px" }} title={`${fmtDate(r.m.createdAt)} · ${r.m.id} · ${r.m.entity ?? ""} · signal ${r.m.signal.toFixed(2)} · hits ${r.m.hits} · TTL ${daysLeft(r.m.expiresAt)}`}>
                       {fmtDate(r.m.createdAt)} · {r.m.id.slice(0, 8)}{r.m.entity ? ` · ${r.m.entity}` : ""} · {r.m.signal.toFixed(2)} · hits {r.m.hits} · {daysLeft(r.m.expiresAt)}
                     </div>
-                    <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? "收起" : "展开全文"}</button>
+                    <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? "Collapse" : "Expand full text"}</button>
                   </div>
                   {r.m.tags.length > 0 && (
                     <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: 4 }}>{r.m.tags.map((tag) => <span key={tag} style={s.tag}>{tag}</span>)}</div>
@@ -525,8 +526,8 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                    <button style={s.btn} title="归档（TTL/软删，可恢复不载入索引）" onClick={() => void act(() => api.archive(r.m.id, r.m.workspace))}>归档</button>
-                    <button style={s.btn} title="永久删除" onClick={() => { if (window.confirm(`删除这条记忆?\n${r.m.text.slice(0, 60)}`)) void act(() => api.remove(r.m.id, r.m.workspace)); }}>删除</button>
+                    <button style={s.btn} title="Archive (soft / TTL, restorable, not indexed)" onClick={() => void act(() => api.archive(r.m.id, r.m.workspace))}>Archive</button>
+                    <button style={s.btn} title="Delete permanently" onClick={() => { if (window.confirm(`Delete this memory?\n${r.m.text.slice(0, 60)}`)) void act(() => api.remove(r.m.id, r.m.workspace)); }}>Delete</button>
                   </div>
                 </td>
               </tr>
@@ -537,11 +538,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
       {flatRows.length > 0 && (
         <div style={s.pageBar}>
-          <button style={s.btn} disabled={memPageSafe === 0} onClick={() => setMemPage(memPageSafe - 1)}>‹ 上一页</button>
-          <span>第 {memPageSafe + 1} / {memPageCount} 页 · 共 {flatRows.length} 条</span>
-          <button style={s.btn} disabled={memPageSafe >= memPageCount - 1} onClick={() => setMemPage(memPageSafe + 1)}>下一页 ›</button>
-          <select style={s.input} value={memPageSafe} onChange={(e) => setMemPage(Number(e.target.value))} title="跳页">
-            {Array.from({ length: memPageCount }, (_, i) => <option key={i} value={i}>第 {i + 1} 页</option>)}
+          <button style={s.btn} disabled={memPageSafe === 0} onClick={() => setMemPage(memPageSafe - 1)}>‹ Previous page</button>
+          <span>Page {memPageSafe + 1} / {memPageCount} · total {flatRows.length}</span>
+          <button style={s.btn} disabled={memPageSafe >= memPageCount - 1} onClick={() => setMemPage(memPageSafe + 1)}>Next page ›</button>
+          <select style={s.input} value={memPageSafe} onChange={(e) => setMemPage(Number(e.target.value))} title="Go to page">
+            {Array.from({ length: memPageCount }, (_, i) => <option key={i} value={i}>{i + 1}</option>)}
           </select>
         </div>
       )}
@@ -551,33 +552,33 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       {view === "esr" && (
         <>
       <div style={s.stats}>
-        <StatCard num={String(wsCounts ? wsCounts.tasks : (overview?.totals.tasks ?? 0))} label={wsCounts ? "任务 (active)" : "任务 (active, 全局)"} />
-        <StatCard num={String(wsCounts ? wsCounts.links : (overview?.totals.links ?? 0))} label={wsCounts ? "关系" : "关系 (全局)"} />
-        <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview?.totals.nodes ?? 0))} label={wsCounts ? "节点" : "节点 (全局)"} />
+        <StatCard num={String(wsCounts ? wsCounts.tasks : (overview?.totals.tasks ?? 0))} label={wsCounts ? "Tasks (active)" : "Tasks (active, global)"} />
+        <StatCard num={String(wsCounts ? wsCounts.links : (overview?.totals.links ?? 0))} label={wsCounts ? "Relations" : "Relations (global)"} />
+        <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview?.totals.nodes ?? 0))} label={wsCounts ? "Nodes" : "Nodes (global)"} />
       </div>
 
       <div style={s.subPanel}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-          agent 行为观测
-          <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}> · 每次 engram_*/esr_* 工具调用实时累计（真实数据，按工作区/天滚动）</span>
+          Agent behaviour observability
+          <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}> · each engram_*/esr_* tool call accumulated live (real data, rolled up per workspace / per day)</span>
         </div>
         {!usageStats ? (
           <div style={s.mono}>…</div>
         ) : (
           <>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <span style={s.tag}>ESR 主动性 {pct(usageStats.ratios.esrRatio)}（{usageStats.ratios.esrCalls}/{usageStats.ratios.calls} 次）</span>
-              <span style={s.tag}>召回命中率 {pct(usageStats.ratios.recallHitRate)}</span>
-              <span style={s.tag}>平均命中 {usageStats.ratios.recallHitsPerQuery ?? "–"}/查询</span>
-              <span style={s.tag}>detail 转化 {pct(usageStats.ratios.detailFollowRate)}</span>
-              <span style={s.tag}>失败 {usageStats.totals.failures}</span>
-              {usageStats.ratios.calls < 10 && <span style={s.tag}>样本不足（{usageStats.ratios.calls} 次），比例仅供参考</span>}
+              <span style={s.tag}>ESR proactivity {pct(usageStats.ratios.esrRatio)} ({usageStats.ratios.esrCalls}/{usageStats.ratios.calls} calls)</span>
+              <span style={s.tag}>recall hit-rate {pct(usageStats.ratios.recallHitRate)}</span>
+              <span style={s.tag}>avg hits {usageStats.ratios.recallHitsPerQuery ?? "–"}/query</span>
+              <span style={s.tag}>detail conversion {pct(usageStats.ratios.detailFollowRate)}</span>
+              <span style={s.tag}>failures {usageStats.totals.failures}</span>
+              {usageStats.ratios.calls < 10 && <span style={s.tag}>thin sample ({usageStats.ratios.calls} calls), ratios are illustrative</span>}
             </div>
             <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-              ESR 主动性过低时，下一个会话的 [ESR] 注入块会附加一行基于真实数据的 escalate 提醒，引导模型当场补建任务/节点/关系——比例回升后提醒自动消失。
+              When ESR proactivity is too low, the next session's [ESR] injected block appends a one-line data-driven escalate reminder (based on real usage), nudging the model to build tasks/nodes/relations on the spot — the reminder disappears once the ratio recovers.
             </div>
             <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)", marginTop: 5, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-              工具调用：
+              Tool calls:
               {Object.entries(usageStats.totals.counts).map(([k, v]) => (
                 <span key={k} style={s.tag}>{k} ×{v}</span>
               ))}
@@ -585,7 +586,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
             {usageStats.byDay.length > 0 && (
               <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {usageStats.byDay.map((d) => (
-                  <span key={d.day}>{d.day} · 调用 {Object.values(d.counts).reduce((a, b) => a + b, 0)} · 失败 {d.failures}</span>
+                  <span key={d.day}>{d.day} · {Object.values(d.counts).reduce((a, b) => a + b, 0)} calls · failures {d.failures}</span>
                 ))}
               </div>
             )}
@@ -593,28 +594,28 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         )}
       </div>
 
-      <div style={s.panelTitle}>ESR 任务（证据闭环）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
+      <div style={s.panelTitle}>ESR tasks (evidence closure){workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}> · all workspaces</span>}</div>
 
-      {/* GUI 新建任务：把 esr_task 触发器直接放到面板里 */}
+      {/* eslint-disable-next-line: place the esr_task trigger directly in the panel */}
       <div style={s.subPanel}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <select style={s.input} value={newTaskWs} onChange={(e) => setNewTaskWs(e.target.value)}>
             {workspaces.length === 0 && <option value="">(no workspaces)</option>}
             {workspaces.map((ws) => <option key={ws} value={ws}>{ws}</option>)}
           </select>
-          <input style={{ ...s.input, width: 170 }} placeholder="任务名…" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNewTask(); }} />
-          <input style={{ ...s.input, width: 240 }} placeholder="要产出 / 满足什么（可选）" value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} />
+          <input style={{ ...s.input, width: 170 }} placeholder="Task name…" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNewTask(); }} />
+          <input style={{ ...s.input, width: 240 }} placeholder="Outcomes / what to satisfy (optional)" value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} />
           <button style={s.btnPrimary} disabled={newTaskBusy || newTaskName.trim() === ""} onClick={() => void createNewTask()}>
-            {newTaskBusy ? "…" : "新建任务"}
+            {newTaskBusy ? "…" : "Create task"}
           </button>
         </div>
       </div>
 
-      {tasks.length === 0 && <div style={s.empty}>暂无任务 — 用上方「新建任务」或 esr_task 工具创建</div>}
+      {tasks.length === 0 && <div style={s.empty}>No tasks yet — create one with the "Create task" button above or the esr_task tool</div>}
       {taskGroups.map(([ws, items]) => (
         <Fragment key={ws}>
-          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 个任务</div>}
-          {items.map((task) => {
+          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} tasks</div>}
+          {items.map((task, i) => {
             const gaps = taskGaps(task);
             const isStable = task.state === "stable";
             return (
@@ -627,28 +628,28 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                   </span>
                   {!isStable && (
                     <button style={s.btn} onClick={() => setCloseFor(closeFor === task.id ? null : task.id)}>
-                      {closeFor === task.id ? "收起" : "填写证据关闭…"}
+                      {closeFor === task.id ? "Collapse" : "Fill evidence to close…"}
                     </button>
                   )}
                 </div>
                 {!isStable && gaps.length > 0 && (
                   <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-                    缺口：{gaps.join(", ")} — 提供 artifact / evaluation / memory_ref 后转为 STABLE
+                    Gaps: {gaps.join(", ")} — provide artifact / evaluation / memory_ref to go STABLE
                   </div>
                 )}
                 {task.description && <div style={{ fontSize: 12, color: "var(--dsh-color-muted-strong, #4b5563)", marginTop: 4 }}>{task.description}</div>}
                 {task.memoryRefs.length > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 4 }}>记忆引用：{task.memoryRefs.map((r) => <span key={r} style={s.tag}>{r.slice(0, 8)}</span>)}</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>Memory refs: {task.memoryRefs.map((r) => <span key={r} style={s.tag}>{r.slice(0, 8)}</span>)}</div>
                 )}
                 {closeFor === task.id && (
                   <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--dsh-color-border, #e5e7eb)", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>提供证据后关闭（三项全齐才转 STABLE）</div>
+                    <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>Close after evidence is provided (all three required to become STABLE)</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <input style={{ ...s.input, width: 150 }} placeholder="artifact 路径/URL" value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
-                      <input style={{ ...s.input, width: 150 }} placeholder="evaluation 验证证据" value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
-                      <input style={{ ...s.input, width: 150 }} placeholder="memory_refs 逗号分隔" value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
-                      <button style={s.btnPrimary} disabled={closeBusy} onClick={() => void submitClose(task)}>{closeBusy ? "…" : "提交关闭"}</button>
-                      <button style={s.btn} onClick={() => setCloseFor(null)}>取消</button>
+                      <input style={{ ...s.input, width: 150 }} placeholder="artifact path/URL" value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
+                      <input style={{ ...s.input, width: 150 }} placeholder="evaluation verification" value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
+                      <input style={{ ...s.input, width: 150 }} placeholder="memory_refs comma-separated" value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
+                      <button style={s.btnPrimary} disabled={closeBusy} onClick={() => void submitClose(task)}>{closeBusy ? "…" : "Submit close"}</button>
+                      <button style={s.btn} onClick={() => setCloseFor(null)}>Cancel</button>
                     </div>
                   </div>
                 )}
@@ -658,11 +659,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         </Fragment>
       ))}
 
-      <div style={s.panelTitle}>节点与关系（esr_node / esr_link）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
-      {nodes.length === 0 && <div style={s.empty}>暂无节点 — 模型会为反复出现的领域对象主动登记（esr_node），此处也可查看关系</div>}
+      <div style={s.panelTitle}>Nodes and relations (esr_node / esr_link){workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}> · all workspaces</span>}</div>
+      {nodes.length === 0 && <div style={s.empty}>No nodes yet — the model proactively registers recurring domain objects (esr_node); relations can be viewed here too</div>}
       {nodeGroups.map(([ws, items]) => (
         <Fragment key={ws}>
-          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 个节点</div>}
+          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} nodes</div>}
           {items.map((n: EntityRecord) => (
             <div key={n.id} style={{ fontSize: 12.5, padding: "2px 0" }}>
               <span className="mono" style={{ ...s.mono, color: "#4338ca" }}>{n.id.slice(0, 24)}</span>{" "}

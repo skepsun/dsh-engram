@@ -1,11 +1,11 @@
 /**
- * dsh-engram: browser-half entry — renders a standalone "Engram 记忆" settings
+ * dsh-engram: browser-half entry — renders a standalone "Engram Memory" settings
  * section (memory viewer / ESR board / GC) and the plugins configuration card
  * through DSH's native slot system.
  *
- * The rich page mounts as a first-class `settings.section` (设置 → Engram 记忆),
+ * The rich page mounts as a first-class `settings.section` (Settings → Engram Memory),
  * sitting right after the Plugins section in the settings sidebar; the config
- * card stays in the Plugins → 插件配置 tab as a collapsible card.
+ * card stays in the Plugins → Plugin configuration tab as a collapsible card.
  *
  * Zero direct imports of other plugins at runtime (bundle-purity gate): slots
  * and settingsScope come through the injected client context; the only value
@@ -40,9 +40,9 @@ interface EngramKey {
 }
 
 export const zh: EngramKey = {
-  nav: "Engram 记忆",
-  refresh: "刷新",
-  error: "读取失败",
+  nav: "Engram Memory",
+  refresh: "Refresh",
+  error: "Load failed",
 };
 
 export const en: EngramKey = {
@@ -64,7 +64,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS) as (key: string) => string;
   const sectionInjected = (): EngramSectionFace => ({ api, t });
 
-  // Rich viewer as a standalone first-class settings section (设置 → Engram 记忆),
+  // Rich viewer as a standalone first-class settings section (Settings → Engram Memory),
   // no longer a tab inside the Plugins section. The slot is list-kind; the
   // settings shell hands the component its inject face plus the locale bound
   // to our NS. Sits right after the Plugins section (order 15) in the ledger.

@@ -1,6 +1,6 @@
 # dsh-engram
 
-> **[English](README.md) · [中文](README.zh.md)**
+> **[English](README.md) · [中文](README.zh.md) · [Русский](README.ru.md)**
 
 Minimalist long-term memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), distilled from the
 [symbolic-index](https://github.com/skepsun/symbolic-index) and [pi-esr](https://github.com/skepsun/pi-esr) ideas —
