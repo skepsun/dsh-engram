@@ -23,6 +23,10 @@
   artifact 按工作区（= 会话 cwd）解析并在磁盘上实存校验，路径不存在则任务保持 ACTIVE、给出原因；
   `force:true`（或关掉该开关）可跳过磁盘校验——三种证据门照样必填。工具与网页表单共享同一个
   证据门（`store.evidenceGate`），口径绝不会漂移。
+  任务不再是孤立节点：`esr_task(entity=…)` 一键挂点——自动建 `ent_<slug>` 节点并挂
+  `task --relates_to--> entity` 边（幂等），挂着领域锚点的任务立刻带关系；
+  `esr_dep` 双写——依赖边同时进 `tasks[].deps`（blocker 逻辑）与 links 表，图谱里每条
+  任务依赖都是一等可见的边。
 - **决策点触发（P0-A/B + P2 + P3）** — 在漏斗最窄处（todo 多、esr 少）与任务泄漏处（建了不关）
   给模型侧触发：监听 `tools/result` 里的原生 `todo_write`，当会话 pending todo ≥ 2 且多于 active ESR
   任务时，`[ESR]` 块追加带具体候选的 `promote:` 提示（`esr_task(name="…")`，每会话仅一次）；

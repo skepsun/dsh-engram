@@ -53,6 +53,19 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 - 配置：`minTodosForPromote` / `todoPromoteRatio` / `minErrorHits` / `staleTaskDays`（profile patch 可调）。
 - ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（`/triggerstats` 为新路由，重启后注册）。
 
+### 0b. **关系卫生：建任务自带关系 + 依赖边一等公民入图（A + B）** — 宿主侧
+修复"只有节点没有关系"：`esr_task` 曾只建任务不建任何关系，且 `esr_dep` 的边只写进
+`tasks[].deps`（仅喂 blocker 计数），图谱只渲染 `esr_link` 表 → 依赖边在图里不可见。
+- **`esr_task(entity=…)` 一键挂点（B）**：传 `entity` 时自动建 `ent_<slug>` 节点（kind=concept，
+  与 `esr_node` 同 id 派生）并挂 `task --relates_to--> entity` 边（幂等，重复调用不重复建边/节点）；
+  返回显式报告 `wired: … (node created)`。把"先 esr_node 再 esr_link"两步压成一步，直补
+  node/link 全零漏斗；`modeling:` 提示随之教 "esr_task(entity=…) 一键挂点"。
+- **`esr_dep` 双写 links 表（A）**：任务依赖除写 `tasks[].deps`（blocker 逻辑不变）外，同步
+  `addLinkOnce` 一条 `task--kind-->task` 入 links 表——依赖边成为图谱 / /links / 实体邻域里的一等公民，
+  客户端零改动即可见；GC 悬空链接清理自动接管。
+- 新增 `store.addLinkOnce`（按 source/relation/target 幂等）与 `tools.wireTaskEntity`（可单测）。
+- ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（无新路由）。
+
 ### 1. 关系图谱 — `4646fb4`
 手写 SVG 力导向图（无第三方图库，bundle 纯净）：实体为圆形节点、任务为勾选徽标、
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、

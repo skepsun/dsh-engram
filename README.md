@@ -33,6 +33,12 @@ with one goal: **save tokens**.
   `force:true` (or disabling the toggle) skips the disk check, the three gates
   are still mandatory. The tool and the web forms share one gate
   (`store.evidenceGate`), so the two surfaces can never drift.
+  Tasks are never isolated graph nodes: `esr_task(entity=…)` one-call wiring
+  auto-creates the `ent_<slug>` node and hangs the task on it
+  (`task --relates_to--> entity`, idempotent), so a task created with a domain
+  anchor immediately shows a relation; and `esr_dep` writes the dependency edge
+  into both the task's `deps` (blocker logic) and the shared links table, making
+  every task dependency a first-class visible edge in the graph.
 - **Decision-point triggers (P0-A/B + P2 + P3)** — firing where the todo→esr
   routing decision actually happens and where tasks leak: a `tools/result`
   watcher snapshots the native `todo_write` plan and, when the session has ≥ 2
