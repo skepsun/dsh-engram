@@ -1,7 +1,7 @@
 {
   "name": "dsh-engram",
   "description": "Minimalist long-term memory for DeepSeek Harness, distilling symbolic-index + pi-esr ideas: zero-LLM auto-capture, a symbolic [ENGRAM] index with progressive disclosure, and an ESR-lite evidence-closure protocol (esr_task / esr_node / esr_close / esr_link). Real agent-behaviour telemetry (usage rollup + /stats) and a deterministic offline recall benchmark (npm run eval). Hot path is model-free; storage on ctx.storageDomain; web memory viewer, observability panel and config card through DSH's native settings slots.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "MIT",
   "repository": {
     "type": "git",
