@@ -443,3 +443,50 @@ test("store: putModel normalizes a non-string ws to the global key instead of co
   assert.equal(listed, domain.getModel(""), "undefined ws reads the global row too");
   await domain.close();
 });
+
+test("api: /triggerstats streams recorder conversion stats per workspace", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const { makeTriggerRecorder } = await import("../lib/trigger.js");
+  const recorder = makeTriggerRecorder();
+  recorder.emitHint("promote", "/ws/a", "s1");
+  recorder.emitHint("stale", "/ws/a", "s1");
+  recorder.handle(
+    { name: "esr_task", agent: { session: { id: "s2", header: { cwd: "/ws/a" } } }, arguments: {} },
+    {},
+  );
+  const service = {
+    config: CONFIG,
+    captureStats: { total: 0, git: 0, file: 0, error: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+    recorder,
+  };
+  const routes = makeEngramRoutes(service);
+
+  const allRes = res();
+  await route(routes, `${API_PREFIX}/triggerstats`).handler(req({ url: `${API_PREFIX}/triggerstats` }), allRes);
+  assert.equal(allRes._out.status, 200);
+  const all = json(allRes).stats;
+  assert.equal(all.byKind.promote.shown, 1);
+  assert.equal(all.byKind.promote.converted, 1, "esr_task in window converts promote");
+  assert.equal(all.byKind.stale.shown, 1);
+  assert.equal(all.byKind.stale.converted, 0);
+
+  const wsRes = res();
+  await route(routes, `${API_PREFIX}/triggerstats`).handler(req({ url: `${API_PREFIX}/triggerstats?workspace=%2Fws%2Fb` }), wsRes);
+  const wsB = json(wsRes).stats;
+  assert.equal(wsB.total.shown, 0, "other workspace sees nothing");
+
+  await domain.close();
+});
+
+test("api: /triggerstats without a recorder returns null stats (host not upgraded)", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = { config: CONFIG, captureStats: { total: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeEngramRoutes(service);
+  const r = res();
+  await route(routes, `${API_PREFIX}/triggerstats`).handler(req({ url: `${API_PREFIX}/triggerstats` }), r);
+  assert.equal(r._out.status, 200);
+  assert.equal(json(r).stats, null);
+  await domain.close();
+});

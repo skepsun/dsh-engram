@@ -24,6 +24,35 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 + 工作区持久 ESR 任务（证据缺口徽标 + 内联「补齐证据 → 关闭」）+ 关系图芯片。
 有内容才显示，15s 轮询保持实时；loopback 围栏 API 不可达时内建计划仍照常渲染。
 
+### 0a. **决策点触发：todo→ESR 提示 + 根因/闭环/stale 候选 + 实时平衡 nudge（P0-A/B + P2 + P3）** — 宿主侧
+针对漏斗最窄处（todo 多、esr 少）与任务泄漏（建了不关）的模型侧触发，纯规则 / 零 LLM / 进程内：
+- **todo_write 挂钩（P0-A）**：`tools/result` 监听原生 `todo_write`，把该会话的未完成 todo 列表快照进内存；
+  `[ESR]` 块（每次装配现渲染）在「pending todo ≥ `minTodosForPromote`(默认2)」且
+  「pending > active ESR 任务 × `todoPromoteRatio`(默认1)」时，追加一行**带具体候选**的提示
+  `promote: N pending todo(s) vs M ESR task(s) — esr_task(name="首项 / 次项")`，
+  同一会话**只提示一次**（防刷屏）。与 GUI「沉淀到 ESR」按钮同一漏斗补位，模型在决策点即可见。
+- **根因任务候选（P0-B）**：error 记忆经失败复活爬到 `hits ≥ minErrorHits`(默认2) 即判为"反复发作的
+  故障"，`[ESR]` 块给一行 `root-cause: <error> ×N — esr_task it so the pattern dies`，
+  每个 error id 每会话至多一次。把"复发"这类强持久化信号直接变成任务候选。
+- **可执行 next 清单（P2）**：活动任务按 `READY-to-close → 已认领 → active → draft` 排序，
+  存在证据齐的任务时块首给 `next: esr_close <id>`（模型无需逐行重扫即可行动）；排序纯派生。
+- **闭环触发（P3）**：
+  - `close:` — 本会话 todo 从有 pending → 全部 completed（自然"收工"事件），且存在证据齐的
+    active 任务时，给 `close: task <id> … esr_close now`，每会话一次。
+  - `stale:` — active 任务超过 `staleTaskDays`(默认14) 无更新时给 `stale: <id> — no update Nd,
+    esr_close with evidence or drop the intent`，每任务每会话至多一次。
+- **实时 mem-vs-esr 平衡（P1）**：修复 P0 时代遗留的死数据源——`escalationHint` 原读 per-day `usage`
+  表，但评估 P3 移除了逐调用写路径，表已无人写，nudge 静默失效。现由同一 `tools/result` 订阅维护
+  进程内 `(workspace, day)` 计数（`MEM_TOOLS`/`ESR_TOOLS`），`[ESR]` 实时用它在
+  mem<3 或 ratio≥0.34 时消失、否则升压提示。零 I/O、零每轮查询。
+- **转化度量（P4）**：每条 nudge 行带稳定来源标记 `#suggest-promote/rootcause/close/stale/escalate`
+  （日志可回溯、模型可引用）；recorder 在**真实注入**（live session，GUI 预览不计）时记一次
+  曝光（同会话同 kind 不重复计数），某一 esr_* 工具在 **10 分钟窗口**内被调用则把最近一条
+  待转化 hint 归因成功——`GET /api/dsh-engram/triggerstats?workspace=` 返回
+  `{total/byKind: {shown, converted, rate}, windowMs}`，可验证哪些触发真的推动了行为。
+- 配置：`minTodosForPromote` / `todoPromoteRatio` / `minErrorHits` / `staleTaskDays`（profile patch 可调）。
+- ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（`/triggerstats` 为新路由，重启后注册）。
+
 ### 1. 关系图谱 — `4646fb4`
 手写 SVG 力导向图（无第三方图库，bundle 纯净）：实体为圆形节点、任务为勾选徽标、
 关系按类型着色带方向箭头；拖拽节点 / 平移 / 滚轮缩放 / 重组；悬停高亮邻域、

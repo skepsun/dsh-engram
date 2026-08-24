@@ -23,6 +23,16 @@
   artifact 按工作区（= 会话 cwd）解析并在磁盘上实存校验，路径不存在则任务保持 ACTIVE、给出原因；
   `force:true`（或关掉该开关）可跳过磁盘校验——三种证据门照样必填。工具与网页表单共享同一个
   证据门（`store.evidenceGate`），口径绝不会漂移。
+- **决策点触发（P0-A/B + P2 + P3）** — 在漏斗最窄处（todo 多、esr 少）与任务泄漏处（建了不关）
+  给模型侧触发：监听 `tools/result` 里的原生 `todo_write`，当会话 pending todo ≥ 2 且多于 active ESR
+  任务时，`[ESR]` 块追加带具体候选的 `promote:` 提示（`esr_task(name="…")`，每会话仅一次）；
+  复发失败（error hits≥2）给 `root-cause:` 任务候选；收工（todo 全部完成）给 `close:` 提示关证据齐的
+  任务；长期无更新的 active 任务给 `stale:` 提示；活动任务按 READY 优先排序并给 `next: esr_close`。
+  并用同一订阅维护进程内 mem-vs-esr 实时计数修复 `escalationHint` 的死数据源（评估 P3 移除了
+  per-call usage 写路径后原 nudge 已静默失效）。纯规则、零 LLM、零每轮 I/O；每条 nudge 带稳定 `#suggest-*` 来源标记，
+  且 recorder 计量「提示曝光 → esr_* 调用」转化（每会话每 kind 记一次曝光，
+  esr 工具 10 分钟窗口内调用即归因），`GET /api/dsh-engram/triggerstats`
+  返回各 kind 的 shown/converted/rate。
 - **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
   stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
   永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。

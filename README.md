@@ -33,6 +33,24 @@ with one goal: **save tokens**.
   `force:true` (or disabling the toggle) skips the disk check, the three gates
   are still mandatory. The tool and the web forms share one gate
   (`store.evidenceGate`), so the two surfaces can never drift.
+- **Decision-point triggers (P0-A/B + P2 + P3)** — firing where the todo→esr
+  routing decision actually happens and where tasks leak: a `tools/result`
+  watcher snapshots the native `todo_write` plan and, when the session has ≥ 2
+  pending todos that outnumber its active ESR tasks, the [ESR] block appends a
+  concrete `promote:` hint (`esr_task(name="…")`, once per session); recurring
+  failures (error memories with hits ≥ 2) earn a `root-cause:` task candidate;
+  a completed plan (pending → 0) earns a `close:` nudge for evidence-complete
+  tasks; long-unupdated active tasks get a `stale:` nudge; and the task list is
+  ordered READY-first with a `next: esr_close <id>` line, so the model can act
+  top-down. The same subscription feeds an in-memory mem-vs-esr counter that
+  restores `escalationHint` (the per-day `usage` table stopped being written
+  after assessment P3, silently orphaning the old nudge). Pure rules, zero
+  LLM, zero per-render I/O. Every hint line carries a stable `#suggest-*`
+  source tag (traceable in logs) and the same recorder measures hint → esr_*
+  conversion (shown once per session per hint, attributed when an esr tool
+  runs within a 10-minute window) — `GET /api/dsh-engram/triggerstats`
+  reports per-kind shown/converted/rate so you can see which nudge actually
+  moves behaviour.
 - **Memory GC (pi-esr constraints)** — a scheduled, mechanical, archive-only
   sweep: TTL-expired memories are archived, over-cap workspaces evict the
   lowest-value entries, stable tasks past their retention window leave the
