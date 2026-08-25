@@ -216,6 +216,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const [taskPage, setTaskPage] = useState(0);
   /** todo→ESR promotions done this session (dedupe by plan content). */
   const [promoted, setPromoted] = useState<Set<string>>(new Set());
+  const [promoteNote, setPromoteNote] = useState<string | null>(null);
   const [promoteBusy, setPromoteBusy] = useState(false);
   /** Real usage rollup (host /toolstats) for the mini behaviour bar. */
   const [toolStats, setToolStats] = useState<ToolStats | null>(null);
@@ -375,18 +376,27 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   const promoteAll = async () => {
     if (!effWs || promoteBusy || toPromote.length === 0) return;
     setPromoteBusy(true);
+    setPromoteNote(null);
     const done: string[] = [];
+    const failed: string[] = [];
     for (const it of toPromote) {
       try {
         await api.createTask(effWs, it.content, "源自会话计划（todo_write 一键沉淀）");
         done.push(it.content);
       } catch {
-        /* loopback guard or transient — keep it for a retry */
+        failed.push(it.content);
       }
     }
     if (done.length > 0) {
       setPromoted((prev) => new Set([...prev, ...done]));
       void load();
+    }
+    if (failed.length > 0) {
+      setPromoteNote(
+        failed.length === done.length
+          ? `沉淀失败：${failed.length} 项未能创建（工作区已满或服务不可达），请刷新后重试`
+          : `部分失败：${failed.length}/${toPromote.length} 项未能创建`,
+      );
     }
     setPromoteBusy(false);
   };
@@ -622,6 +632,9 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                   </button>
                   <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>转草稿 · 跨会话闭环</span>
                 </div>
+              )}
+              {promoteNote && (
+                <div style={{ fontSize: 11, color: "#dc2626", lineHeight: 1.4 }} role="alert">⚠ {promoteNote}</div>
               )}
               {activeTasks.length === 0 && (
                 <div style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted, #6b7280))", paddingTop: 2 }}>

@@ -83,9 +83,14 @@ function res() {
 
 const json = (r) => JSON.parse(r._out.body);
 
-/** One-shot: route = first route whose path + method match (method default GET). */
+/** One-shot: route = first route whose path + method match (method default GET).
+    A union route advertises several methods (method is an array) and picks the
+    right inner handler itself — that same single route resolves every method. */
 function route(routes, path, method = "GET") {
-  return routes.find((r) => r.path === path && (r.method === void 0 || r.method === method));
+  return routes.find(
+    (r) => r.path === path
+      && (r.method === void 0 || r.method === method || (Array.isArray(r.method) && r.method.includes(method))),
+  );
 }
 
 test("api: overview reports per-workspace counts, indexes and captures", async () => {
@@ -184,6 +189,45 @@ test("api: tasks and links are workspace-scoped, archive + delete mutate", async
   );
   assert.equal(del._out.status, 200);
   assert.equal(domain.listMemories("/w").length, 0);
+  await domain.close();
+});
+
+test("api: /tasks is ONE exact route serving GET(list)+POST(create) — host exact-table is path-keyed and drops a second route silently", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeEngramRoutes(service);
+
+  // Exactly one exact route owns the path; it must admit both methods.
+  const owners = routes.filter((r) => r.path === `${API_PREFIX}/tasks`);
+  assert.equal(owners.length, 1);
+  assert.deepEqual(owners[0].method, ["GET", "POST"]);
+
+  // POST creates a task...
+  const created = res();
+  await owners[0].handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks`, body: { workspace: "/w", name: "promote me", description: "沉淀到ESR" } }),
+    created,
+  );
+  assert.equal(created._out.status, 200);
+  const task = json(created).task;
+  assert.equal(task.workspace, "/w");
+  assert.equal(task.name, "promote me");
+  assert.equal(task.state, "active");
+
+  // ...and GET returns it for the same workspace (the round-trip the GUI needs).
+  const listed = res();
+  await owners[0].handler(
+    req({ url: `${API_PREFIX}/tasks?workspace=${encodeURIComponent("/w")}&includeStable=1` }),
+    listed,
+  );
+  assert.equal(listed._out.status, 200);
+  assert.equal(json(listed).items.length, 1);
+  assert.equal(json(listed).items[0].name, "promote me");
+
+  // Unsupported methods on the shared path stay a clean 405.
+  const put = res();
+  await owners[0].handler(req({ method: "PUT", url: `${API_PREFIX}/tasks` }), put);
+  assert.equal(put._out.status, 405);
   await domain.close();
 });
 
