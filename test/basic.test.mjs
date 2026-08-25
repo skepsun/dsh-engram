@@ -276,35 +276,41 @@ test("index block surfaces node count + node list; usurp proactive guidance", as
   await domain.close();
 });
 
-test("escalationHint: data-driven under-proactivity nudge appears, then disappears when healthy", async () => {
-  const { dayKey } = await import("../lib/usage.js");
+test("escalationHint: live-balance nudge appears on the pull path, then disappears when healthy", async () => {
+  const { makeTriggerRecorder } = await import("../lib/trigger.js");
+  const { esrHintLines } = await import("../lib/index-block.js");
   const domain = await openEngramDomain(fakeFacility());
-  const d = dayKey();
+  const rec = makeTriggerRecorder();
+  const feed = (name) => rec.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w" } } }, arguments: {} }, {});
+  const pull = () => esrHintLines(domain, "/w", CONFIG, { recorder: rec, sessionId: "s1" }).filter((h) => h.kind === "escalate").map((h) => h.line);
   // under-proactive: 4 mem ops vs 1 esr call (ratio 20% < 34%)
-  await domain.bumpUsage("/w", d, {
-    counts: { engram_store: 3, engram_recall: 1, esr_node: 1 },
-    failures: 0,
-    recall: { queries: 1, withHits: 1, hitsTotal: 3 },
-  });
-  const esr = renderEsr(domain, "/w", CONFIG);
-  assert.ok(esr.includes("escalate:"), "under-proactive workspace gets the nudge");
-  assert.match(esr, /4 mem ops vs 1 esr calls/);
+  for (let i = 0; i < 4; i++) feed("engram_store");
+  feed("esr_node");
+  const escalated = pull();
+  assert.ok(escalated.some((l) => l.includes("escalate:")), "under-proactive workspace gets the nudge on pull");
+  assert.ok(escalated.some((l) => /4 mem ops vs 1 esr calls/.test(l)));
+  // the frozen block never carries the nudge
+  assert.ok(!renderEsr(domain, "/w", CONFIG).includes("escalate:"), "frozen [ESR] block is hint-free");
   // too little signal (fewer than 3 mem ops) → no nudge
-  const domain2 = await openEngramDomain(fakeFacility());
-  await domain2.bumpUsage("/w2", d, { counts: { engram_store: 1 }, failures: 0, recall: {} });
-  assert.ok(!renderEsr(domain2, "/w2", CONFIG).includes("escalate:"), "below sample floor: no nudge");
+  const rec2 = makeTriggerRecorder();
+  const feed2 = (name) => rec2.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w2" } } }, arguments: {} }, {});
+  feed2("engram_store");
+  assert.deepEqual(esrHintLines(domain, "/w2", CONFIG, { recorder: rec2, sessionId: "s1" }).filter((h) => h.kind === "escalate"), [], "below sample floor: no nudge");
   // healthy balance (esr ≥ ~half of mem ops) → nudge disappears (closed loop)
-  await domain.bumpUsage("/w", d, { counts: { esr_task: 2, esr_link: 1 }, failures: 0, recall: {} });
-  const esr2 = renderEsr(domain, "/w", CONFIG);
-  assert.ok(!esr2.includes("escalate:"), "healthy after escalation: nudge gone");
-  // with an active task, the hint still appends when under-proactive
-  const domain3 = await openEngramDomain(fakeFacility());
-  await domain3.bumpUsage("/w3", d, { counts: { engram_store: 4, engram_recall: 1, esr_task: 1 }, failures: 0, recall: {} });
-  await domain3.putTask({ id: "tsk_9", workspace: "/w3", name: "t9", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
-  const esr3 = renderEsr(domain3, "/w3", CONFIG);
+  feed("esr_task");
+  feed("esr_task");
+  feed("esr_link");
+  assert.deepEqual(pull(), [], "healthy after escalation: nudge gone");
+  // with an active task, the snapshot lists it; the nudge still appears on pull when under-proactive
+  await domain.putTask({ id: "tsk_9", workspace: "/w", name: "t9", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
+  const rec3 = makeTriggerRecorder();
+  const feed3 = (name) => rec3.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w" } } }, arguments: {} }, {});
+  for (let i = 0; i < 4; i++) feed3("engram_store");
+  feed3("esr_node");
+  const esr3 = renderEsr(domain, "/w", CONFIG);
   assert.ok(esr3.includes("tsk_9"));
-  assert.ok(esr3.includes("escalate:"), "nudge coexists with open tasks");
-  await Promise.all([domain.close(), domain2.close(), domain3.close()]);
+  assert.ok(esrHintLines(domain, "/w", CONFIG, { recorder: rec3, sessionId: "s1" }).some((h) => h.kind === "escalate"), "nudge coexists with open tasks on pull");
+  await domain.close();
 });
 
 test("bm25Rank: recency factor is gentle — relevance still wins, ties go fresh", async () => {

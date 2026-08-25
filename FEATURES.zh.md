@@ -24,34 +24,34 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
 + 工作区持久 ESR 任务（证据缺口徽标 + 内联「补齐证据 → 关闭」）+ 关系图芯片。
 有内容才显示，15s 轮询保持实时；loopback 围栏 API 不可达时内建计划仍照常渲染。
 
-### 0a. **决策点触发：todo→ESR 提示 + 根因/闭环/stale 候选 + 实时平衡 nudge（P0-A/B + P2 + P3）** — 宿主侧
-针对漏斗最窄处（todo 多、esr 少）与任务泄漏（建了不关）的模型侧触发，纯规则 / 零 LLM / 进程内：
-- **todo_write 挂钩（P0-A）**：`tools/result` 监听原生 `todo_write`，把该会话的未完成 todo 列表快照进内存；
-  `[ESR]` 块（每次装配现渲染）在「pending todo ≥ `minTodosForPromote`(默认2)」且
-  「pending > active ESR 任务 × `todoPromoteRatio`(默认1)」时，追加一行**带具体候选**的提示
-  `promote: N pending todo(s) vs M ESR task(s) — esr_task(name="首项 / 次项")`，
-  同一会话**只提示一次**（防刷屏）。与 GUI「沉淀到 ESR」按钮同一漏斗补位，模型在决策点即可见。
-- **根因任务候选（P0-B）**：error 记忆经失败复活爬到 `hits ≥ minErrorHits`(默认2) 即判为"反复发作的
-  故障"，`[ESR]` 块给一行 `root-cause: <error> ×N — esr_task it so the pattern dies`，
-  每个 error id 每会话至多一次。把"复发"这类强持久化信号直接变成任务候选。
-- **可执行 next 清单（P2）**：活动任务按 `READY-to-close → 已认领 → active → draft` 排序，
-  存在证据齐的任务时块首给 `next: esr_close <id>`（模型无需逐行重扫即可行动）；排序纯派生。
-- **闭环触发（P3）**：
-  - `close:` — 本会话 todo 从有 pending → 全部 completed（自然"收工"事件），且存在证据齐的
-    active 任务时，给 `close: task <id> … esr_close now`，每会话一次。
-  - `stale:` — active 任务超过 `staleTaskDays`(默认14) 无更新时给 `stale: <id> — no update Nd,
-    esr_close with evidence or drop the intent`，每任务每会话至多一次。
-- **实时 mem-vs-esr 平衡（P1）**：修复 P0 时代遗留的死数据源——`escalationHint` 原读 per-day `usage`
-  表，但评估 P3 移除了逐调用写路径，表已无人写，nudge 静默失效。现由同一 `tools/result` 订阅维护
-  进程内 `(workspace, day)` 计数（`MEM_TOOLS`/`ESR_TOOLS`），`[ESR]` 实时用它在
-  mem<3 或 ratio≥0.34 时消失、否则升压提示。零 I/O、零每轮查询。
-- **转化度量（P4）**：每条 nudge 行带稳定来源标记 `#suggest-promote/rootcause/close/stale/escalate`
-  （日志可回溯、模型可引用）；recorder 在**真实注入**（live session，GUI 预览不计）时记一次
-  曝光（同会话同 kind 不重复计数），某一 esr_* 工具在 **10 分钟窗口**内被调用则把最近一条
-  待转化 hint 归因成功——`GET /api/dsh-engram/triggerstats?workspace=` 返回
-  `{total/byKind: {shown, converted, rate}, windowMs}`，可验证哪些触发真的推动了行为。
-- 配置：`minTodosForPromote` / `todoPromoteRatio` / `minErrorHits` / `staleTaskDays`（profile patch 可调）。
-- ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（`/triggerstats` 为新路由，重启后注册）。
+### 0a. **ESR 触发机制（pi-esr 对齐，混合：静态协议 + 冻结快照 + 单调渐进 actionables + 拉取）** — 宿主侧
+ 前缀缓存稳定是核心（pi-esr 三不变式：静态提示词 / 一次性注入 / 增量拉取），纯规则 / 零 LLM：
+- **静态方法论（不变式①）**：新增 `engram:esr-method` 段——ESR 操作协议（何时 esr_task /
+  esr_claim / esr_close、state 是唯一真相、拿不准就 call esr_status），每轮逐字节相同；教模型
+  "何时用 ESR"不再依赖运行期提示行的出现/消失。
+- **会话快照（不变式②）**：`[ESR]` 块改为**每会话冻结**（与 `[ENGRAM]` 同 WeakMap 缓存、一次渲染），
+  确定性排序（README 末尾行 tiebreak 从 `updatedAt` 改为任务 id——时间戳彻底排除出上下文），
+  明示 `WILL NOT auto-refresh; call esr_status for live state`。
+- **拉取触发（不变式③）**：新增 `esr_status(workspace?, since_revision?)` 工具——返回确定性快照 +
+  派生 actionables；传上次 `revision`（任务表面指纹 `esrFingerprint`：id/state/证据/认领人，
+  **不含时间戳**）状态未变时给 ~10 token 的 `unchanged` 短响应。
+- **actionables 混合落地（评审后修订）**：提示行**不只出现在拉取**——`[ESR]` 块在冻结快照之上
+  **单调追加**本会话 actionables：每条提示在成熟的那一刻被**一次写进块并冻结**（永不回撤），
+  前缀只在「真正出现新决策点信息」时变化、绝不逐轮漂移；`esr_status` 拉取保持可用（覆盖快照冻结
+  后的实时状态 + 块里没有的后续派生）。
+  - `promote:`（P0-A）— recorder 快照的 todo 在「pending ≥ `minTodosForPromote`(默认2)」且
+    「pending > active × `todoPromoteRatio`(默认1)」时给具体候选，每会话一次。
+  - `root-cause:`（P0-B）— error 记忆 `hits ≥ minErrorHits`(默认2) 判为反复发作，每 error id 每会话一次。
+  - `close:` / `stale:`（P3）— 收工事件（pending→0）提示关证据齐任务；活动任务超 `staleTaskDays`
+    (默认14) 无更新提示清理，每任务每会话一次。
+  - `escalate:`（P1）— 同一 `tools/result` 订阅维护进程内 `(workspace,day)` mem-vs-esr 计数，
+    mem<3 或 ratio≥0.34 时消失、否则升压提示（修复死数据源，与评估 P3 结论一致）。
+- **转化度量（P4）**：每条 nudge 行带稳定 `#suggest-*` 标记；`esr_status` 真实返回（GUI 预览不计）
+  时记一次曝光（同会话同 kind 不重复），esr_* 工具 **10 分钟窗口**内调用即归因最近一条——
+  `GET /api/dsh-engram/triggerstats?workspace=` 返回 `{total/byKind:{shown, converted, rate}, windowMs}`。
+- 配置：`minTodosForPromote` / `todoPromoteRatio` / `minErrorHits` / `staleTaskDays`（profile patch 可调，
+  仅影响 `esr_status` 派生）；`[ESR]` 前缀与静态方法论不受运行期状态影响。
+- ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（`/triggerstats` 与 `esr_status` 工具注册）。
 
 ### 0b. **关系卫生：建任务自带关系 + 依赖边一等公民入图（A + B）** — 宿主侧
 修复"只有节点没有关系"：`esr_task` 曾只建任务不建任何关系，且 `esr_dep` 的边只写进
@@ -237,6 +237,13 @@ esr_task 勾选徽标，拖拽/缩放/点选查关系明细），并跟随工作
 
 ## 近期的三处核心增强（复用 DSH 本身）
 
+- **Context GC（自动 GC = 替代 DSH 自动 compact）**：接管宿主 `compaction` 服务
+  （`ContextGcEngine extends BasicCompactionEngine`，只重写 `summarize()`），把 DSH 默认的有损
+  LLM 全量摘要换成**机械驱逐 + 重取指针**——扫描被驱逐消息里的 engram/ESR 锚
+  （`#记忆id` / `tsk_*` / `ent_*` / `file_path`），输出 `engram_detail(id)` / `engram_recall(query)`
+  / `[ESR]` 显式重取指针；无锚轮次才走 scoped LLM 叙事（`gcNarrative` 默认开，可关成纯机械）。
+  六条 GC 约束齐（active 工作集复述、指针显式、无锚不驱逐）；任何错误回退默认压缩、永不破坏 compact；
+  `gcReplacesCompaction:false` 不加载、卸载/reload 自动还回默认引擎。与记忆面板 GC 正交。
 - **证据硬核化（verifyArtifact）**：`esr_close` 的非 URL artifact 会按工作区（= DSH 提供的会话
   cwd）解析并在磁盘上实存校验；不存在则任务保持 ACTIVE 并给出原因（`force:true` 跳过磁盘校验，
   三种证据门仍必填）。工具与网页表单共享 `store.evidenceGate` 单一证据门，口径不漂移。设置里

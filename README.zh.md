@@ -27,19 +27,24 @@
   `task --relates_to--> entity` 边（幂等），挂着领域锚点的任务立刻带关系；
   `esr_dep` 双写——依赖边同时进 `tasks[].deps`（blocker 逻辑）与 links 表，图谱里每条
   任务依赖都是一等可见的边。
-- **决策点触发（P0-A/B + P2 + P3）** — 在漏斗最窄处（todo 多、esr 少）与任务泄漏处（建了不关）
-  给模型侧触发：监听 `tools/result` 里的原生 `todo_write`，当会话 pending todo ≥ 2 且多于 active ESR
-  任务时，`[ESR]` 块追加带具体候选的 `promote:` 提示（`esr_task(name="…")`，每会话仅一次）；
-  复发失败（error hits≥2）给 `root-cause:` 任务候选；收工（todo 全部完成）给 `close:` 提示关证据齐的
-  任务；长期无更新的 active 任务给 `stale:` 提示；活动任务按 READY 优先排序并给 `next: esr_close`。
-  并用同一订阅维护进程内 mem-vs-esr 实时计数修复 `escalationHint` 的死数据源（评估 P3 移除了
-  per-call usage 写路径后原 nudge 已静默失效）。纯规则、零 LLM、零每轮 I/O；每条 nudge 带稳定 `#suggest-*` 来源标记，
-  且 recorder 计量「提示曝光 → esr_* 调用」转化（每会话每 kind 记一次曝光，
-  esr 工具 10 分钟窗口内调用即归因），`GET /api/dsh-engram/triggerstats`
-  返回各 kind 的 shown/converted/rate。
+- **ESR 触发机制（pi-esr 对齐，混合：静态协议 + 冻结快照 + 单调渐进 actionables + 拉取）** —
+  前缀缓存稳定是核心。模型「何时用 ESR」靠**静态方法论**（`engram:esr-method`，每轮逐字节相同）；
+  `[ESR]` 块 = 确定性**冻结快照**（会话开始定下、确定性排序、时间戳排除、明示 WILL NOT
+  auto-refresh）+ 本会话**单调渐进的 actionables**：`promote:/root-cause:/close:/stale:/escalate:`
+  在它们成熟的那一刻被**一次追加进块并冻结**（永不回撤）——前缀只在「真正出现新决策点信息」时变化、
+  绝不逐轮漂移，同时保留决策点提醒（漏斗最窄处 / 复发失败 / 收工 / stale / 平衡）。实时状态仍可
+  **拉取**：`esr_status`（全量视图 + `since_revision` 增量短响应 + 派生 actionables）。
+  recorder 由 `tools/result` 订阅喂入（actionables 的数据源）；P4 转化度量照常（`#suggest-*` 标记 +
+  10 分钟归因 + `GET /api/dsh-engram/triggerstats`）。纯规则、零 LLM。
 - **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
   stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
   永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。
+- **Context GC（自动 GC = 替代 DSH 自动 compact）** — 不是记忆面板 GC：接管 DSH 自带的上下文压缩
+  （`compaction` 服务），把「有损 LLM 全量摘要」换成**机械驱逐 + 重取指针**——扫描被驱逐轮次里的
+  engram/ESR 锚（`#记忆id`、`tsk_*`、`ent_*`、`file_path`），只留一行「细节在 `engram_detail` /
+  `engram_recall` / `[ESR]` 里」；只有无锚轮次才走 scoped LLM 叙事兜底（`gcNarrative`，默认开、可关成纯机械）。
+  六条 GC 约束（working-set-protected / pointer-salience / no-provenance-no-evict…）全部落地；任何错误回退
+  默认压缩，永不破坏 compact。
 - **Web 查看器** — 一个带统计的记忆浏览器和配置卡片，完全构建在 DSH 原生设置槽位上（不碰任何第三方 UI 包）。
 
 ```
@@ -176,7 +181,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 29 项单元测试（含 usage 滚动 / /stats 路由）
+npm test    # 152 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -199,9 +204,15 @@ npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/
 | `esr_task` | 创建任务实体（draft → active） | 写 |
 | `esr_close` | 按证据协议关闭任务（artifact + evaluation + memory_ref） | 写 |
 | `esr_link` | 在两个实体之间添加类型化关系（迷你图） | 写 |
+| `esr_ready` | 列出可认领任务（无 blocker、无人认领） | 读 |
+| `esr_status` | 拉取实时 ESR 状态 + 派生提示（`since_revision` 增量短响应） | 读 |
 | `esr_gc` | 运行本工作区的记忆 GC（`dry_run:true` 预览不落库） | 写 |
 
-## 记忆 GC
+`[ESR]` 块是每会话冻结快照，绝不中途刷新——要最新状态调 `esr_status`。
+
+## GC：两块——记忆面板回收 + Context GC（替代自动 compact）
+
+### 记忆面板回收（存储维护）
 
 定时回收（`gcIntervalHours`，默认 24h）+ `esr_gc` 手动触发 + GUI 按钮，按 pi-esr 方式把存储保持在
 有界内——**机械、工作集保护、只归档**：
@@ -215,6 +226,51 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 （`hits >= promoteHits`）。用 `esr_gc` + `dry_run: true` 先预览。**不硬删**——报告的末尾为所有
 归档项附上重取指针，归档可恢复、不是丢失。
 
+### Context GC（替换 DSH 自动 compact）
+
+DSH 默认的上下文压缩是**有损 LLM 全量摘要**（`compaction-basic`）：被驱逐的历史被压缩成散文，
+不可查询、摘要本身还烧 token。dsh-engram 的自动 GC 替代它：`ContextGcEngine extends
+BasicCompactionEngine` 只重写唯一的 `summarize()` 钩子，把摘要正文换成：
+
+1. **扫描**被驱逐消息的 provenance 锚——`engram_store`/`engram_recall`/`engram_detail` 回显的
+   `#记忆id`、`esr_*` 涉及的 `tsk_*`/`ent_*`、`file_path` 锚（`esr_gc` 等管理工具**不算**锚）；
+2. **指针摘要**：每条被驱逐类别都带显式重取调用（`engram_detail(id: "…")` / `engram_recall(query)`
+   / `[ESR]` 块 / `esr_ready`），active 工作集在摘要里**复述**不驱逐；
+3. **兜底叙事**：只有无锚轮次（纯对话/推理）才走 scoped LLM 摘要（`gcNarrative`，默认开；关掉后整条
+   路径零 LLM，无锚轮次截断原文保留）。
+
+触发时机完全跟随 DSH 现有 compact（step pressure / context-overflow / `/compact`）；锁、回放校验、
+tool-call/result 配对、token 定价全部复用基本引擎。任何错误 → 回退默认压缩，**永不破坏 compact**。
+装配即注册 `compaction` 服务，卸载/reload engram 自动还回默认引擎。
+
+**装配语义（已按 cordis 源码验证）**：cordis 拒绝同域第二个同名 provider（`provide()` 抛
+`service "compaction" has been registered`，不是「后注册 wins」）。因此：
+
+- **host 平面**：插件 patch 直接 `disable` 基座 `compaction-basic` 行（卸载 engram 自动还原），由
+  dsh-engram 独占 `compaction`；`gcReplacesCompaction:false` 时仍挂裸 `BasicCompactionEngine`，
+  服务永不缺席。headless / TUI / base 型 profile 开箱即用。
+- **preset 平面（web profile）**：web 面把 compaction 放在 agent preset 的 isolate realm（`standard`
+  预设自挂 `compaction-basic`），host 条目进不去。把 preset `compaction` 组里的 `compaction-basic`
+  行换成 dsh-engram 提供的可挂载条目即可按 session 生效：
+  ```yaml
+  - id: compaction
+    name: cordis:group
+    group: true
+    isolate:
+      compaction: true
+      toolResultPruner: true
+    config:
+      - id: engram-compaction       # ← 替换原 compaction-basic
+        name: dsh-engram/compaction
+        config:
+          gcReplacesCompaction: true   # 可选；false=该 session 用默认 LLM 摘要
+          gcNarrative: true
+      - id: command-compact
+        name: '@deepseek-ai/dsh-command-compact'
+      - id: tool-result-pruner
+        name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+        # 原有配置保留
+  ```
 
 ## 自动捕获策略
 
@@ -243,6 +299,11 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 模型实际看到的内容（每个会话渲染一次，然后冻结）：
 
 ```
+ESR 操作协议（静态，每轮逐字节相同）
+  1. 动工前：esr_ready 看可认领工作；esr_status 拿实时状态。
+  2. 多步工作 → esr_task（draft 起步）；动工 → esr_claim；收工 → esr_close（三证齐）。
+  state 是唯一真相：拿不准 state 就 call esr_status。
+
 [ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
@@ -251,6 +312,9 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
 - closed: tsk_9a (RAG eval)  ·  +1
+snapshot from session start — WILL NOT auto-refresh; call esr_status for live state
+# this-session actionables (frozen)
+promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-promote
 ```
 
 前缀：`[D]` 决定 · `[E]` 错误 · `[P]` 流程 · `[F]` 事实 · `[I]` 洞察 · `[H]` 交接 · `[T]` 任务。
@@ -281,6 +345,8 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
     gcEnabled: true          # 定时记忆 GC
     gcIntervalHours: 24      # 回收节奏
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
+    gcReplacesCompaction: true # Context GC：接管 DSH 自动 compact（false=回退默认 LLM 压缩）
+    gcNarrative: true        # 无锚轮次走 scoped LLM 叙事；false=纯机械（零 LLM）
     engramIndexOrder: 40    # systemPrompt section 顺序（位于 tools 段之前）
     esrOrder: 41
 ```
@@ -288,7 +354,7 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
 ## 开发
 
 ```sh
-npm test            # 21 个测试：核心 + Web API + GC（node:test）
+npm test            # 152 个测试：核心 + Web API + GC + Context GC + ESR 触发（node:test）
 npm run build:client
 ```
 

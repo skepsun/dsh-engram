@@ -15,6 +15,7 @@
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./compaction": "./lib/compaction.js",
     "./client": "./lib/client.js",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"
@@ -60,7 +61,10 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.7",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.7",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/dsh-compaction": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.7"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -70,6 +74,15 @@
       "optional": true
     },
     "@deepseek-ai/dsh-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-compaction": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-compaction-basic": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
       "optional": true
     },
     "@deepseek-ai/schemastery": {

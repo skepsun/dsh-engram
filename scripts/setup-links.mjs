@@ -6,6 +6,8 @@
  *   dsh-engram 宿主侧运行期 import：
  *     - zod（registry 唯一外部依赖）
  *     - @deepseek-ai/{dsh-settings,dsh-storage-domain,schemastery}（harness 工作区包）
+ *     - @deepseek-ai/{dsh-compaction,dsh-compaction-basic,dsh-llm}（Context GC 引擎，
+ *       host 侧动态导入，缺省时引擎静默不加载、DSH 沿用默认 compact）
  *   当插件以 `link:` 方式进 profile 时，Node 从插件的真实路径向上解析 import，
  *   这层 node_modules 不随 git 分发，换机器就会 ERR_MODULE_NOT_FOUND。本脚本
  *   一条命令重建：
@@ -111,6 +113,21 @@ function buildPlan(harness) {
       label: "@deepseek-ai/schemastery",
       mount: join(SCOPE, "schemastery"),
       target: join(harness, "vendor", "schemastery"),
+    },
+    {
+      label: "@deepseek-ai/dsh-compaction",
+      mount: join(SCOPE, "dsh-compaction"),
+      target: join(harness, "packages", "compaction", "compaction"),
+    },
+    {
+      label: "@deepseek-ai/dsh-compaction-basic",
+      mount: join(SCOPE, "dsh-compaction-basic"),
+      target: join(harness, "packages", "compaction", "compaction-basic"),
+    },
+    {
+      label: "@deepseek-ai/dsh-llm",
+      mount: join(SCOPE, "dsh-llm"),
+      target: join(harness, "packages", "llm", "llm"),
     },
   ];
   return plan;

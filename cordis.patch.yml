@@ -5,6 +5,18 @@
 # The row is a bare host-half plugin by package name. It does not need to
 # enable storage-domain / storage-json / session-query-sqlite — the standard
 # web profile (dsh-base x dsh-web-app) already mounts them.
+
+# dsh-engram REPLACES the host-plane auto-compact: its Context GC engine
+# provides the `compaction` service (see docs/PROPOSAL-contextgc.zh.md).
+# cordis refuses two sibling rows registering the same service key, so the
+# base row must be disabled here — this patch layer wins because bundle patch
+# layers apply in bundle order and dsh-engram loads after dsh-base. Removing
+# dsh-engram from the profile re-arms the base row automatically.
+# NOTE: with `gcReplacesCompaction:false`, dsh-engram still mounts a plain
+# BasicCompactionEngine, so compaction never goes away while it is installed.
+- id: compaction-basic
+  disabled: true
+
 - insert:
     - id: engram
       name: dsh-engram

@@ -39,30 +39,39 @@ with one goal: **save tokens**.
   anchor immediately shows a relation; and `esr_dep` writes the dependency edge
   into both the task's `deps` (blocker logic) and the shared links table, making
   every task dependency a first-class visible edge in the graph.
-- **Decision-point triggers (P0-A/B + P2 + P3)** — firing where the todo→esr
-  routing decision actually happens and where tasks leak: a `tools/result`
-  watcher snapshots the native `todo_write` plan and, when the session has ≥ 2
-  pending todos that outnumber its active ESR tasks, the [ESR] block appends a
-  concrete `promote:` hint (`esr_task(name="…")`, once per session); recurring
-  failures (error memories with hits ≥ 2) earn a `root-cause:` task candidate;
-  a completed plan (pending → 0) earns a `close:` nudge for evidence-complete
-  tasks; long-unupdated active tasks get a `stale:` nudge; and the task list is
-  ordered READY-first with a `next: esr_close <id>` line, so the model can act
-  top-down. The same subscription feeds an in-memory mem-vs-esr counter that
-  restores `escalationHint` (the per-day `usage` table stopped being written
-  after assessment P3, silently orphaning the old nudge). Pure rules, zero
-  LLM, zero per-render I/O. Every hint line carries a stable `#suggest-*`
-  source tag (traceable in logs) and the same recorder measures hint → esr_*
-  conversion (shown once per session per hint, attributed when an esr tool
-  runs within a 10-minute window) — `GET /api/dsh-engram/triggerstats`
-  reports per-kind shown/converted/rate so you can see which nudge actually
-  moves behaviour.
+- **ESR trigger mechanism (pi-esr-aligned, hybrid: static protocol + frozen
+  snapshot + monotonically accumulated actionables + pull)** — prefix-cache
+  stability is the point. Teaching the model WHEN to use ESR is a **static
+  methodology** section (byte-identical every turn); the `[ESR]` block is a
+  deterministic **per-session frozen snapshot** (set at session start,
+  deterministically sorted, timestamps excluded, explicitly "WILL NOT
+  auto-refresh") **plus the session's monotonically accumulated actionables**:
+  the `promote:` / `root-cause:` / `close:` / `stale:` / `escalate:` lines are
+  APPENDED exactly once, the moment each matures, and stay frozen for the rest
+  of the session (never removed) — so the prefix changes only when genuinely
+  new decision-point info appears, never per-turn, while the timely nudges
+  (narrow funnel / recurring failure / work done / stale / balance) stay in
+  context. Live state is still **pulled** via `esr_status` (full deterministic
+  view + `since_revision` short "unchanged" response + derived actionables).
+  The `tools/result` recorder feeds the actionables' data sources; P4
+  conversion metering stays (`#suggest-*` tags + 10-minute attribution +
+  `GET /api/dsh-engram/triggerstats`). Pure rules, zero LLM.
 - **Memory GC (pi-esr constraints)** — a scheduled, mechanical, archive-only
   sweep: TTL-expired memories are archived, over-cap workspaces evict the
   lowest-value entries, stable tasks past their retention window leave the
   `[ESR]` surface, and dangling link edges are dropped. The working set (active
   task refs, task memories, indexed hits) is never touched, and nothing is
   hard-deleted — every archived entry keeps its id and stays re-fetchable.
+- **Context GC (auto-GC = replaces DSH's auto-compact)** — NOT the memory-panel
+  GC. It takes over the host's `compaction` service and swaps DSH's lossy
+  LLM-summary compression for **mechanical eviction + re-fetch pointers**:
+  evicted turns are scanned for engram/ESR anchors (`#memory-id`, `tsk_*`,
+  `ent_*`, `file_path`) and replaced with one line "this detail lives at
+  `engram_detail` / `engram_recall` / the [ESR] block"; only un-provenanced
+  turns get a scoped LLM narrative (`gcNarrative`, default on, off = fully
+  mechanical). All six GC constraints hold (working-set-protected,
+  pointer-salience, no-provenance-no-evict…); any error falls back to the
+  default compressor — compaction is never broken.
 - **Web viewer** — a memory browser with benchmark-ish stats and a config card,
   built entirely on DSH's native settings slots (no third-party UI package).
 
@@ -272,9 +281,16 @@ npm run build:client
 | `esr_task` | Create a task entity (draft → active) | write |
 | `esr_close` | Close a task via the evidence protocol (artifact + evaluation + memory_ref) | write |
 | `esr_link` | Add a typed relation between two entities (mini graph) | write |
+| `esr_ready` | List claimable tasks (no open blocker, unclaimed) | read |
+| `esr_status` | Pull live ESR state + derived hints (`since_revision` short "unchanged" response) | read |
 | `esr_gc` | Run the memory GC for the workspace (`dry_run:true` previews) | write |
 
-## Memory GC
+The `[ESR]` block is a frozen per-session snapshot and never auto-refreshes —
+call `esr_status` for the live truth.
+
+## GC: two planes — memory-panel reclamation + Context GC (replacing auto-compact)
+
+### Memory-panel reclamation (store maintenance)
 
 A scheduled sweep (`gcIntervalHours`, default 24h) plus a manual `esr_gc` /
 GUI button keeps the store bounded the pi-esr way — **mechanical, working-set
@@ -291,6 +307,67 @@ GC never touches the working set: memories referenced by an active task
 (`hits >= promoteHits`). Run `esr_gc` with `dry_run: true` to preview. Nothing
 is hard-deleted — the report ends with re-fetch pointers for everything it
 archived, so archives are recoverable, not lost.
+
+### Context GC (replaces DSH's auto-compact)
+
+DSH's default context compression is a **lossy LLM full summary**
+(`compaction-basic`): evicted history is crushed into prose — un-queryable, and
+the summary itself burns tokens. dsh-engram's auto-GC replaces it:
+`ContextGcEngine extends BasicCompactionEngine` overrides the single
+`summarize()` hook and swaps the summary body for:
+
+1. **Scan** — the evicted messages are scanned for provenance anchors: memory
+   ids echoed by `engram_store`/`engram_recall`/`engram_detail`, `tsk_*`/`ent_*`
+   touched by `esr_*`, and `file_path` anchors (`esr_gc` and other management
+   calls are NOT anchors);
+2. **Pointer summary** — every evicted category carries an explicit re-fetch
+   call (`engram_detail(id: "…")` / `engram_recall(query)` / the [ESR] block /
+   `esr_ready`); the active working set is restated, never evicted;
+3. **Narrative safety net** — only un-provenanced turns (pure chat / reasoning)
+   get a scoped LLM summary (`gcNarrative`, default on; off = the whole path is
+   zero-LLM and un-provenanced turns are kept as truncated verbatim).
+
+Triggers follow DSH's own compaction timing (step pressure / context-overflow /
+`/compact`); the lock, replay validation, tool-call/result pairing and token
+pricing are all reused from the basic engine. Any error falls back to the
+default compressor — compaction is never broken; with `gcReplacesCompaction:
+false` (or a host without `dsh-compaction-basic`) the engine never mounts.
+Mounting registers the `compaction` service on the plugin's fiber, so
+unloading/reloading engram restores the default engine.
+
+**Mounting semantics (verified against cordis source)**: cordis refuses a second
+provider of the same service in the same realm (`provide()` throws
+`service "compaction" has been registered` — not "last write wins"). Hence:
+
+- **Host plane**: the plugin patch disables the base `compaction-basic` row
+  (re-armed automatically when engram is uninstalled); dsh-engram is then the
+  sole `compaction` provider, mounting a bare `BasicCompactionEngine` under
+  `gcReplacesCompaction:false` so the service never disappears. Headless / TUI /
+  base-style profiles work out of the box.
+- **Preset plane (web profile)**: web keeps compaction inside each agent
+  preset's isolated realm (the shipped `standard` preset mounts its own
+  `compaction-basic`), unreachable from a host-plane row. Swap that row for the
+  mountable entry dsh-engram ships (`dsh-engram/compaction`, package subpath
+  export) to activate per session:
+  ```yaml
+  - id: compaction
+    name: cordis:group
+    group: true
+    isolate:
+      compaction: true
+      toolResultPruner: true
+    config:
+      - id: engram-compaction       # replaces the original compaction-basic
+        name: dsh-engram/compaction
+        config:
+          gcReplacesCompaction: true   # optional; false = default LLM summary for this session
+          gcNarrative: true
+      - id: command-compact
+        name: '@deepseek-ai/dsh-command-compact'
+      - id: tool-result-pruner
+        name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+        # keep the original config
+  ```
 
 ## Auto-capture policy
 
@@ -323,6 +400,11 @@ injected".
 What the model actually sees (rendered once per session, then frozen):
 
 ```
+ESR operating protocol (static, byte-identical every turn)
+  1. Before starting: esr_ready to see claimable work; esr_status for live state.
+  2. Multi-step work → esr_task (draft first); claim → esr_claim; finish → esr_close (all three gates).
+  state is the single source of truth: unsure → call esr_status.
+
 [ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
@@ -331,6 +413,9 @@ drill: engram_store (user asks to remember) | engram_recall <query> | engram_det
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
 - closed: tsk_9a (RAG eval)  ·  +1
+snapshot from session start — WILL NOT auto-refresh; call esr_status for live state
+# this-session actionables (frozen)
+promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-promote
 ```
 
 Prefixes: `[D]` decision · `[E]` error · `[P]` procedure · `[F]` fact ·
@@ -367,6 +452,8 @@ Defaults are token-conscious; override any key via the profile patch
     gcEnabled: true          # scheduled memory GC
     gcIntervalHours: 24      # sweep cadence
     gcStableRetentionDays: 120  # stable tasks leave [ESR] after this
+    gcReplacesCompaction: true # Context GC: take over DSH auto-compact (false = keep the default LLM summarizer)
+    gcNarrative: true        # scoped LLM narrative for un-provenanced turns; false = fully mechanical (zero LLM)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
     esrOrder: 41
 ```
@@ -374,7 +461,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 29 tests: core + web API + GC + usage-observability (node:test)
+npm test            # 152 tests: core + web API + GC + usage-observability + Context GC + ESR triggers (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

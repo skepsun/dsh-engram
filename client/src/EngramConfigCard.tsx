@@ -36,6 +36,8 @@ export interface EngramConfigValue {
   maxRecallPerSession?: number;
   gcEnabled?: boolean;
   gcStableRetentionDays?: number;
+  /** Context GC: allow scoped LLM narrative for un-provenanced turns (default on). */
+  gcNarrative?: boolean;
   /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
   trustedHosts?: string[];
 }
@@ -98,10 +100,11 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
   {
     id: "retention-adv",
     title: "生命周期与 GC（高级）",
-    description: "容量上限与定期回收",
+    description: "容量上限与定期回收（自动 GC = 替代 DSH 自动 compact）",
     fields: [
       { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
       { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
+      { key: "gcNarrative", label: "Context GC 叙事兜底", hint: "自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
       { key: "verifyArtifact", label: "校验 artifact 存在", hint: "esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过", kind: "bool" },
     ],
