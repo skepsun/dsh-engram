@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EngramApi, EngramStats } from "./api";
 import { useEngramTheme } from "./theme";
+import { POLL_MS } from "./esrModel";
 import { EvidenceRing } from "./EvidenceRing";
 
 interface EngramTelemetryFace {
@@ -55,14 +56,13 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
 
   useEffect(() => {
     void refresh();
-    const id = setInterval(() => void refresh(), 20000);
+    const id = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
 
   const toolRows = useMemo(() => {
     if (!stats) return [];
     const entries = Object.entries(stats.totals.counts ?? {}).sort((a, b) => b[1] - a[1]);
-    const max = entries.length > 0 ? entries[0][1] : 0;
     return entries.slice(0, 8).map(([name, count]) => ({
       name,
       count,

@@ -10,11 +10,15 @@
  * Plain React + inline styles; the only value imports are react (bundle
  * purity). The scoped --dsh-color-* palette comes from useEngramTheme.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramGraph } from "./EngramGraph";
 import type { EntityRecord, LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
+import { blockedBy, buildTasksMarkdown, fmtDateShort, POLL_MS, shortAgent, shortId, taskGaps } from "./esrModel";
+// EngramBoardMount re-exports this for consumers; keep the board as a stable facade.
+export { buildTasksMarkdown } from "./esrModel";
 
 export interface EngramBoardApi {
   overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> }>;
@@ -33,23 +37,12 @@ export interface EngramBoardProps {
   onRequestClose: () => void;
 }
 
-/** Evidence gaps of an active task (artifact / evaluation / memory_ref). */
-function taskGaps(t: TaskRecord): string[] {
-  const gaps: string[] = [];
-  if (!t.artifact) gaps.push("artifact");
-  if (!t.evaluation) gaps.push("evaluation");
-  if (!t.memoryRefs || t.memoryRefs.length === 0) gaps.push("memory_ref");
-  return gaps;
-}
-
 const COLUMNS = [
   { key: "draft", title: "草稿", sub: "未被激活", color: "#94a3b8", match: (t: TaskRecord) => t.state === "draft" },
   { key: "gapped", title: "进行中", sub: "证据有缺口", color: "#f59e0b", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length > 0 },
   { key: "ready", title: "就绪", sub: "证据齐，可闭环", color: "#10b981", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length === 0 },
   { key: "stable", title: "已闭环", sub: "凭据齐备", color: "#6366f1", match: (t: TaskRecord) => t.state === "stable" },
 ] as const;
-
-const fmtDate = (ts: number) => (ts ? new Date(ts).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) : "–");
 
 /** Compose per-task close evidence from bulk form values + existing task gates. */
 export function buildCloseEvidence(bulkArtifact: string, bulkEval: string, bulkRefs: string, task: TaskRecord): { artifact?: string; evaluation?: string; memoryRefs?: string[] } {
@@ -59,35 +52,6 @@ export function buildCloseEvidence(bulkArtifact: string, bulkEval: string, bulkR
     evaluation: bulkEval.trim() || task.evaluation || undefined,
     memoryRefs: refs.length > 0 ? refs : task.memoryRefs,
   };
-}
-
-/** Rendering-agnostic markdown export of the current task view (unit-testable). */
-export function buildTasksMarkdown(tasks: TaskRecord[]): string {
-  const esc = (s: string) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
-  const rows = tasks
-    .slice()
-    .sort((a, b) => a.state.localeCompare(b.state) || (a.createdAt ?? 0) - (b.createdAt ?? 0))
-    .map((t) => {
-      const ev = `${t.artifact ? "artifact✓" : "artifact✗"} · ${t.evaluation ? "eval✓" : "eval✗"} · ${(t.memoryRefs?.length ?? 0) > 0 ? "ref✓" : "ref✗"}`;
-      return `| ${t.state} | ${esc(t.name)} | ${esc(t.workspace.replace(/^.*[\\/]/, ""))} | ${esc(taskGaps(t).join(", ") || "—")} | ${ev} | ${fmtDate(t.createdAt ?? 0)} |`;
-    });
-  return `# ESR 任务导出 · ${new Date().toISOString().slice(0, 10)}\n\n| 状态 | 任务 | 工作区 | 证据缺口 | 证据 | 创建 |\n|---|---|---|---|---|---|\n${rows.join("\n") || "(无任务)"}`;
-}
-
-function shortId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id;
-}
-
-/** Beads-inspired derived blocked state: open (non-stable) blocks/parent-of deps. */
-function blockedBy(t: TaskRecord, all: TaskRecord[]): number {
-  if (t.state === "stable") return 0;
-  const open = new Set(all.filter((x) => x.state !== "stable").map((x) => x.id));
-  return (t.deps ?? []).filter((d) => d.kind !== "relates-to" && open.has(d.id)).length;
-}
-function shortAgent(a: string | null): string {
-  if (!a) return "";
-  const bare = a.split(/[@#/:\\]+/).pop()!;
-  return bare.replace(/^session[-_]/i, "").replace(/^agent[-_]/i, "").slice(0, 14);
 }
 
 const TREND_LABEL: Record<string, string> = {
@@ -126,7 +90,6 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const [bulkRefs, setBulkRefs] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
-  const loadedWs = useRef(new Set<string>());
   const [obsItems, setObsItems] = useState<ObservationRecord[] | null>(null);
   const [obsOpen, setObsOpen] = useState(false);
   const [model, setModel] = useState<MentalModelRecord | null>(null);
@@ -138,14 +101,14 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       setOverview(ov);
       setDenied(false);
       const wsList = Object.keys(ov.workspaces);
+      // Re-fetch every workspace on each poll — no permanent "already loaded"
+      // gate, so tasks created later (via esr_task / the agent / this board)
+      // surface within one poll instead of silently sticking in the first
+      // snapshot taken when the workspace first appeared.
       const entries = await Promise.all(
         wsList.map(async (w) => {
-          const shouldLoad = !loadedWs.current.has(w);
-          if (shouldLoad) loadedWs.current.add(w);
-          const res = shouldLoad
-            ? await Promise.all([api.tasks(w, true), api.nodes(w), api.links(w)])
-            : null;
-          return [w, res ? { tasks: res[0].items, nodes: res[1].items, links: res[2].items } : null] as const;
+          const res = await Promise.all([api.tasks(w, true), api.nodes(w), api.links(w)]);
+          return [w, { tasks: res[0].items, nodes: res[1].items, links: res[2].items }] as const;
         }),
       );
       setTasksByWs((prev) => {
@@ -179,27 +142,9 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
 
   useEffect(() => {
     void refresh();
-    const id = setInterval(() => void refresh(), 20000);
+    const id = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
-
-  // The 20s polling above skips already-loaded workspaces; only re-fetch the
-  // current selection's workspace every poll so newly created tasks appear.
-  useEffect(() => {
-    if (!ws || denied) return;
-    const id = setInterval(() => {
-      const fetchWs = async () => {
-        try {
-          const [res, nodeRes, linkRes] = await Promise.all([api.tasks(ws, true), api.nodes(ws), api.links(ws)]);
-          setTasksByWs((prev) => ({ ...prev, [ws]: res.items }));
-          setNodesByWs((prev) => ({ ...prev, [ws]: nodeRes.items }));
-          setLinksByWs((prev) => ({ ...prev, [ws]: linkRes.items }));
-        } catch { /* polling errors are surface-level; full refresh handles them */ }
-      };
-      void fetchWs();
-    }, 20000);
-    return () => clearInterval(id);
-  }, [ws, denied, api]);
 
   const workspaces = useMemo(
     () => (overview ? Object.entries(overview.workspaces).sort((a, b) => b[1].tasks - a[1].tasks) : []),
@@ -268,7 +213,6 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     setBusy(true);
     try {
       await api.createTask(targetWs, name, newDesc);
-      loadedWs.current.add(targetWs);
       setNewName("");
       setNewDesc("");
       setCreating(false);
@@ -560,7 +504,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                             artifact{t.artifact ? "✓" : "✗"}·eval{t.evaluation ? "✓" : "✗"}·ref{(t.memoryRefs?.length ?? 0) > 0 ? "✓" : "✗"}
                           </span>
                         )}
-                        <span style={hb.meta}>{fmtDate(t.createdAt)}</span>
+                        <span style={hb.meta}>{fmtDateShort(t.createdAt)}</span>
                       </div>
                     </div>
                   </div>
@@ -627,7 +571,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   );
 }
 
-const hb = {
+const hb: Record<string, CSSProperties> = {
   header: {
     padding: "10px 14px",
     borderBottom: "1px solid var(--dsw-alias-border-l1, var(--dsh-color-border, #e5e7eb))",

@@ -15,7 +15,7 @@
  * refused.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -33,7 +33,39 @@ function sh(cmd, args, cwd) {
   execFileSync(cmd, args, { cwd, stdio: "inherit" });
 }
 
+/** Newest mtime (ms) of any client source file under `dir` (recursive). */
+function newestSourceMtime(dir, acc = 0) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      acc = newestSourceMtime(p, acc);
+    } else if (/\.(ts|tsx|mjs)$/.test(entry.name)) {
+      acc = Math.max(acc, statSync(p).mtimeMs);
+    }
+  }
+  return acc;
+}
+
+/**
+ * 0. Fail the publish when the shipped client bundle is stale — the exact
+ *    0.3.4-class hazard (edit client/src, forget `npm run build:client`,
+ *    publish an old GUI). Cheap, and saves a broken release.
+ */
+function assertClientBundleFresh() {
+  const newestSrc = newestSourceMtime(join(root, "client/src"));
+  if (newestSrc === 0) return;
+  for (const bundle of ["lib/client.js", "lib/esrModel.mjs"]) {
+    const p = join(root, bundle);
+    if (!existsSync(p)) throw new Error(`${bundle} is missing — run \`npm run build:client\` before publishing`);
+    if (statSync(p).mtimeMs < newestSrc) {
+      throw new Error(`${bundle} is stale (a client/src file is newer) — run \`npm run build:client\` before publishing`);
+    }
+  }
+}
+
 try {
+  assertClientBundleFresh();
+
   // 1. pack. npm publish --dry-run propagates npm_config_dry_run into this
   //    script's child npm, which would make the nested pack a no-op — pin
   //    dry-run off explicitly so the tarball is always really produced.

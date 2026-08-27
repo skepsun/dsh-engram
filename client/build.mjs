@@ -10,19 +10,27 @@
  * shipped bundles use).
  *
  * This is a DEV tool for the external dsh-engram repo; it resolves esbuild from
- * the harness checkout (the only place it is installed locally).
+ * the harness checkout (the only place it is installed locally). Set
+ * `$DSH_CHECKOUT` to a harness root to use a checkout other than the default
+ * sibling/legacy candidates (see client/harness.mjs).
  */
 
 import { createRequire } from "node:module";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { esbuildPkg as resolveEsbuildPkg } from "./harness.mjs";
 
 // esbuild is a transitive dep of the harness, stored in its pnpm store —
 // anchor the require at its virtual-store entry rather than the root.
-const require = createRequire(
-  "/d1/chuxiong/code/deepseek-harness/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/package.json",
-);
+const esbuildPkg = resolveEsbuildPkg();
+if (esbuildPkg === null) {
+  console.error(
+    "[dsh-engram build:client] esbuild not found — set DSH_CHECKOUT to a DeepSeek Harness checkout (or install esbuild into node_modules).",
+  );
+  process.exit(1);
+}
+const require = createRequire(join(esbuildPkg, "package.json"));
 const esbuild = require("esbuild");
 
 const HERE = dirname(fileURLToPath(import.meta.url));

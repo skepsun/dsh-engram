@@ -33,6 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { EngramApi, LinkRecord, TaskRecord, EntityRecord, ToolStats } from "./api";
 import { useEngramTheme } from "./theme";
+import { POLL_MS, taskGaps } from "./esrModel";
 
 /** Status of one built-in plan item (mirrors @deepseek-ai/dsh-tool-todo/client). */
 export type PlanItemStatus = "pending" | "in_progress" | "completed";
@@ -81,14 +82,6 @@ function fmtD(ts: number): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-
-const taskGaps = (t: TaskRecord): string[] => {
-  const gaps: string[] = [];
-  if (!t.artifact) gaps.push("artifact");
-  if (!t.evaluation) gaps.push("evaluation");
-  if (!t.memoryRefs || t.memoryRefs.length === 0) gaps.push("memory_ref");
-  return gaps;
-};
 
 /** Status coloring used across the strip (light/dark aware via CSS vars). */
 const STATUS = {
@@ -306,7 +299,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
   useEffect(() => {
     if (!effWs || data.denied) return;
     if (pollRef.current !== null) window.clearInterval(pollRef.current);
-    pollRef.current = window.setInterval(() => void load(), 15000);
+    pollRef.current = window.setInterval(() => void load(), POLL_MS);
     return () => {
       if (pollRef.current !== null) window.clearInterval(pollRef.current);
       pollRef.current = null;

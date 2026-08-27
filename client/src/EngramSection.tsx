@@ -18,6 +18,7 @@ import { EngramTelemetry } from "./EngramTelemetry";
 import { EngramDetail, type DetailTarget } from "./EngramDetail";
 import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
 import { useEngramTheme } from "./theme";
+import { POLL_MS, taskGaps } from "./esrModel";
 
 export interface EngramSectionFace {
   api: EngramApi;
@@ -218,14 +219,6 @@ function StatCard({ num, label }: { num: string; label: string }) {
   );
 }
 
-function taskGaps(t: TaskRecord): string[] {
-  const gaps: string[] = [];
-  if (!t.artifact) gaps.push("artifact");
-  if (!t.evaluation) gaps.push("evaluation");
-  if (!t.memoryRefs || t.memoryRefs.length === 0) gaps.push("memory_ref");
-  return gaps;
-}
-
 /** Group workspace-tagged rows (memories/tasks/links), most rows first. */
 function groupByWorkspace<T extends { workspace: string }>(items: T[]): Array<[string, T[]]> {
   const groups = new Map<string, T[]>();
@@ -280,7 +273,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       // workspace === "" → 全部工作区：stat 卡显示全局总数，表格按工作区分组
       // 完整展示所有记忆（默认视图）；选中某个工作区时各卡片与表格跟随该工作区。
       const wsList = workspace ? [workspace] : Object.keys(ov.workspaces);
-      const [mem, taskGroups, linkGroups, nodeGroups, st] = await Promise.all([
+      const [mem, taskGroups, linkGroups, nodeGroups] = await Promise.all([
         api.memories({
           workspace: workspace || undefined,
           q: q || undefined,
@@ -304,6 +297,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
 
   useEffect(() => {
     void refresh();
+    // Keep the settings lists current while the agent works elsewhere (agent
+    // may add tasks/memories at any moment). Same shared interval as the
+    // board/dock so the surfaces can't drift apart (see esrModel POLL_MS).
+    const id = setInterval(() => void refresh(), POLL_MS);
+    return () => clearInterval(id);
   }, [refresh]);
 
   const workspaces = useMemo(() => (overview ? Object.keys(overview.workspaces) : []), [overview]);
@@ -555,7 +553,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
               <div key={t.id} style={s.mono}>- {t.id.slice(0, 6)} {t.reason}: {t.name}</div>
             ))}
             {gcReport.removedLinks.slice(0, 3).map((l) => (
-              <div key={l.id} style={s.mono}>- link {l.source.slice(0, 8)} --{l.relation}--&gt; {l.target.slice(0, 8)}</div>
+              <div key={l.id} style={s.mono}>- link {(l.source ?? "?").slice(0, 8)} --{(l.relation ?? "")}--&gt; {(l.target ?? "?").slice(0, 8)}</div>
             ))}
           </div>
         )}
@@ -624,7 +622,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                 <td style={{ ...s.td, minWidth: 0 }}>
                   <div title={r.m.text} style={expandedRows.has(r.m.id) ? s.expanded : s.clamp3}>{r.m.text}</div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
-                    <div style={{ ...s.mono, ...s.ellipsis, flex: "1 1 160px" }} title={`${fmtDate(r.m.createdAt)} · ${r.m.id} · ${r.m.entity ?? ""} · signal ${r.m.signal.toFixed(2)} · hits ${r.m.hits} · TTL ${daysLeft(r.m.expiresAt)}`}>
+                    <div style={{ ...s.mono, flex: "1 1 160px" }} title={`${fmtDate(r.m.createdAt)} · ${r.m.id} · ${r.m.entity ?? ""} · signal ${r.m.signal.toFixed(2)} · hits ${r.m.hits} · TTL ${daysLeft(r.m.expiresAt)}`}>
                       {fmtDate(r.m.createdAt)} · {r.m.id.slice(0, 8)}{r.m.entity ? ` · ${r.m.entity}` : ""} · {r.m.signal.toFixed(2)} · hits {r.m.hits} · {daysLeft(r.m.expiresAt)}
                     </div>
                     <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? "收起" : "展开全文"}</button>
@@ -826,7 +824,6 @@ export function EngramSection({ api, t }: EngramSectionFace) {
             <EngramDetail
               target={detail}
               api={api}
-              memories={memories}
               tasks={tasks}
               nodes={nodes}
               links={links}

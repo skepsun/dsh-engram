@@ -20,6 +20,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import type { EngramScope, EngramScopeSnapshot } from "./scope";
 import { useEngramTheme } from "./theme";
 
@@ -38,6 +39,8 @@ export interface EngramConfigValue {
   gcStableRetentionDays?: number;
   /** Context GC: allow scoped LLM narrative for un-provenanced turns (default on). */
   gcNarrative?: boolean;
+  /** esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）。 */
+  verifyArtifact?: boolean;
   /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
   trustedHosts?: string[];
 }
@@ -102,7 +105,7 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
     title: "生命周期与 GC（高级）",
     description: "容量上限与定期回收（自动 GC = 替代 DSH 自动 compact）",
     fields: [
-      { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", kind: "num", min: 0, max: 10000 },
+      { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", hint: "单工作区容量上限（GC 归档超限条目）", kind: "num", min: 0, max: 10000 },
       { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
       { key: "gcNarrative", label: "Context GC 叙事兜底", hint: "自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
@@ -128,7 +131,7 @@ const CARD_DESCRIPTION = "控制 engram 记忆的捕获、索引、保留与隧�
 // The built-in plugin cards are styled with the platform's dsw-alias design
 // tokens; mirroring them here makes dsh-engram read as a sibling of the Shell /
 // Agent loop / Web search cards in the same tab.
-const s = {
+const s: Record<string, CSSProperties> = {
   card: {
     listStyle: "none",
     border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)",
@@ -372,7 +375,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
   const writable = snap?.writable !== false && snap?.status !== "unavailable";
   const available = snap?.status === "ready";
   const { vars } = useEngramTheme();
-  const renderField = (field) => {
+  const renderField = (field: EngramConfigField) => {
                   const raw = value[field.key];
                   const overridden = snap?.user !== undefined && field.key in (snap.user as object);
                   return (
@@ -433,7 +436,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
                     </div>
                   );
   };
-  const renderGroup = (group) => (
+  const renderGroup = (group: EngramConfigGroup) => (
     <div key={group.id} style={s.groupPanel}>
       <div style={s.groupHead}>
         <div style={s.groupTitle}>{group.title}</div>

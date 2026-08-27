@@ -338,7 +338,7 @@ export function EngramGraph({ workspace, entities, tasks, links, nameOf }: Engra
     }
   };
 
-  const endPointer = (e: RPointerEvent<SVGSVGElement>) => {
+  const endPointer = () => {
     if (dragging.current) {
       const p = posRef.current.get(dragging.current.id);
       if (p) {

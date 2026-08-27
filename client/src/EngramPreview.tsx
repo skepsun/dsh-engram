@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EngramApi, InjectPreview } from "./api";
 import { useEngramTheme } from "./theme";
+import { POLL_MS } from "./esrModel";
 
 interface EngramPreviewFace {
   api: EngramApi;
@@ -74,7 +75,7 @@ export function EngramPreview({ api, workspace, defaultWorkspace, workspaces }: 
 
   useEffect(() => {
     void refresh();
-    const id = setInterval(() => void refresh(), 20000);
+    const id = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
 

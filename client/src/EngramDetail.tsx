@@ -21,7 +21,6 @@ export type DetailTarget =
 interface EngramDetailFace {
   target: DetailTarget;
   api: EngramApi;
-  memories: MemoryRecord[];
   tasks: TaskRecord[];
   nodes: EntityRecord[];
   links: LinkRecord[];
@@ -82,7 +81,7 @@ function gapsOf(t: TaskRecord): string[] {
   return gaps;
 }
 
-export function EngramDetail({ target, api, memories, tasks, nodes, links, onClose, onNavigateMemory, onChanged }: EngramDetailFace) {
+export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavigateMemory, onChanged }: EngramDetailFace) {
   const { dark, vars } = useEngramTheme();
   const [gArt, setGArt] = useState("");
   const [gEval, setGEval] = useState("");
