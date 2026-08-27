@@ -41,6 +41,8 @@ export interface EngramConfigValue {
   gcNarrative?: boolean;
   /** esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）。 */
   verifyArtifact?: boolean;
+  /** 实体锚定 + 替换式更新自动把旧记忆标为 superseded（默认关，启发式）。 */
+  autoSupersede?: boolean;
   /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
   trustedHosts?: string[];
 }
@@ -110,6 +112,14 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
       { key: "gcNarrative", label: "Context GC 叙事兜底", hint: "自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
       { key: "verifyArtifact", label: "校验 artifact 存在", hint: "esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过", kind: "bool" },
+    ],
+  },
+  {
+    id: "semantics-adv",
+    title: "记忆语义（高级）",
+    description: "supersedes / contradict 的启发式",
+    fields: [
+      { key: "autoSupersede", label: "自动 supersedes", hint: "实体锚定 + 替换式更新（改用/不再/no longer…）自动把旧记忆标为 superseded；旧行保留、召回降级。默认关，显式 supersedes 永远优先", kind: "bool" },
     ],
   },
   {

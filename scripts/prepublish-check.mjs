@@ -84,7 +84,9 @@ try {
   const installed = join(tmp, "node_modules", ...name.split("/"));
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
   const host = await import(pathToFileURL(join(installed, manifest.main)).href);
-  const expected = ["apply", "inject", "name"].sort().join(",");
+  // resolveConfig is a deliberate public export (settings test builds the
+  // real DEFAULTS from it); widen the host surface consciously, not silently.
+  const expected = ["apply", "inject", "name", "resolveConfig"].sort().join(",");
   const actual = Object.keys(host).sort().join(",");
   if (actual !== expected) {
     throw new Error(`host exports mismatch: got ${actual}, want ${expected}`);
