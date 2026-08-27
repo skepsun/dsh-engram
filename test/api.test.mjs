@@ -491,9 +491,15 @@ test("store: putModel normalizes a non-string ws to the global key instead of co
 test("api: /triggerstats streams recorder conversion stats per workspace", async () => {
   const domain = await openEngramDomain(fakeFacility());
   const { makeTriggerRecorder } = await import("../lib/trigger.js");
-  const recorder = makeTriggerRecorder();
-  recorder.emitHint("promote", "/ws/a", "s1");
+  // Injectable clock: hint order and the conversion window are fully
+  // deterministic (the wall clock flaked this test — strict > only resolves
+  // one way when timestamps are controlled).
+  let clock = 1_000_000;
+  const recorder = makeTriggerRecorder({ now: () => clock });
   recorder.emitHint("stale", "/ws/a", "s1");
+  clock += 1; // stale now sits strictly older
+  recorder.emitHint("promote", "/ws/a", "s1"); // most recent pending hint
+  clock += 1;
   recorder.handle(
     { name: "esr_task", agent: { session: { id: "s2", header: { cwd: "/ws/a" } } }, arguments: {} },
     {},
