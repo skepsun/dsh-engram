@@ -1,0 +1,189 @@
+# meow-memory 🐱📝
+
+| [中文](README.md) | [English](README.en.md) | [MIT License](LICENSE) |
+| :---: | :---: | :---: |
+
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）打造的跨会话记忆插件。
+
+
+**核心理念**：每个工作区维护一份结构化记忆数据库（`.dsh-meow/memory.db`，基于 `node:sqlite`）。
+静态记忆手册（数据总览 + 工具用法 + 写作准则）以固定 section 的形式放在 **system prompt** 里——
+文本恒定，因此不会破坏 LLM provider 的 KV/上下文缓存。动态内容（soul/user 全量、设计原则、
+记忆导引）作为**第一条用户消息的前缀**注入，且首轮只注入长期记忆、不做关键词命中；
+从第二轮起每条用户消息做关键词命中（top-2）。模型按需用 `memory_search` /
+`memory_project` 深入检索。每个窗口由自己的主 agent 在空闲时（"dream"）整理记忆
+（本窗口建立 + 提取过的记忆），以窗口最后一次对话时间戳冻结其知识。
+
+## ✨ 功能特性
+
+- **七层记忆**（`soul` = AI 自身 / `user` = 用户基本信息与偏好 / `project` = 项目信息，
+  含 `subcategory`（overview/structure/decisions/quotes/ops/todo）/ `fact` = 原子事实 /
+  `lesson` = 教训与纠正 / `topic` = 进行中的讨论话题，带目标句 / `rules` = 设计原则与行为准则）。
+  每层一张 SQLite 表，UUID 带时间前缀，id 顺序即创建顺序。
+- **首轮注入（长期记忆块）**：第一条用户消息前注入固定格式
+  `===== 长期记忆 =====` → `【关于你】`（soul 全量）→ `【关于user】`（user 全量）→
+  `【设计原则】`（全局 rules 且 importance≥2，少而精的命令式准则）→ `【记忆导引】`
+  （用法说明 + 「用户的所有 project」动态列表，供 `memory_project` 选用）→
+  `===== 长期记忆结束 =====` + `本轮用户prompt：`。**首轮不跑关键词命中**（命中从第二轮起）。
+  即使首条用户消息与插件通知消息同批到达（如 approval policy 变更通知），快照仍注入到
+  真实用户消息上、命中绝不提前。
+- **每消息关键词命中**：从第二条用户消息起，每条真实用户消息都检索
+  fact/lesson/rules/topic（范围 = 全局 + 当前 project 锚定），top-2 命中以
+  「可能相关的记忆，仅供参考：」前缀注入。命中基于**条目关键词**（LLM 提取或自动
+  bigram）而非全文——全文匹配噪音大。打分 = 交集分 × idf × 覆盖率 × 艾宾浩斯衰减
+  （按记忆时间戳）× importance 权重 × title 加成。
+- **当前 project 锚定**：`memory_remember/search/update/project` 带 project 参数即锚定
+  该会话的当前项目；未锚定时命中只搜全局（用户闲聊不误伤）。
+- **缓存友好设计**：静态 `meow-memory:guide` section（order 130，紧随各 `tool:*` 说明之后）
+  在 system prompt 中注册一次——文本恒定，KV 缓存友好。已见记忆（`injected` + `searched`）
+  按会话记录（`.dsh-meow/sessions/<id>.json`）：注入绝不重复；`memory_search` 前 5 条按相关度
+  无脑取（不排除已见/本 session 建立的记忆），其余从排名后续绕开已见补齐；收到会话压缩
+  信号（`compaction/*`）时释放已见记录，允许压缩后被再次命中提取。
+- **工具集**：`memory_remember`（写入，必填 content/project/keywords/importance 且缺失报错引导重填，
+  自动去重合并，返回读回确认：关键词/项目归属）/
+  `memory_search`（BM25 × 近期权重，支持 level/project/status/days 过滤，默认 top10 = 前 5 条
+  最相关不排除已见 + 后 5 条绕开已见补齐，按记忆时间戳排序；返回检索元数据视图：
+  归属 + 完整 id + 相对时间 + 关键词列表，不含原文）/
+  `memory_project`（项目全景注入段落：**project 参数必填**——你要看哪个项目的信息？按子标签分组、未过时条目全给、每条带完整 id 与
+  最后更新时间戳、todo 输出「已完成：」最近 5 条 +「To do list：」，末尾附记忆库与
+  会话历史定位说明）/
+  `memory_find_similar`（查重与冲突检测）/ `memory_read` / `memory_update`（含 status
+  active/archived/stale、importance、goal、keywords 手动修正）/ `memory_dream`（手动触发；
+  用户也可以直接在输入框敲 `/dream` 命令）。
+- **记忆时间戳**（`updated_at` = 最后更新时间）：dream 封存或 `memory_update` 刷新时更新。
+  展示的时间戳一律是 `updated_at`；search（工作视图）带相对时间戳，命中注入/memory_project
+  （原文视图）带相对 + 绝对时间戳（如「2026-08-15 10:58 [2 天前]」）。
+- **project 归属**：全局适用的信息 project 填 `"全局"`（与留空=未标记区分）；同时适用于
+  多个项目时用英文逗号分隔（如 `"dsh, femwa"`）——检索/命中按"包含当前项目名 或 全局"判定。
+- **按窗口 dream**：窗口空闲 ≥ `idleMinutes`（默认 **180 分钟 = 3 小时**）即进入允许
+  触发状态（替代原夜间窗口），每个最后发言晚于上次 dream 的窗口由自己的主 agent
+  整理——分轮处理（第 1 轮原子记忆 project/fact/lesson/rules/soul/user，第 2 轮 topic
+  记忆，第 3 轮项目总结——本窗口涉及具体项目时追加：调 memory_project 复查并精简成
+  新的项目长期记忆，被取代的旧条目归档），project 小标题分段，每条记忆附关键词行
+  （AI 核查/重写关键词用），范围=本窗口
+  建立 + 提取过（注入/检索/查阅 memory_read）的记忆，使用其完整会话上下文；
+  长期稳定的 rules 不反复重审（`dream.rulesReviewDays` 默认 2 天内有更新才进清单，
+  防"没话找话"式更新）。**峰时抑制**（按 `timeZone` 计算，默认
+  北京时间）：`suppressWindows`（默认 09:00–12:00、14:00–18:00，API 峰谷电价峰时）
+  及各自开始前 `suppressLeadMinutes`（默认 15）分钟内不触发，峰时结束后下一个检查
+  周期自动触发；进行中的 dream 不打断。无 live agent 且超过 24h 的旧窗口、以及已归档
+  的会话，均不处理。
+- **`/dream` 命令**：不想等空闲触发？在输入框敲 `/dream` 立即手动唤起本窗口的记忆整理
+  （与 `memory_dream` 工具同语义，不受峰时抑制）。dsh 命令平面执行、不发给模型，输入 `/`
+  的补全菜单里直接可见；已有整理在进行中会明确提示，不会重复启动。
+- **跳过梦境整理（client 端）**：某个窗口的记忆不想被自动整理？左侧边栏该会话行的「…」
+  菜单里点一下**「跳过梦境整理记忆」**即可，再点**「取消跳过梦境整理记忆」**恢复。被跳过
+  的窗口不再被空闲定时器自动 dream（`/dream` 与 `memory_dream` 手动触发不受影响）。
+  跳过状态持久保存、重启不丢；双实例共享同一记忆库，状态天然一致。
+- **反思**：单次任务内连续 ≥7 个工具 step 后，插件询问模型自上次整理以来是否有值得记忆的内容。
+  最后工具是 `memory_*` 视为已主动记忆、不重复反思；被取消的轮次绝不触发。
+- **注入折叠 UI（client 端）**：首轮长期记忆 / 每消息关键词命中的注入文本在前端
+  折叠成「▸ 已注入记忆（长期记忆/关键词命中）」横条（与用户气泡同宽），点开可查看
+  注入全文；用户 prompt 以气泡形式直接显示，消息流干净不被注入刷屏。纯文本消息才折叠
+  （带附件的保持原样）。
+- **反思轮折叠 UI（client 端）**：记忆反思/dream 轮的 prompt 与后续 think/tool call/汇报
+  折叠成一条横条（默认折叠，显示「新增记忆 N 条」/「记忆梦境任务」），点击向下展开成
+  卡片查看完整记录——卡片内 Think / tool call / 上下文注入均可点开查看细节。
+- **会话列表 dream 图标（client 端）**：左侧会话列表中，"dream 整理过记忆且之后无新对话
+  新信息"的会话行显示**淡黄色小月牙 🌙**；dream 轮进行中显示**白→金呼吸灯月牙**（替换 dsh
+  的运行中蓝色动画，避免与正常工作混淆）；有新活动即移除。图标放进 dsh 会话行的状态槽位
+  （替换槽内内容，标题零位移）。数据走事件驱动无轮询：`/meow-memory/dream-events` SSE
+  长连接——dream 开始推 `state:'dreaming'`、完成推 `state:'dreamed'`、有新活动推
+  `state:'active'`；client 挂载/断线重连时对 `/meow-memory/dreamed-sessions` 全量对账一次。
+  行定位零 dsh 改动：读 React 18 fiber（`__reactFiber$` 内部属性）拿会话行渲染 key =
+  session id，不依赖标题匹配。
+- **dream 防重复**：check 门（DB 原子 60s 检查节流）+ start 幂等抢占（`dream_pending`）+
+  中断自愈（未收尾的 dream 自动补收尾）+ 孤儿收尾（跨实例/热重载后 turn 结束也能收尾）；
+  插件注入轮的事件不刷新窗口活跃度——已 dream 的窗口不会反复被 dream。
+- **零运行时依赖**：`node:sqlite`（Node ≥22.13 默认可用；22.5–22.12 需 `--experimental-sqlite`）+ 自包含 esbuild 产物（`lib/index.js`）。
+  无原生模块。
+
+## 📦 安装
+
+### 通过 npm（已发布包）
+
+```sh
+# 1. 安装到 profile 的 node_modules（loader 在那里解析插件）
+cd $DSH_HOME/profiles/web          # 默认 home: ~/.dsh/profiles/web
+npm install meow-memory
+
+# 2. 在 profile 的 package.json 中把包加进装配 bundles（推荐，v0.9.0 起）：
+#    "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "meow-memory"] } }
+#    （插件自带 dsh.bundle.patch，bundle 机制自动装配；profile patch 的 insert
+#     按 id 寻址、找不到已有条目会报 not found——新增插件请走 bundles 数组。）
+
+# 3. 重启 dsh web。新会话自动加载插件。
+```
+
+### 手动安装（任意 DSH 安装，无需 npm）
+
+1. 把本包复制（或软链）到 profile 的 `node_modules`：
+   ```sh
+   mkdir -p ~/.dsh/profiles/web/node_modules
+   ln -s /path/to/meow-memory ~/.dsh/profiles/web/node_modules/meow-memory
+   ```
+   （Windows：`New-Item -ItemType Junction ...` —— NTFS junction，无需管理员权限。）
+2. 把 `meow-memory` 加进 profile `package.json` 的 `dsh.profile.bundles`（同上）。
+3. 重启 `dsh web`。新会话自动加载插件。
+
+## ⚙️ 配置
+
+所有字段均可选（profile patch 或 `cordis.patch.yml`）：
+
+```yaml
+- id: meow-memory
+  name: 'meow-memory'
+  config:
+    enabled: true          # 总开关
+    projectDir: '.dsh-meow' # 记忆目录（相对工作区）
+    hitTopK: 2             # 每条用户消息关键词命中的条目数上限（fact/lesson/rules/topic）
+    reflect: true          # 连续 ≥reflectTurns 轮工具调用后自动反思
+    reflectTurns: 7        # 触发反思所需的连续工具轮数
+    dream:
+      enabled: true
+      idleMinutes: 180      # 窗口空闲 ≥180 分钟（3 小时）允许 dream
+      suppressWindows:      # 峰时抑制时段（按下方 timeZone 计算，"HH:MM" 起止）
+        - start: '09:00'    #   API 峰谷电价峰时
+          end: '12:00'
+        - start: '14:00'
+          end: '18:00'
+      suppressLeadMinutes: 15  # 每个峰时开始前 15 分钟也不触发
+      checkMinutes: 15
+      timeZone: 'Asia/Shanghai'  # 用户机器时钟为美区时间；抑制时段必须
+                                 # 按此固定时区计算
+```
+
+## 🧠 工作原理
+
+```
+第一条用户消息（首轮）         第二条起的每条消息                空闲≥3h 且非峰时
+┌────────────────────┐        ┌────────────────────┐        ┌──────────────────────┐
+│ ===== 长期记忆 ===== │        │ 可能相关的记忆，仅供  │        │ 按窗口 dream：        │
+│ 【关于你】(soul)     │        │ 参考：keywords 命中   │        │ 三轮（含项目总结）      │
+│ 【关于user】         │        │ top-2（全局+当前     │        │ 七层+提取过的，       │
+│ 【设计原则】(rules)   │        │ project 锚定）      │        │ updated_at 以 T 封存  │
+│ 【记忆导引】          │        └────────────────────┘        └──────────────────────┘
+│ ─────────────      │        已见 id 按会话记录
+│ 本轮用户prompt：     │        (sessions/<id>.json)
+│ [user text]        │        压缩信号 → 释放已见
+└────────────────────┘
+ 每会话只注入一次，
+ 首轮不做命中
+```
+
+## 🛠 开发
+
+```sh
+npm install
+npm run build          # esbuild 打包 → lib/index.js（自包含）
+npm run test           # 228 项逻辑测试：db / bm25 / migrate / inject / reflect / dream / tools / apply
+```
+
+`@deepseek-ai/*` 包位于 dsh-meow pnpm workspace 中，不在本包的 `node_modules` 里。
+在 Windows 上，`npm run link-workspace`（或 `scripts/link-workspace.ps1`）创建 workspace
+包的 junction 镜像，使 esbuild 能解析它们；`build.mjs` 通过 `nodePaths` 引用。
+这些链接仅构建期需要。
+
+## 📄 License
+
+MIT —— 见 [LICENSE](LICENSE)。

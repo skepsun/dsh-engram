@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Every check runs on the published surface (host entry + client bundle) the
+# way a real profile would resolve it. The @deepseek-ai peers are optional
+# peerDependencies — they are consumed from the npm registry exactly like the
+# harness's own pnpm resolution, and the client toolchain (esbuild /
+# typescript / @types/react) is deliberately not a package dependency, so CI
+# installs it locally for build + typecheck only.
+jobs:
+  verify:
+    name: test · eval · bundle · typecheck · pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install runtime dep (zod)
+        run: npm install --no-audit --no-fund
+
+      # One --no-save install only: separate --no-save installs prune each
+      # other (npm treats the earlier ones as extraneous).
+      - name: Install optional peers + client toolchain
+        run: >
+          npm install --no-audit --no-fund --no-save
+          @deepseek-ai/cordis@^4.0.1
+          @deepseek-ai/dsh-storage-domain@^0.1.0-rc.7
+          @deepseek-ai/dsh-settings@^0.1.0-rc.7
+          @deepseek-ai/schemastery@^3.18.1
+          @deepseek-ai/dsh-compaction@^0.1.0-rc.7
+          @deepseek-ai/dsh-compaction-basic@^0.1.0-rc.7
+          @deepseek-ai/dsh-llm@^0.1.0-rc.7
+          esbuild typescript @types/react @types/react-dom
+
+      - name: Host unit tests
+        run: npm test
+
+      - name: Recall & structure benchmark
+        run: npm run eval
+
+      - name: Rebuild client bundles from source
+        run: npm run build:client
+
+      - name: Bundle freshness gate — committed lib/ must match client/src
+        run: git diff --exit-code -- lib/ && echo "bundles fresh ✓"
+
+      - name: Client typecheck (strict tsc)
+        run: npm run typecheck
+
+      - name: Pack + install-in-temp import (published surface)
+        run: npm run prepublishOnly

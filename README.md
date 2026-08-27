@@ -2,6 +2,8 @@
 
 > **[English](README.md) · [中文](README.zh.md)**
 
+[![CI](https://github.com/skepsun/dsh-engram/actions/workflows/ci.yml/badge.svg)](https://github.com/skepsun/dsh-engram/actions/workflows/ci.yml)
+
 Minimalist long-term memory for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), distilled from the
 [symbolic-index](https://github.com/skepsun/symbolic-index) and [pi-esr](https://github.com/skepsun/pi-esr) ideas —
 with one goal: **save tokens**.
@@ -11,6 +13,16 @@ with one goal: **save tokens**.
   key files, repeated errors), plus an explicit `engram_store`. Nothing on the hot
   path calls a model, and pure plumbing — `git push` / `git stash` / silent
   commits — is deliberately never recorded (see *Auto-capture policy* below).
+  Every write is run through a deterministic **secret redactor** first — API
+  keys, JWTs, `Bearer` tokens, private keys, AWS/Stripe/Slack/GitHub tokens and
+  `key=value` secret shapes are replaced with `<REDACTED:…>` markers before the
+  dedup hash, the char cap, and storage, so sensitive text can never land on
+  disk. Failing **test runs** are recognized by pure patterns (`npm test`,
+  `node --test`, vitest/pytest/jest, failure lines) and captured as
+  `tags:["error","test"]` entries with a raised signal. DSH **goal-domain
+  integration**: a completed or blocked goal (`goal/change` session event)
+  auto-sediments as a `handoff`/`error` memory (`tag:goal`), so the outcome of
+  a goal survives its session (see the `GET /api/dsh-engram/goals` read surface).
 - **Symbolic index + progressive disclosure** — a compact `[ENGRAM]` block (default
   budget 700 chars ≈ 175 tokens; one line per memory) is injected at prompt
   assembly and **frozen per session**, keeping the request prefix byte-stable for
@@ -23,7 +35,18 @@ with one goal: **save tokens**.
   (repeat-failure revival: recency + hit climb toward promoteHits so the
   failure resurfaces instead of piling up), and on zero local hits falls back
   to DSH's own cross-session full-text index (`ctx.sessionQuery`, filtered by
-  cwd) instead of building a parallel SQLite index.
+  cwd) instead of building a parallel SQLite index; when the FTS fallback also
+  comes back empty and the query contains **CJK** characters (Chinese FTS5
+  tokenization), recall runs a bounded substring scan over the newest session
+  logs (zstd-decompressed, LRU-cached) and appends matched past sessions —
+  deterministic `# past sessions` lines, capped files and bytes.
+- **Memory-to-memory semantics** — `engram_store` accepts optional
+  `supersedes` / `contradicts` memory ids (validated against the same
+  workspace). A superseded ("stale truth") memory is demoted to the tail of
+  recall and **excluded from the `[ENGRAM]` block**, while the superseding
+  statement keeps the line; a contradicted memory stays ranked but is flagged
+  `· contradicted by <id>`. Old rows are never deleted — re-fetchable, just
+  honestly ranked.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of
@@ -275,15 +298,20 @@ npm run build:client
 
 | Tool | Purpose | Kind |
 |---|---|---|
-| `engram_store` | Explicitly store one memory (kind, tags, optional entity anchor) | write |
+| `engram_store` | Explicitly store one memory (kind, tags, optional entity anchor, optional supersedes/contradicts memory ids) | write |
 | `engram_recall` | Deterministic keyword recall over workspace memories; optional `search_sessions` FTS over past sessions | read |
 | `engram_detail` | Full record of one memory id (provenance, tags, hits) | read |
 | `esr_task` | Create a task entity (draft → active) | write |
 | `esr_close` | Close a task via the evidence protocol (artifact + evaluation + memory_ref) | write |
 | `esr_link` | Add a typed relation between two entities (mini graph) | write |
+| `esr_dep` | Add a dependency edge (blocks / relates-to / parent-of) between tasks | write |
+| `esr_claim` | Atomically claim a task (assignee + claimedAt, draft → active) | write |
+| `esr_unclaim` | Release a claimed task's assignee | write |
 | `esr_ready` | List claimable tasks (no open blocker, unclaimed) | read |
 | `esr_status` | Pull live ESR state + derived hints (`since_revision` short "unchanged" response) | read |
+| `esr_node` | Create/update an entity node (stable symbol) | write |
 | `esr_gc` | Run the memory GC for the workspace (`dry_run:true` previews) | write |
+| `esr_model` | Precomputed mental model of the workspace (`brief`/`full`, `max_chars`) | read |
 
 The `[ESR]` block is a frozen per-session snapshot and never auto-refreshes —
 call `esr_status` for the live truth.

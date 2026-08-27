@@ -2,6 +2,8 @@
 
 > **[中文](README.zh.md) · [English](README.md) · [已交付 UI 控件清单](FEATURES.zh.md)**
 
+[![CI](https://github.com/skepsun/dsh-engram/actions/workflows/ci.yml/badge.svg)](https://github.com/skepsun/dsh-engram/actions/workflows/ci.yml)
+
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 设计的极简长期记忆插件，融合了
 [symbolic-index](https://github.com/skepsun/symbolic-index) 与 [pi-esr](https://github.com/skepsun/pi-esr) 的思想——
 目标只有一个：**省 token**。
@@ -9,6 +11,12 @@
 - **零 LLM 摄入** — 纯模式匹配从工具结果自动捕获有意义的事件（带书面 `-m` 提交信息的 git 里程碑、
   关键文件编辑、反复出现的错误），另有显式 `engram_store`。热路径上没有任何模型调用，纯粹的操作
   ——`git push` / `git stash` / 无提交信息的 commit——刻意**从不记录**（见下方「自动捕获策略」）。
+  每条写入先过一道确定性**密钥脱敏器**——API key、JWT、`Bearer` token、私钥、AWS/Stripe/Slack/GitHub
+  token 与 `key=value` 形密钥一律替换为 `<REDACTED:…>` 标记，且在去重哈希 / 字符上限 / 落盘之前完成，
+  敏感内容永远进不了磁盘。**测试失败**用纯模式识别（`npm test` / `node --test` / vitest/pytest/jest
+  + 失败行）自动捕获为 `tags:["error","test"]`、信号上调。DSH **goal 域打通**：completed/blocked 的
+  goal（`goal/change` 会话事件）自动沉淀为 `handoff`/`error` 记忆（`tag:goal`），目标结局不随会话消散
+  （读取面见 `GET /api/dsh-engram/goals`）。
 - **符号索引 + 渐进披露** — 一个紧凑的 `[ENGRAM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
   组装提示词时注入，并**按会话冻结**，让请求前缀字节稳定以复用 KV 缓存。模型需要细节时用
   `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。召回对内存池做
@@ -16,7 +24,14 @@
   命中实体锚定的记忆时附带**实体邻域关系简表**（复用 esr_link：`node --rel--> node · conf%`）；
   与历史失败**高度同源**的新错误会**唤醒旧 error 记忆**（刷新 recency + 命中，向 promoteHits
   爬升直至重回索引，失败不重复堆积）；本地零命中时自动兜底到 **DSH 自带的跨会话全文索引**
-  （`ctx.sessionQuery`，按 cwd 过滤）——不另建 SQLite，完全复用宿主。
+  （`ctx.sessionQuery`，按 cwd 过滤）——不另建 SQLite，完全复用宿主。当 FTS 兜底也返回空、
+  且查询含 **CJK 中文**（FTS5 中文分词整段只算一个 token）时，召回会对最近若干会话日志做
+  有界的**子串扫描**（zstd 解压 + LRU 缓存，限文件数与字节），追加命中会话的确定性
+  `# past sessions` 行。
+- **记忆间语义（supersede/contradict）** — `engram_store` 可选收 `supersedes` / `contradicts`
+  记忆 id（同工作区校验）。被 supersede 的「过期真相」在召回里**降级到尾部**、并从 `[ENGRAM]`
+  块中**剔除**（新陈述占行）；被 contradicts 的记忆保留排序但标注 `· contradicted by <id>`。
+  旧行永不删除——可重取，只是排得诚实。
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
   摊在明面上，而不是让 agent 没有证据就宣布完成。可开 `verifyArtifact`（默认开）：非 URL 的
@@ -198,15 +213,20 @@ npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/
 
 | 工具 | 用途 | 类型 |
 |---|---|---|
-| `engram_store` | 显式存入一条记忆（kind、tags、可选实体锚点） | 写 |
+| `engram_store` | 显式存入一条记忆（kind、tags、可选实体锚点、可选 supersedes/contradicts 记忆 id） | 写 |
 | `engram_recall` | 工作区记忆的确定性关键词召回；可选 `search_sessions` 跨会话 FTS | 读 |
 | `engram_detail` | 一条记忆 id 的完整记录（来源、标签、命中数） | 读 |
 | `esr_task` | 创建任务实体（draft → active） | 写 |
 | `esr_close` | 按证据协议关闭任务（artifact + evaluation + memory_ref） | 写 |
 | `esr_link` | 在两个实体之间添加类型化关系（迷你图） | 写 |
+| `esr_dep` | 在任务间添加依赖边（blocks / relates-to / parent-of） | 写 |
+| `esr_claim` | 原子认领任务（assignee + claimedAt，draft → active） | 写 |
+| `esr_unclaim` | 释放已认领任务的 assignee | 写 |
 | `esr_ready` | 列出可认领任务（无 blocker、无人认领） | 读 |
 | `esr_status` | 拉取实时 ESR 状态 + 派生提示（`since_revision` 增量短响应） | 读 |
+| `esr_node` | 创建/更新实体节点（稳定符号） | 写 |
 | `esr_gc` | 运行本工作区的记忆 GC（`dry_run:true` 预览不落库） | 写 |
+| `esr_model` | 工作区预计算心智模型（`brief`/`full`，`max_chars`） | 读 |
 
 `[ESR]` 块是每会话冻结快照，绝不中途刷新——要最新状态调 `esr_status`。
 
