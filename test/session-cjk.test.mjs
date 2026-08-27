@@ -132,3 +132,18 @@ test("searchSessionsCJK returns [] for non-CJK queries, missing buckets and empt
   ]);
   assert.deepEqual(searchSessionsCJK({ cwd, query: "中间表示", root }), []); // no match
 });
+
+test("searchSessionsCJK redacts secrets from raw-log snippets", () => {
+  const root = tmpRoot();
+  const cwd = path.join(root, "redact");
+  const bucket = bucketFromCwd(cwd);
+  writeSession(root, bucket, "s1", [
+    '{"type":"session","cwd":"' + cwd + '"}',
+    '{"type":"tool/result","data":{"name":"x","output":"配置 API_KEY: superSecretZebra123 缓存命中"}}',
+  ]);
+  const hits = searchSessionsCJK({ cwd, query: "缓存", root, limit: 1 });
+  assert.equal(hits.length, 1);
+  assert.ok(!hits[0].snippet.includes("superSecretZebra123"), "raw secret never reaches the snippet");
+  assert.match(hits[0].snippet, /<REDACTED/);
+  assert.ok(hits[0].snippet.includes("缓存"), "matched CJK region is still visible");
+});

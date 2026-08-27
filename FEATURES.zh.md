@@ -257,6 +257,35 @@ esr_task 勾选徽标，拖拽/缩放/点选查关系明细），并跟随工作
   刷新 recency + 命中 +1；重复失败把它推向 `promoteHits` 门槛，最终在 `[ENGRAM]` 里重新冒头
   （projectmem「重复失败前预警」的零 LLM 版本）。只对 error 记忆生效，fact/decision 等不受影响。
 
+## 第二批核心增强（2026-08：CI / 脱敏 / 测试失败 / 记忆语义 / goal 打通）
+
+> 全部宿主侧（`lib/*.js`），纯规则 / 零 LLM / 确定性；宿主改动需 `dsh web` 重启一次生效。
+
+- **CI + 文档漂移修复**：新增 `.github/workflows/ci.yml`——push/PR 全链路
+  （`npm test` → `npm run eval` → `build:client` → **`git diff --exit-code -- lib/` 包一致性门** →
+  `typecheck` → `prepublishOnly` 打包+导入验证）；顺带修掉 lib 头注释与 README 的文档漂移
+  （"六工具"→"十四工具"、三表→四表）。
+- **PII/密钥脱敏（写入前确定性打码）**：`lib/redact.js`——私钥块、JWT、Bearer、
+  AWS/Stripe/Slack/GitHub token、`key=value` 密钥形状一律替换为 `<REDACTED:*>` 标记；
+  在**去重哈希 / 字符上限 / 落盘之前**执行，敏感内容永不进存储。**会话扫描片段同防线**：
+  `searchSessionsCJK` 的 snippet 来自原始 session 日志，返回前也过同一脱敏器（防密钥经
+  中文兜底路径溜进上下文）。`lib/usage.js` 统计路径已核查为纯计数、不面文本。
+- **测试失败捕获**：`lib/capture.js` 纯规则识别测试跑失败（`npm test` / `node --test` /
+  vitest/pytest/jest + 失败行）→ `kind:error` + `tags:[error,test]` + signal 0.35；
+  普通命令失败仍按 0.25 通用路径。
+- **记忆间语义（supersede / contradict）**：`engram_store` 可选 `supersedes` / `contradicts`
+  记忆 id（同工作区校验）。被 supersede 的「过期真相」召回**降级到尾**、`[ENGRAM]` 剔除；
+  被 contradicts 的记忆保留排序但标注 `· contradicted by <id>`。旧行永不删。
+- **DSH goal 域打通**：`lib/goal-capture.js` 监听宿主 `goal/change` 会话事件——completed →
+  `handoff`、blocked → `error`（tag `goal`）自动沉淀，事件处理完全抛错隔离；读取面
+  `GET /api/dsh-engram/goals`（tag=goal 记忆，默认 50 条）。
+- **中文 FTS 兜底**：`lib/session-cjk.js`——FTS5 `unicode61` 把中文整段当一个 token，
+  中文子串查询（如「中间表示」）命中不了「…的中间表示生成…」。兜底：CJK 查询且官方 FTS
+  零命中时，对最近会话日志做**有界子串扫描**（zstd 解压 + LRU 缓存，限 4 文件 / 24MB），
+  追加确定性 `# past sessions` 行。
+- **确定性修复**：`makeTriggerRecorder({ now })` 可注入时钟，修掉 `/triggerstats` 归因测试
+  对 1ms 墙钟的偶发依赖（此前 6 次复现 1 次失败）。
+
 ## 工程约定（复用时请遵守）
 
 - **无图表库**：图谱/仪表盘/圆环全部手写 SVG，`lib/client.js` 保持纯净（运行期只依赖 react 系）
@@ -269,6 +298,6 @@ esr_task 勾选徽标，拖拽/缩放/点选查关系明细），并跟随工作
 
 ## 验收口径
 
-- 每次改动后跑：`npm test`（宿主单测，当前 31/31）+ 各客户端无头套件
+- 每次改动后跑：`npm test`（宿主单测，当前 184）+ 各客户端无头套件
   （看板 21、注入预览 15、遥测 19、证据环 7、详情 22、dock-chip 11 —— 全绿）
 - 客户端改动依靠 client-hmr 即时生效；仅「注入预览」路由需重启

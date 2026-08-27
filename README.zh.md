@@ -31,7 +31,11 @@
 - **记忆间语义（supersede/contradict）** — `engram_store` 可选收 `supersedes` / `contradicts`
   记忆 id（同工作区校验）。被 supersede 的「过期真相」在召回里**降级到尾部**、并从 `[ENGRAM]`
   块中**剔除**（新陈述占行）；被 contradicts 的记忆保留排序但标注 `· contradicted by <id>`。
-  旧行永不删除——可重取，只是排得诚实。
+  旧行永不删除——可重取，只是排得诚实。可选 `autoSupersede` 配置（默认**关**）对"实体锚定 +
+  替换式更新（改用/不再/no longer/switched…）"自动打 supersedes；显式 `supersedes` 永远优先。
+- **失败→解法闭环（零 LLM）** — error 记忆带 `cmd:` 签名标签；同命令随后跑通时自动沉淀
+  `procedure` 记忆（`fixed: <cmd> — N earlier failing runs now succeed`），并把旧 error
+  行打上 `resolved`（不影响其排序），召回因此浮出解法而不是过期失败。
 - **ESR-lite 证据闭环** — `esr_task` / `esr_close` / `esr_link` 给任务一个 `draft → active → stable`
   生命周期，其中 `stable` 必须要有真实证据（`artifact` / `evaluation` / `memory_ref`），把"缺什么"
   摊在明面上，而不是让 agent 没有证据就宣布完成。可开 `verifyArtifact`（默认开）：非 URL 的

@@ -46,7 +46,14 @@ with one goal: **save tokens**.
   recall and **excluded from the `[ENGRAM]` block**, while the superseding
   statement keeps the line; a contradicted memory stays ranked but is flagged
   `· contradicted by <id>`. Old rows are never deleted — re-fetchable, just
-  honestly ranked.
+  honestly ranked. Opt-in `autoSupersede` config (default **off**) auto-marks
+  entity-anchored replacement updates ("改用 / no longer / switched…") as
+  superseding their matching older row; explicit `supersedes` always wins.
+- **Failure→fix closure (zero LLM)** — error memories carry a `cmd:` signature
+  tag; when that same command later succeeds, engram auto-sediments a
+  `procedure` memory (`fixed: <cmd> — N earlier failing runs now succeed`),
+  tags the earlier error rows `resolved` (never re-ranking them), and recall
+  then surfaces the fix instead of the stale failure.
 - **ESR-lite closure protocol** — `esr_task` / `esr_close` / `esr_link` give tasks
   a `draft → active → stable` lifecycle where `stable` requires real evidence
   (`artifact` / `evaluation` / `memory_ref`), surfacing closure gaps instead of

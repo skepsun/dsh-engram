@@ -13,6 +13,7 @@
  */
 
 import { openEngramDomain } from "../lib/store.js";
+import { makeCaptureHandler } from "../lib/capture.js";
 
 const WS = "/home/u/projs/dsh-engram";
 
@@ -142,6 +143,60 @@ async function runStructureBench(domain) {
   return out;
 }
 
+/**
+ * Semantic edge-case gate: the new capabilities must hold through the REAL
+ * store path, not just unit extracts.
+ *   supersedeRanking — a superseding statement ranks ABOVE its stale truth
+ *   redactionClean   — a secret-bearing memory stores zero raw secret bytes
+ *   fixClosure       — failed→passed run yields a procedure + resolved tag
+ */
+async function runSemanticBench(domain) {
+  const out = {};
+
+  // supersede: seed a stale statement and the newer replacement of the same
+  // entity; recall must rank the current statement above the stale one.
+  const stale = await domain.storeMemory(
+    { workspace: WS, kind: "fact", text: "the build tool is webpack with a heavy config", entity: "ent_tool", tags: ["build", "tool"], sessionId: "bench", seq: 901, signal: 0.6 },
+    CONFIG,
+  );
+  const current = await domain.storeMemory(
+    { workspace: WS, kind: "fact", text: "switched the build tool to vite; webpack config removed", entity: "ent_tool", tags: ["build", "tool"], sessionId: "bench", seq: 902, signal: 0.6, supersedes: stale.id },
+    CONFIG,
+  );
+  const ranked = domain.recall(WS, "webpack build tool", 200);
+  const iCur = ranked.findIndex((m) => m.id === current.id);
+  const iStale = ranked.findIndex((m) => m.id === stale.id);
+  const curIn = iCur !== -1 && iStale !== -1;
+  out.supersedeRanking = curIn && iCur < iStale ? 1 : 0;
+
+  // redaction: a raw secret shape must never survive the write path.
+  await domain.storeMemory(
+    { workspace: WS, kind: "fact", text: "prod access AWS \x41\x4B\x49\x41\x49\x4F\x53\x46\x4F\x44\x4E\x4E\x37\x45\x58\x41\x4D\x50\x4C\x45 with Bearer \x65\x79\x4A\x68\x62\x47\x63\x69\x4F\x69\x4A\x49\x55\x7A\x49\x31\x4E\x69\x49\x73\x49\x6E\x52\x35\x63\x43\x49\x36\x49\x6B\x70\x58\x56\x43\x4A\x39.secret", tags: ["secret-probe"], sessionId: "bench", seq: 903, signal: 0.6 },
+    CONFIG,
+  );
+  const probe = domain.listMemories(WS, 500).find((m) => (m.tags ?? []).includes("secret-probe"));
+  const raw = probe?.text ?? "";
+  out.redactionClean = raw.includes("\x41\x4B\x49\x41\x49\x4F\x53\x46\x4F\x44\x4E\x4E\x37\x45\x58\x41\x4D\x50\x4C\x45") || raw.includes("\x65\x79\x4A\x68\x62\x47\x63\x69\x4F\x69\x4A\x49\x55\x7A\x49\x31\x4E\x69\x49\x73\x49\x6E\x52\x35\x63\x43\x49\x36\x49\x6B\x70\x58\x56\x43\x4A\x39") ? 0 : 1;
+
+  // fix-closure: fail npm test, then pass it → procedure + resolved tag.
+  const handler = makeCaptureHandler(domain, CONFIG, { warn: () => {} });
+  handler(
+    { name: "bash", agent: { session: { id: "bench-fix", header: { cwd: WS }, events: { length: 1 } } }, arguments: { command: "npm test" } },
+    { isError: true, value: { stderr: "not ok 3 - recall ranks recency\n# fail 1" } },
+  );
+  await new Promise((r) => setTimeout(r, 30));
+  handler(
+    { name: "bash", agent: { session: { id: "bench-fix", header: { cwd: WS }, events: { length: 2 } } }, arguments: { command: "npm test" } },
+    { isError: false, value: { stdout: "pass 184\n# fail 0" } },
+  );
+  await new Promise((r) => setTimeout(r, 30));
+  const after = domain.listMemories(WS, 500);
+  const hasProcedure = after.some((m) => m.kind === "procedure" && /fixed: npm test/.test(m.text));
+  const closed = after.filter((m) => m.kind === "error" && /tests failed \(npm test\)/.test(m.text));
+  out.fixClosure = hasProcedure && closed.length > 0 && closed.every((m) => (m.tags ?? []).includes("resolved")) ? 1 : 0;
+  return out;
+}
+
 async function main() {
   const facility = fakeFacility();
   const domain = await openEngramDomain(facility);
@@ -157,6 +212,7 @@ async function main() {
 
   const recallRows = runRecallBench(domain);
   const structure = await runStructureBench(domain);
+  const semantic = await runSemanticBench(domain);
 
   const n = recallRows.length;
   const avg = (k) => recallRows.reduce((a, x) => a + x[k], 0) / n;
@@ -180,8 +236,14 @@ async function main() {
   console.log("exact-duplicate dedup rate:", structure.dedupeRate, "(1.0 means 3 stores of same text collapsed to 1)");
   console.log("entity-anchored coverage:", structure.entityAnchored.toFixed(3), "of", structure.totalMemories, "memories");
   console.log("nodes:", structure.nodes, "| links:", structure.links, "| dangling:", structure.danglingLinks);
+  console.log("");
+  console.log("-- semantic edge cases --");
+  console.log("supersede ranking (current above stale truth):", semantic.supersedeRanking ? "✓ 1" : "✗ 0");
+  console.log("redaction clean (no raw secret bytes on disk):", semantic.redactionClean ? "✓ 1" : "✗ 0");
+  console.log("failure→fix closure (procedure + resolved):", semantic.fixClosure ? "✓ 1" : "✗ 0");
 
-  const pass = avg("r") >= 0.5 && hit1 >= 0.5 && structure.dedupeRate === 1 && structure.danglingLinks === 0;
+  const pass = avg("r") >= 0.5 && hit1 >= 0.5 && structure.dedupeRate === 1 && structure.danglingLinks === 0
+    && semantic.supersedeRanking === 1 && semantic.redactionClean === 1 && semantic.fixClosure === 1;
   console.log("");
   console.log(pass ? "BENCH PASS ✓" : "BENCH LOOK (investigate below-threshold metrics)");
   await facility.close?.();
