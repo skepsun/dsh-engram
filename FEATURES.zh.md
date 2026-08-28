@@ -53,6 +53,15 @@ TodoPanel），把两套任务平面合并成一个控件：会话当前计划�
   仅影响 `esr_status` 派生）；`[ESR]` 前缀与静态方法论不受运行期状态影响。
 - ⚠️ 宿主侧改动，需 `dsh web` 重启一次生效（`/triggerstats` 与 `esr_status` 工具注册）。
 
+### 0a+. 会话结束 todo 自动沉淀（draft 兜底，`autoSinkTodosOnEnd` 默认开） — 宿主侧
+把「todo 随会话静默蒸发」的缺口补上：监听 `session/disposed`（会话拆解边界），从会话日志
+取**最后一次** `todo/write` 快照里的 pending 项，自动转为该工作区 **ESR draft** 任务——
+名称=todo 原文、描述「源自会话计划（会话结束自动沉淀）」、按已存在任务名去重（大小写不敏感、
+列表内重复只落一份）、受 `maxTasksPerWorkspace` 上限约束（含 draft 计数）。落 **draft** 而非
+active：不进 `[ESR]` active 行、零证据义务，仍需 `esr_claim` / `esr_task` 才推进为 active。
+去重/上限逻辑抽成纯函数可单测；开关进设置卡（「会话结束自动沉淀 todo」）与 profile patch。
+⚠️ 宿主侧改动，需 `dsh web` 重启一次生效。
+
 ### 0b. **关系卫生：建任务自带关系 + 依赖边一等公民入图（A + B）** — 宿主侧
 修复"只有节点没有关系"：`esr_task` 曾只建任务不建任何关系，且 `esr_dep` 的边只写进
 `tasks[].deps`（仅喂 blocker 计数），图谱只渲染 `esr_link` 表 → 依赖边在图里不可见。
@@ -243,7 +252,31 @@ esr_task 勾选徽标，拖拽/缩放/点选查关系明细），并跟随工作
   （`#记忆id` / `tsk_*` / `ent_*` / `file_path`），输出 `engram_detail(id)` / `engram_recall(query)`
   / `[ESR]` 显式重取指针；无锚轮次才走 scoped LLM 叙事（`gcNarrative` 默认开，可关成纯机械）。
   六条 GC 约束齐（active 工作集复述、指针显式、无锚不驱逐）；任何错误回退默认压缩、永不破坏 compact；
-  `gcReplacesCompaction:false` 不加载、卸载/reload 自动还回默认引擎。与记忆面板 GC 正交。
+  `gcReplacesCompaction:false` 挂裸 `BasicCompactionEngine`（`compaction` 服务永不缺席）、
+  卸载/reload 自动还回默认引擎。与记忆面板 GC 正交。
+  **入口已接实**（此前 host 平面只 import 未调用，属死装配——本次修复）：`lib/index.js` 的
+  `ctx.effect` 直接 `mountCompactionEngine(...)` 注册服务，headless/TUI/base 默认即开（启动日志
+  `engram context-gc: compaction = Context GC …`）；web 面**全自动、覆盖全部预设**——启动时
+  `autoWebCompaction`（默认开）把每个仍处于 stock 布局的 agent 预设（默认 + 整张 roster：
+  shipped `standard`/`code`/`cordis` + `~/.dsh/.agent-presets` 用户预设）的 `compaction` 组里
+  `compaction-basic` 行换成 `dsh-engram/compaction`（幂等、create-only 备份、写后校验、自定义/无
+  compaction 布局绝不碰、失败只 warn 回退默认摘要），等价手动 CLI（随 npm 包发布）：
+  `npx dsh-engram status|doctor|enable|revert`（卸载 engram 前先 revert，避免预设悬空引用）。
+  启动日志每接管一个预设一行 `engram web-provision: wired Context GC into preset …` 即该预设已接管；
+  插件启动时把权威状态写到 `$DSH_HOME/engram/context-gc.status.json`，供
+  `npx dsh-engram status` / `doctor` 与 web 看板头部状态徽标（overview API 的 `compaction` 字段）读取。
+  写进预设行的引擎配置来自设置卡 `gcReplacesCompaction`/`gcNarrative`——改配置 → 下次启动自动刷新
+  已接管的行，web 平面与设置卡真实联动（配置不再硬编码）。
+  **收缩闸门自洽（本次修复的关键）**：harness 的 `summarizeCompaction` 拒绝任何不比被驱逐片段更小的
+  checkpoint（`summary is not smaller than the shadowed content`）并整事务回滚——旧实现指针/叙事体
+  太大，导致 web 预设接管后 `compaction/start` 涨而 `compaction/summary` 恒为 0，上下文永不缩小、
+  最终模型侧溢出。修复：`estimateShadowedTokens`/`estimateFramedTokens` 用 host `tokenMeter` 复刻
+  harness 的 framing 估算（3-block 布局，实测与 harness 逐 token 一致），`fitSummaryToSpan` 按
+  `shadowed - margin` 预算二分裁剪摘要尾部（指针头/工作集保留，细节仍在会话日志可重取）；mechanical
+  路径同时补上 `provider`/`model`/`maxTokens` 落盘（否则 `compaction/summary` 因 undefined 被
+  session 判 non-JSON-serializable 拒收，手动 `/compact` 报 `manual compaction did not commit
+  cleanly`）。修复后复现：window=200 压力场景 summary 0 → 6/7 提交。完整用法见
+  `docs/CONTEXT-GC-GUIDE.zh.md`（从 0 开始的使用教程）。
 - **证据硬核化（verifyArtifact）**：`esr_close` 的非 URL artifact 会按工作区（= DSH 提供的会话
   cwd）解析并在磁盘上实存校验；不存在则任务保持 ACTIVE 并给出原因（`force:true` 跳过磁盘校验，
   三种证据门仍必填）。工具与网页表单共享 `store.evidenceGate` 单一证据门，口径不漂移。设置里

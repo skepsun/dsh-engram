@@ -14,6 +14,12 @@
 # dsh-engram from the profile re-arms the base row automatically.
 # NOTE: with `gcReplacesCompaction:false`, dsh-engram still mounts a plain
 # BasicCompactionEngine, so compaction never goes away while it is installed.
+# The host-plane provider is mounted by `lib/index.js` (`mountCompactionEngine`);
+# the WEB plane is auto-wired at boot (`autoWebCompaction`, default on): the
+# plugin swaps the `compaction-basic` row for `dsh-engram/compaction` in every
+# stock-layout preset — default + full roster (shipped + user roots; idempotent,
+# backed up, never touches a custom or no-compaction preset; manual CLI
+# `npm run web-compaction:status|enable|revert`).
 - id: compaction-basic
   disabled: true
 

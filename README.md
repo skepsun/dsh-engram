@@ -86,6 +86,18 @@ with one goal: **save tokens**.
   The `tools/result` recorder feeds the actionables' data sources; P4
   conversion metering stays (`#suggest-*` tags + 10-minute attribution +
   `GET /api/dsh-engram/triggerstats`). Pure rules, zero LLM.
+- **Session-end todo auto-sink (draft safety net, `autoSinkTodosOnEnd` default
+  on)** — during a session the native todo stays cheap, per-session working
+  memory that dies with the session. But when a session closes at its teardown
+  edge (`session/disposed`) while its plan still has pending todos, they are
+  **auto-landed as ESR `draft` tasks** (name = the todo text, description
+  marked 「源自会话计划」, deduped against existing task names, capped by
+  `maxTasksPerWorkspace`), so the plan never silently evaporates. Sinking to
+  **draft** — not active — keeps them out of the `[ESR]` active rows and creates
+  no evidence obligation; an explicit `esr_claim` / `esr_task` step is still
+  what promotes a draft to active. The "nothing auto-written during the
+  session" trade-off is unchanged; only the end-of-session data-loss gap is
+  closed. Disable via profile patch or the settings card.
 - **Memory GC (pi-esr constraints)** — a scheduled, mechanical, archive-only
   sweep: TTL-expired memories are archived, over-cap workspaces evict the
   lowest-value entries, stable tasks past their retention window leave the
@@ -366,24 +378,74 @@ Triggers follow DSH's own compaction timing (step pressure / context-overflow /
 `/compact`); the lock, replay validation, tool-call/result pairing and token
 pricing are all reused from the basic engine. Any error falls back to the
 default compressor — compaction is never broken; with `gcReplacesCompaction:
-false` (or a host without `dsh-compaction-basic`) the engine never mounts.
-Mounting registers the `compaction` service on the plugin's fiber, so
-unloading/reloading engram restores the default engine.
+false` (or a host without `dsh-compaction-basic`) a bare `BasicCompactionEngine`
+is mounted instead, so the `compaction` service never disappears while
+dsh-engram is installed. Mounting registers the `compaction` service on the
+plugin's fiber, so unloading/reloading engram restores the default engine.
 
-**Mounting semantics (verified against cordis source)**: cordis refuses a second
-provider of the same service in the same realm (`provide()` throws
-`service "compaction" has been registered` — not "last write wins"). Hence:
+> **Shrink gate**: the harness refuses any checkpoint that is not strictly
+> smaller than the evicted span (`summary is not smaller than the shadowed
+> content`) and rolls the compaction back — otherwise the context never shrinks
+> and the session eventually hits the model-side overflow. Context GC
+> self-predicts that gate: it mirrors the harness framing with the host
+> `tokenMeter` (verified token-for-token identical) and truncates the
+> pointer/narrative body to the evicted span's token budget (the pointer head
+> and working set survive; the trimmed tail stays recoverable in the session
+> log), so compactions actually commit. Full from-scratch usage:
+> [`docs/CONTEXT-GC-GUIDE.zh.md`](docs/CONTEXT-GC-GUIDE.zh.md).
 
-- **Host plane**: the plugin patch disables the base `compaction-basic` row
-  (re-armed automatically when engram is uninstalled); dsh-engram is then the
-  sole `compaction` provider, mounting a bare `BasicCompactionEngine` under
-  `gcReplacesCompaction:false` so the service never disappears. Headless / TUI /
-  base-style profiles work out of the box.
-- **Preset plane (web profile)**: web keeps compaction inside each agent
-  preset's isolated realm (the shipped `standard` preset mounts its own
-  `compaction-basic`), unreachable from a host-plane row. Swap that row for the
-  mountable entry dsh-engram ships (`dsh-engram/compaction`, package subpath
-  export) to activate per session:
+#### Where it is enabled (the entry point)
+
+Assembly happens on **two planes** — and web is now fully automatic, zero config:
+
+- **Host plane (headless / TUI / base profiles) — on by default, zero config**:
+  the main plugin (`lib/index.js`) mounts the engine inside `ctx.effect` via
+  `mountCompactionEngine(ctx, resolved, { readWorkspace }) → new Engine()`,
+  registering the `compaction` service on its own fiber; the plugin patch
+  disables the base `compaction-basic` row, making engram the sole host-plane
+  provider. `gcReplacesCompaction: true` (default) → `ContextGcEngine`;
+  `false` → a bare `BasicCompactionEngine`. Tune via profile patch
+  (`config: { gcReplacesCompaction: false }`) or the settings card's
+  `gcNarrative` knob (narrative off = fully mechanical).
+- **Preset plane (web profile) — fully automatic, zero config, covers every
+  preset**: web keeps compaction inside each agent preset's isolated realm
+  (the shipped presets mount their own `compaction-basic`), unreachable from a
+  host-plane row — and unreachable from a profile patch too (`mountPreset`
+  builds its `Include.Config` with no patches; verified against the harness
+  source). So on boot, once the `agentPresets` service is ready, the plugin
+  **auto-edits every preset that still has the stock layout** — the default
+  preset plus the whole roster (shipped root + `~/.dsh/.agent-presets` user
+  root: `standard`, `code`, `cordis`, and your own presets): it swaps the
+  `compaction-basic` row inside the `compaction` group for
+  `dsh-engram/compaction`. That auto-wiring is:
+  - **on by default** (`autoWebCompaction: true`, toggle in the settings card's
+    memory-GC section), idempotent — an already-wired preset is left alone;
+    **what "off" means**: the plugin stops auto-wiring on later boots (the
+    headless/TUI/base host plane is unaffected) — it does NOT un-wire presets
+    that were already wired; use `npm run web-compaction:revert` for that;
+  - **per-preset**: only stock-layout presets are touched — a preset with a
+    custom compaction group, or none at all (e.g. the shipped `minimal`
+    preset), is never written, only logged;
+  - **backed up + validated**: a create-only `agent.cordis.yml.engram.bak`
+    holds each original next to its file, every result is re-read and verified
+    after writing, and any doubt rolls that file back; a failure only warns and
+    that session keeps DSH's default summarizer — the host plane is never
+    affected.
+  - **config actually propagates**: the engine config written into each row
+    comes from the live settings (`gcReplacesCompaction` / `gcNarrative`) — with
+    "already wired but with a different config" treated as a refresh, so
+    changing the settings knobs re-provisions the web rows on the next boot
+    instead of being silently ignored.
+  - A fully equivalent manual CLI, shipped in the npm package
+    (scans both the shipped and the user root; `--file <path>` targets one):
+    ```bash
+    npx dsh-engram status     # stock = untouched · wired = active · custom = hands-off
+    npx dsh-engram doctor     # status + ranked next steps for every gap found
+    npx dsh-engram enable     # same as the boot-time auto-wiring (usually a no-op)
+    npx dsh-engram revert     # restore the stock row everywhere — run BEFORE uninstalling
+    ```
+    (in the repo, `npm run web-compaction:*` is an alias of the same CLI.)
+    Either way the `compaction` group becomes:
   ```yaml
   - id: compaction
     name: cordis:group
@@ -395,14 +457,51 @@ provider of the same service in the same realm (`provide()` throws
       - id: engram-compaction       # replaces the original compaction-basic
         name: dsh-engram/compaction
         config:
-          gcReplacesCompaction: true   # optional; false = default LLM summary for this session
-          gcNarrative: true
+          gcReplacesCompaction: true   # from settings; false = default LLM summary for this session
+          gcNarrative: true            # from settings; false = fully mechanical
       - id: command-compact
         name: '@deepseek-ai/dsh-command-compact'
       - id: tool-result-pruner
         name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
         # keep the original config
   ```
+  ⚠️ **Uninstall = revert first**: once a preset references
+  `dsh-engram/compaction`, removing dsh-engram leaves every such row dangling
+  and web sessions hang on load — so run `npx dsh-engram revert`
+  (restores every preset) BEFORE uninstalling. A harness upgrade that ships a
+  fresh standard preset overwrites the swap and self-heals the dangling
+  reference.
+
+#### First impressions after an npm install (perceive / guide / configure)
+
+- **Automatic**: install into a profile and boot once — the host plane is taken
+  over by `mountCompactionEngine`, and the web plane by `autoWebCompaction`
+  (default on) rewriting every stock preset at boot. **Zero manual setup.**
+- **Perceivable**: at boot the plugin writes an authoritative snapshot to
+  `$DSH_HOME/engram/context-gc.status.json` (`host` plane mode + the per-preset
+  `web` results + effective config). At any time run `npx dsh-engram status` or
+  `npx dsh-engram doctor`; the web memory board (ESR kanban) also shows a
+  header chip ("Context GC·主机 ·N 预设") fed by the overview API. Two startup
+  log lines confirm it too: `engram context-gc: compaction = Context GC …` and
+  `engram web-provision: wired Context GC into preset …`.
+- **Configurable**: one settings card (memory-GC section) governs everything:
+  `autoWebCompaction` (web auto-wiring on/off), `gcReplacesCompaction`
+  (Context GC vs default summarizer), `gcNarrative` (narrative safety net).
+  Changes take effect after restarting `dsh web`, and the web rows are
+  refreshed to match automatically.
+
+**Verify it took**: after restarting `dsh web` (or the profile) —
+- host plane (headless/TUI/base): the startup log shows
+`engram context-gc: compaction = Context GC (mechanical eviction + re-fetch pointers)`;
+- web plane: the log shows one line per wired preset —
+`engram web-provision: wired Context GC into preset "standard" (…); restart dsh web so sessions pick it up`,
+or `npx dsh-engram status` reports `wired` for each; sessions composed
+from ANY preset then compact via mechanical eviction + re-fetch pointers.
+A line like `… keeping the existing compaction service` means another provider
+already owns `compaction` in that realm (the swap didn't take); `web-provision … skipped (custom)`
+means that preset was customized (or has no compaction group) and was left untouched;
+`dsh-compaction-basic unavailable` means the backend is missing and everything
+falls back to the default compressor.
 
 ## Auto-capture policy
 

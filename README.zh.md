@@ -55,6 +55,13 @@
   **拉取**：`esr_status`（全量视图 + `since_revision` 增量短响应 + 派生 actionables）。
   recorder 由 `tools/result` 订阅喂入（actionables 的数据源）；P4 转化度量照常（`#suggest-*` 标记 +
   10 分钟归因 + `GET /api/dsh-engram/triggerstats`）。纯规则、零 LLM。
+- **会话结束 todo 自动沉淀（draft 兜底，`autoSinkTodosOnEnd` 默认开）** — 会话内 todo 仍是
+  轻量、随会话而逝的"工作记忆"；但当会话在其**拆解边界**（`session/disposed`）关闭时仍挂着 pending
+  todo，这些待办会**自动转为该工作区的 ESR draft 任务**（名称=todo 原文、描述「源自会话计划」、
+  按已存在任务名去重、受 `maxTasksPerWorkspace` 上限约束），计划从此不静默蒸发。落到 **draft**
+  而非 active：不占 `[ESR]` 的 active 行、不产生证据义务，仍需刻意的 `esr_claim` / `esr_task`
+  推进才变 active——「进行中默认不写」的取舍不变，只把「收尾丢数据」的缺口补上。可关（profile
+  patch 或设置卡）。
 - **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
   stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
   永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。
@@ -267,15 +274,53 @@ BasicCompactionEngine` 只重写唯一的 `summarize()` 钩子，把摘要正文
 tool-call/result 配对、token 定价全部复用基本引擎。任何错误 → 回退默认压缩，**永不破坏 compact**。
 装配即注册 `compaction` 服务，卸载/reload engram 自动还回默认引擎。
 
-**装配语义（已按 cordis 源码验证）**：cordis 拒绝同域第二个同名 provider（`provide()` 抛
-`service "compaction" has been registered`，不是「后注册 wins」）。因此：
+> **收缩闸门（shrink gate）**：harness 拒绝任何不比被驱逐片段更小的 checkpoint（`summary is not
+> smaller than the shadowed content`），否则压缩回滚、上下文永不缩小、最终触发模型侧溢出。Context GC
+> 据此**自预测闸门**：用 host `tokenMeter` 复刻 harness 的 framing 估算（实测逐 token 一致），把指针
+> 摘要/叙事体按被驱逐 span 的 token 预算动态**裁剪尾部**（指针头与工作集保留，细节仍在会话日志可
+> 重取），保证 checkpoint 严格缩得更小、压缩真正提交——不出现"start 涨、summary 不涨"的假接管。
+> 完整用法见 [`docs/CONTEXT-GC-GUIDE.zh.md`](docs/CONTEXT-GC-GUIDE.zh.md)（从 0 开始的使用教程）。
 
-- **host 平面**：插件 patch 直接 `disable` 基座 `compaction-basic` 行（卸载 engram 自动还原），由
-  dsh-engram 独占 `compaction`；`gcReplacesCompaction:false` 时仍挂裸 `BasicCompactionEngine`，
-  服务永不缺席。headless / TUI / base 型 profile 开箱即用。
-- **preset 平面（web profile）**：web 面把 compaction 放在 agent preset 的 isolate realm（`standard`
-  预设自挂 `compaction-basic`），host 条目进不去。把 preset `compaction` 组里的 `compaction-basic`
-  行换成 dsh-engram 提供的可挂载条目即可按 session 生效：
+#### 启用入口（这一节就是答案：该功能开在哪）
+
+Context GC 的装配在**两个平面**——web 现在**全部自动**，零配置：
+
+- **host 平面（headless / TUI / base 型 profile）——开箱即用，无需任何配置**：
+  主插件 `lib/index.js` 在 `ctx.effect` 里直接
+  `mountCompactionEngine(ctx, resolved, { readWorkspace }) → new Engine()` 注册 `compaction` 服务；
+  配合插件 patch 禁用基座 `compaction-basic` 行，engram 即为该平面唯一 provider。
+  - `gcReplacesCompaction: true`（**默认**）→ `ContextGcEngine`（机械驱逐 + 重取指针）；
+  - `gcReplacesCompaction: false` → 挂裸 `BasicCompactionEngine`（退化为 DSH 默认 LLM 摘要），
+    **`compaction` 服务永不缺席**。
+  - 关闭/开启：profile patch 里给 engram 行加 `config: { gcReplacesCompaction: false }`，或设置卡
+    「记忆 GC」区的 `gcNarrative` 关掉叙事。
+- **preset 平面（web profile）——全自动，零配置，覆盖全部预设**：web 面把 compaction 放在 agent
+  preset 的 isolate realm（shipped 预设自挂 `compaction-basic`），host 条目进不去、profile patch 也
+  够不到预设文件（`mountPreset` 的 Include 不带 patches——已对源码核实）。所以插件在启动时
+  （`agentPresets` 服务就绪后）**自动改写每个仍处于出厂 stock 布局的预设**——默认预设 + 整张 roster
+  （shipped 根 + `~/.dsh/.agent-presets` 用户根，`standard`/`code`/`cordis` 和你自己的预设都覆盖）：
+  把 `compaction` 组里的 `compaction-basic` 行换成 `dsh-engram/compaction`。这一自动装配是：
+  - **默认开**（`autoWebCompaction: true`，设置卡「记忆 GC」可关），幂等——已替换则跳过；
+    **关掉的含义**：只是在之后的启动时不再自动接管（headless/TUI/base 的 host 平面不受影响）——
+    它**不会**还原之前已接管的预设，要还原用 `npm run web-compaction:revert`；
+  - **逐预设判定，只碰 stock 布局**——用户自定义过 compaction 组的预设，以及根本没有 compaction 组的
+    预设（如 shipped `minimal`），一律不写、只记日志；
+  - **带备份 + 严格校验**：每个文件写前在旁边留 `agent.cordis.yml.engram.bak`（create-only，保留首次
+    原件），写后重读校验，任何一步可疑即回滚该文件；改写失败只 warn，该会话仍用 DSH 默认摘要，
+    **永不影响宿主**。
+  - **配置真实传导**：写进预设行的引擎配置来自设置卡/配置里的 `gcReplacesCompaction` 与
+    `gcNarrative`——改了这两个开关，下次启动会自动把已接管的行刷新成新配置（幂等重写），
+    所以**设置卡对 web 平面同样生效**，不再硬编码 true/true。
+  - 手动的完全等价物（预览 / 审计 / 卸载前回归，随 npm 包发布的 CLI，默认扫 shipped + 用户两个根、
+    可 `--file` 指定单个）：
+    ```bash
+    npx dsh-engram status     # stock → 未动；wired → 已接管；custom → 不碰
+    npx dsh-engram doctor     # status + 按缺口排序的下一步建议
+    npx dsh-engram enable     # 等价于启动时自动装配（通常 no-op）
+    npx dsh-engram revert     # 还原全部预设的 stock 行（卸载 dsh-engram 前先跑这个）
+    ```
+    （仓库内 `npm run web-compaction:*` 是同一 CLI 的别名。）
+    替换后的 `compaction` 组形如：
   ```yaml
   - id: compaction
     name: cordis:group
@@ -287,14 +332,40 @@ tool-call/result 配对、token 定价全部复用基本引擎。任何错误 �
       - id: engram-compaction       # ← 替换原 compaction-basic
         name: dsh-engram/compaction
         config:
-          gcReplacesCompaction: true   # 可选；false=该 session 用默认 LLM 摘要
-          gcNarrative: true
+          gcReplacesCompaction: true   # 来自设置；false=该 session 用默认 LLM 摘要
+          gcNarrative: true            # 来自设置；false=纯机械无 LLM
       - id: command-compact
         name: '@deepseek-ai/dsh-command-compact'
       - id: tool-result-pruner
         name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
         # 原有配置保留
   ```
+  ⚠️ **卸载前先 revert**：预设引用 `dsh-engram/compaction` 后，卸载 dsh-engram 会让该行悬空、
+  web 会话挂 loading。所以**卸载 engram 前**先 `npx dsh-engram revert`（还原全部预设，
+  或逐个恢复各自的 `.engram.bak`）。harness 大版本升级会覆盖 shipped 预设，悬空引用随之自愈。
+
+#### 从 npm 安装后的第一印象（可感知 / 易引导 / 易配置）
+
+- **自动**：装进 profile 后启动一次即可——host 平面由 `mountCompactionEngine` 直接接管；web 平面
+  由 `autoWebCompaction`（默认开）在启动时自动改写全部 stock 预设。**无需任何手动配置。**
+- **可感知**：插件启动时把权威状态写到 `$DSH_HOME/engram/context-gc.status.json`
+  （`host` 平面模式 + `web` 平面每个预设的接管结果 + 生效配置）。随时
+  `npx dsh-engram status` 或 `npx dsh-engram doctor` 查看；web 记忆看板（ESR 任务看板）头部也有
+  一枚状态徽标（"Context GC·主机 ·N 预设"，来自 overview API）。启动日志也有两行关键确认：
+  `engram context-gc: compaction = Context GC …` 与 `engram web-provision: wired Context GC into preset …`。
+- **易配置**：一个设置卡（「记忆 GC」区）管全部：`autoWebCompaction`（web 自动接管开关）、
+  `gcReplacesCompaction`（用 Context GC 还是回退默认摘要）、`gcNarrative`（叙事兜底开关）——
+  改动后 `dsh web` 重启生效，web 预设行会被自动刷新成新配置。
+
+**验证是否生效**：`dsh web`（或对应 profile）重启后——
+- host 平面（headless/TUI/base）：启动日志出现
+  `engram context-gc: compaction = Context GC (mechanical eviction + re-fetch pointers)`；
+- web 平面：日志出现
+  `engram web-provision: wired Context GC into preset "standard" (…); restart dsh web so sessions pick it up`
+  （每个被接管的预设一行）；或 `npx dsh-engram status` 显示 `wired`；任意预设的会话内
+  `command-compact`/压力触发即走机械驱逐 + 重取指针。
+- （若见 `… keeping the existing compaction service` 说明同域已有 provider、未替换成功；`web-provision … skipped (custom)`
+  说明某预设是自定义/无 compaction 布局、未被触碰；`dsh-compaction-basic unavailable` 说明环境缺依赖，自动回退默认压缩。）
 
 ## 自动捕获策略
 

@@ -43,6 +43,9 @@ export interface EngramConfigValue {
   verifyArtifact?: boolean;
   /** 实体锚定 + 替换式更新自动把旧记忆标为 superseded（默认关，启发式）。 */
   autoSupersede?: boolean;
+  /** 会话结束时把仍 pending 的 todo 自动沉淀为 ESR draft（默认开）。 */
+  autoSinkTodosOnEnd?: boolean;
+  autoWebCompaction?: boolean;
   /** Hostnames allowed past the /api/dsh-engram loopback fence (tunnel hosts). */
   trustedHosts?: string[];
 }
@@ -112,6 +115,8 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
       { key: "gcNarrative", label: "Context GC 叙事兜底", hint: "自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）", kind: "bool" },
       { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
       { key: "verifyArtifact", label: "校验 artifact 存在", hint: "esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过", kind: "bool" },
+      { key: "autoSinkTodosOnEnd", label: "会话结束自动沉淀 todo", hint: "会话结束时仍 pending 的 todo 自动转成 ESR draft（按名去重、受任务上限约束）；关掉=随会话弃去", kind: "bool" },
+    { key: "autoWebCompaction", label: "web 面自动启用 Context GC", hint: "启动时把全部 stock 布局的 agent 预设（shipped + 自定义根）的 compaction 组自动换成 dsh-engram/compaction；关掉=不再自动接管（已接管的需 web-compaction:revert 还原）", kind: "bool" },
     ],
   },
   {

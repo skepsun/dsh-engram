@@ -123,6 +123,22 @@ export interface GcStats {
   removedLinks: number;
 }
 
+/** Context GC plane status (see lib/status.js + lib/api.js overview). */
+export interface CompactionPresetStatus {
+  presetId: string;
+  path: string;
+  action: "swapped" | "already" | "skipped" | "failed";
+  reason?: string;
+}
+
+export interface CompactionStatus {
+  host: "context-gc" | "default" | "unavailable" | "unknown" | "pending";
+  web: {
+    action: string;
+    presets: CompactionPresetStatus[];
+  };
+}
+
 export interface GcItem {
   id: string;
   workspace: string;
@@ -182,6 +198,7 @@ export interface EngramOverview {
   indexes: Record<string, IndexCost>;
   captures: { total: number; git: number; file: number; error: number };
   gc: GcStats;
+  compaction: CompactionStatus;
   config: EngramConfig;
 }
 

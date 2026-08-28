@@ -15,13 +15,13 @@ import type { CSSProperties } from "react";
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramGraph } from "./EngramGraph";
-import type { EntityRecord, LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
+import type { CompactionStatus, EntityRecord, LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
 import { blockedBy, buildTasksMarkdown, fmtDateShort, POLL_MS, shortAgent, shortId, taskGaps } from "./esrModel";
 // EngramBoardMount re-exports this for consumers; keep the board as a stable facade.
 export { buildTasksMarkdown } from "./esrModel";
 
 export interface EngramBoardApi {
-  overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> }>;
+  overview(): Promise<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }>; compaction?: CompactionStatus }>;
   tasks(workspace: string, includeStable?: boolean): Promise<{ items: TaskRecord[] }>;
   links(workspace: string): Promise<{ items: LinkRecord[] }>;
   nodes(workspace: string): Promise<{ items: EntityRecord[] }>;
@@ -62,9 +62,35 @@ const TREND_LABEL: Record<string, string> = {
   stale: "陈旧",
 };
 
+/**
+ * Header chip: where Context GC stands right now. Host plane = the compaction
+ * service this process runs under; web plane = how many agent presets carry
+ * the engram row. Built purely from the overview snapshot (no extra fetch).
+ */
+function ContextGcChip({ compaction }: { compaction?: CompactionStatus }) {
+  const host = compaction?.host ?? "unknown";
+  const hostLabel =
+    host === "context-gc" ? "Context GC·主机" : host === "default" ? "默认摘要" : host === "unavailable" ? "GC 不可用" : "GC 状态…";
+  const wired = (compaction?.web?.presets ?? []).filter((p) => p.action === "swapped" || p.action === "already").length;
+  const webLabel = wired > 0 ? `·${wired} 预设` : "";
+  const color = host === "context-gc"
+    ? "var(--dsw-alias-success-strong, #059669)"
+    : host === "default" || host === "unavailable"
+      ? "var(--dsw-alias-label-secondary, var(--dsh-color-muted, #6b7280))"
+      : "var(--dsw-alias-label-tertiary, #9ca3af)";
+  return (
+    <span
+      title={`host 平面：${host}\nweb 平面：${compaction?.web?.action ?? "?"}（${wired} 个预设已接管）\n关掉自动装配见设置卡「web 面自动启用 Context GC」；还原用 npx dsh-engram revert`}
+      style={{ fontSize: 11, fontWeight: 600, color, border: `1px solid ${color}55`, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}
+    >
+      {hostLabel}{webLabel}
+    </span>
+  );
+}
+
 export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
   const { vars } = useEngramTheme();
-  const [overview, setOverview] = useState<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }> } | null>(null);
+  const [overview, setOverview] = useState<{ workspaces: Record<string, { memories: number; tasks: number; links: number; nodes?: number }>; compaction?: CompactionStatus } | null>(null);
   const [tasksByWs, setTasksByWs] = useState<Record<string, TaskRecord[]>>({});
   const [nodesByWs, setNodesByWs] = useState<Record<string, EntityRecord[]>>({});
   const [linksByWs, setLinksByWs] = useState<Record<string, LinkRecord[]>>({});
@@ -311,6 +337,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
           <span style={hb.title}>ESR 任务看板</span>
           <span style={hb.sub}>draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门</span>
           <span style={hb.legendChip}>仅 ESR · 会话内 todo 见输入框上方任务条</span>
+          <ContextGcChip compaction={overview?.compaction} />
           <span style={hb.seg}>
             <button type="button" style={viewMode === "board" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("board")} title="四列任务看板">看板</button>
             <button type="button" style={viewMode === "graph" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("graph")} title="实体关系图谱（esr_node / esr_link）">图谱</button>

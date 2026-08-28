@@ -21,8 +21,12 @@ import {
   buildContextGcSummary,
   serializeMessages,
   summarizeUnprovenanced,
+  estimateShadowedTokens,
+  estimateFramedTokens,
+  fitSummaryToSpan,
   loadContextGcEngine,
   loadCompactionEngine,
+  mountCompactionEngine,
 } from "../lib/context-gc.js";
 import { openEngramDomain } from "../lib/store.js";
 import {
@@ -411,12 +415,13 @@ test("compaction entry: preset-plane plugin shape (name/inject/apply)", () => {
   assert.equal(typeof compactionEntryApply, "function");
 });
 
-function capturingCtx() {
+function capturingCtx(overrides = {}) {
   // object spread materializes getters, so hold the captured engine in a
   // closure and expose a reader method instead.
   const holder = {};
   const ctx = fakeCtx({
     reflect: { provide(name, value) { holder.engine = value; } },
+    ...overrides,
   });
   ctx.engine = () => holder.engine;
   return ctx;
@@ -438,4 +443,148 @@ test("compaction entry: apply in context-gc mode mounts the ContextGcEngine over
   const engine = ctx.engine();
   assert.ok(engine, "apply must construct + provide a compaction engine");
   assert.equal(typeof engine._contextGc, "function", "context-gc mode carries the mechanical eviction override");
+});
+
+// ── mountCompactionEngine — the SHARED entry (host plane + preset plane) ────
+
+test("mount: context-gc mode mounts the mechanical-ejection engine", async () => {
+  const ctx = capturingCtx();
+  const Engine = await mountCompactionEngine(ctx, { gcReplacesCompaction: true, gcNarrative: false }, {});
+  if (Engine === null) {
+    // dsh-compaction-basic not linked — the guarantee is a silent fallback.
+    return;
+  }
+  assert.ok(Engine, "returns the engine class");
+  const engine = ctx.engine();
+  assert.ok(engine, "constructed + provided the compaction service");
+  assert.equal(typeof engine._contextGc, "function", "Context GC override is mounted");
+  assert.equal(ctx._warned, undefined, "no warning on a clean mount");
+});
+
+test("mount: gcReplacesCompaction:false mounts the bare default summarizer", async () => {
+  const ctx = capturingCtx();
+  const Engine = await mountCompactionEngine(ctx, { gcReplacesCompaction: false, gcNarrative: false }, {});
+  if (Engine === null) return;
+  const engine = ctx.engine();
+  assert.ok(engine, "default mode still constructs a compaction service");
+  assert.equal(engine._contextGc, undefined, "no Context GC override in default mode");
+  assert.equal(Object.getPrototypeOf(engine.constructor).name, "BasicCompactionEngine");
+});
+
+test("mount: duplicate/refused provider → warn + return null (never crash the host)", async () => {
+  const warned = [];
+  const ctx = capturingCtx({
+    reflect: {
+      provide() {
+        throw new Error('service "compaction" has been registered');
+      },
+    },
+    logger: { info() {}, warn(...args) { warned.push(args.join(" ")); }, error() {} },
+  });
+  const Engine = await mountCompactionEngine(ctx, { gcReplacesCompaction: true, gcNarrative: false }, {});
+  assert.equal(Engine, null, "a refused registration yields null (host keeps its own compaction)");
+  assert.ok(warned.length > 0, "the skip is surfaced as a warning, not a crash");
+  assert.match(warned[0], /compaction/);
+});
+
+// ── shrink gate — the harness refuses any checkpoint not strictly smaller than
+// the evicted span ("summary is not smaller than the shadowed content") and the
+// durable compaction/summary record rejects undefined provider/model. These
+// tests lock the regression that broke auto compaction in the wild: the Context
+// GC checkpoint must FIT the span and CARRY provenance. ─────────────────────
+
+/** Deterministic token meter standing in for `ctx.tokenMeter` (chars/4 + 2). */
+function fakeMeter() {
+  return {
+    estimateMessage(message) {
+      let chars = 0;
+      const content = message?.content;
+      if (typeof content === "string") chars = content.length;
+      else if (Array.isArray(content)) {
+        for (const block of content) if (block && typeof block.text === "string") chars += block.text.length;
+      }
+      return Math.max(1, Math.ceil(chars / 4) + 2);
+    },
+  };
+}
+
+test("shrink: estimateShadowedTokens sums the evicted region through the SAME meter as the harness", () => {
+  const meter = fakeMeter();
+  const messages = [
+    userText("first request"),
+    assistantWithToolCall("engram_store", { text: "the decision" }, "cF"),
+    toolResult("cF", "stored memory 8f7a2c4e-9b1d-4e0a-8f3c-2b1a0d4e6f8a"),
+    userText("second request"),
+  ];
+  const direct = messages.reduce((total, m) => total + meter.estimateMessage(m), 0);
+  assert.equal(estimateShadowedTokens(meter, messages), direct, "exact mirror of the harness's shadowed count");
+  assert.equal(estimateShadowedTokens(undefined, messages), 0, "no meter → unknown span (0), gate skipped");
+  assert.equal(estimateShadowedTokens(meter, []), 0);
+});
+
+test("shrink: fitSummaryToSpan lands the framed checkpoint strictly under the evicted span", () => {
+  const meter = fakeMeter();
+  // A span comfortably above the ~110-token framing overhead so a fit exists.
+  const shadowed = estimateShadowedTokens(meter, [userText("hello ".repeat(400))]); // ~400 bytes → ~102 tokens
+  assert.ok(shadowed > 120, `test span must exceed framing overhead, got ${shadowed}`);
+  const huge = "Context GC pointer block with a long narrative tail. ".repeat(120);
+  const fit = fitSummaryToSpan(huge, shadowed, { meter });
+  assert.ok(fit.trimmed, "oversized body is trimmed to fit the span");
+  assert.ok(fit.framed < shadowed, `framed ${fit.framed} must be strictly < shadowed ${shadowed} — harness shrink gate`);
+  assert.ok(fit.text.startsWith("Context GC pointer block"), "trim keeps the pointer head, cuts only the tail");
+
+  // A body that already fits is left untouched (no gratuitous truncation).
+  const small = "short and already economical";
+  const fitSmall = fitSummaryToSpan(small, shadowed, { meter });
+  assert.equal(fitSmall.trimmed, false, "no trim when the span affords the full body");
+  assert.equal(fitSmall.text, small, "full fidelity preserved when it fits");
+
+  // No meter → unknown span → gate skipped, body unchanged, never throws.
+  const fitNoMeter = fitSummaryToSpan(huge, 0, {});
+  assert.equal(fitNoMeter.text, huge);
+  assert.equal(fitNoMeter.trimmed, false);
+
+  // Absurdly tiny span: degrades to the smallest body instead of throwing.
+  const fitTiny = fitSummaryToSpan(huge, 8, { meter });
+  assert.ok(fitTiny.text.length < huge.length, "tiny span still yields a smaller body, never the full text");
+});
+
+test("engine: summarize() output passes the shrink gate and carries compaction/summary provenance", async () => {
+  const meter = fakeMeter();
+  const Engine = await loadContextGcEngine(
+    fakeCtx({ tokenMeter: meter }),
+    { auto: false },
+    {
+      // mechanical mode → oversized verbatim narrative fallback, exactly the
+      // configuration that made auto compaction roll back in production.
+      narrativeEnabled: false,
+      readWorkspace: async () => null,
+    },
+  );
+  if (Engine === null) return; // backend not linked — silent fallback guarantee
+
+  const engine = new Engine();
+  const messages = [];
+  for (let i = 0; i < 8; i += 1) {
+    messages.push(userText(`request ${i} ${"x".repeat(40)}`));
+    messages.push({ role: "assistant", content: [{ type: "text", text: `reply ${i} ${"y".repeat(40)}` }] });
+  }
+  const input = { messages };
+  const agent = {
+    session: { id: "sess-1", header: { cwd: "/w" }, requestHeader: () => ({ config: { provider: "acme", model: "gpt-x" } }) },
+    options: {},
+  };
+  const result = await engine.summarize(input, agent);
+  const body = result.summary[0].text;
+  const shadowed = estimateShadowedTokens(meter, input.messages);
+  const framed = estimateFramedTokens(meter, body);
+  assert.ok(shadowed > 0, "meter present → span is known");
+  assert.ok(
+    framed < shadowed,
+    `framed ${framed} must be strictly < shadowed ${shadowed}: a checkpoint that is not smaller would make the harness roll the compaction back`,
+  );
+  assert.ok(body.includes("Context GC"), "pointer header survives the trim (trim cuts the tail, not the head)");
+  assert.equal(result.provider, "acme", "compaction/summary record gets the routed provider");
+  assert.equal(result.model, "gpt-x", "compaction/summary record gets the routed model");
+  assert.ok(Number.isFinite(result.maxTokens), "maxTokens stamped for the durable record");
 });

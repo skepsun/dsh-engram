@@ -13,6 +13,9 @@
   },
   "type": "module",
   "main": "lib/index.js",
+  "bin": {
+    "dsh-engram": "./scripts/dsh-engram.mjs"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./compaction": "./lib/compaction.js",
@@ -22,6 +25,8 @@
   },
   "files": [
     "lib",
+    "scripts",
+    "docs",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -36,7 +41,13 @@
     "build:client": "node client/build.mjs && node client/build-model.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
     "eval": "node eval/recall-bench.mjs",
-    "typecheck": "node client/typecheck.mjs"
+    "typecheck": "node client/typecheck.mjs",
+    "web-compaction": "node scripts/dsh-engram.mjs",
+    "web-compaction:status": "node scripts/dsh-engram.mjs status",
+    "web-compaction:enable": "node scripts/dsh-engram.mjs enable",
+    "web-compaction:revert": "node scripts/dsh-engram.mjs revert",
+    "dsh-engram": "node scripts/dsh-engram.mjs",
+    "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor"
   },
   "publishConfig": {
     "access": "public"
