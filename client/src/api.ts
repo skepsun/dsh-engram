@@ -105,6 +105,9 @@ export interface WorkspaceCounts {
 export interface EngramConfig {
   autoCapture: boolean;
   sessionSearch: boolean;
+  autoRecallOnStart: boolean;
+  autoRecallLimit: number;
+  autoRecallMaxChars: number;
   autoCapturePerSession: number;
   indexMaxLines: number;
   indexMaxChars: number;

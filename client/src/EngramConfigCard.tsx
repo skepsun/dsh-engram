@@ -27,6 +27,10 @@ import { useEngramTheme } from "./theme";
 export interface EngramConfigValue {
   autoCapture?: boolean;
   sessionSearch?: boolean;
+  /** 会话启动自动召回：按首条消息注入 [RECALL] 块（默认开；关掉=纯拉取）。 */
+  autoRecallOnStart?: boolean;
+  /** [RECALL] 块最多注入的记忆条数（少而准）。 */
+  autoRecallLimit?: number;
   autoCapturePerSession?: number;
   indexMaxLines?: number;
   indexMaxChars?: number;
@@ -80,6 +84,7 @@ export interface EngramConfigGroup {
  */
 export const COMMON_FIELDS: EngramConfigField[] = [
   { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
+  { key: "autoRecallOnStart", label: "会话启动自动召回", hint: "新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取", kind: "bool" },
   { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
   { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
   { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
@@ -92,6 +97,7 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
     description: "其余捕获/搜索旋钮",
     fields: [
       { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
+      { key: "autoRecallLimit", label: "自动召回条数", hint: "[RECALL] 块最多注入的记忆条数（少而准）", kind: "num", min: 1, max: 8 },
       { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
     ],
   },

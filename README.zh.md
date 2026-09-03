@@ -28,6 +28,13 @@
   且查询含 **CJK 中文**（FTS5 中文分词整段只算一个 token）时，召回会对最近若干会话日志做
   有界的**子串扫描**（zstd 解压 + LRU 缓存，限文件数与字节），追加命中会话的确定性
   `# past sessions` 行。
+- **会话启动自动召回（`autoRecallOnStart`，默认开）** — 纯拉取式设计有个被实证戳穿的盲区：
+  召回工具只交模型自觉，而真实会话里模型几乎从不主动调 `engram_recall`（实测 19 个会话数千次
+  工具调用只出现 ~5 次召回）。因此宿主在新会话**首次组装**时，用会话**首条用户消息**对工作区做
+  一次确定性 BM25 召回，把命中前 ≤3 条直接注入 `[RECALL]` 块（默认 700 字符预算，"少而准"，
+  agentmemory 候选①）——相关记忆不依赖模型想起来就已在上下文里。纯规则、零 LLM、
+  纯读不 bump 命中；superseded 过期真相不占注入槽（仍可 `engram_detail` 重取）；
+  与 `[ENGRAM]` 一起按会话冻结保持前缀稳定。
 - **记忆间语义（supersede/contradict）** — `engram_store` 可选收 `supersedes` / `contradicts`
   记忆 id（同工作区校验）。被 supersede 的「过期真相」在召回里**降级到尾部**、并从 `[ENGRAM]`
   块中**剔除**（新陈述占行）；被 contradicts 的记忆保留排序但标注 `· contradicted by <id>`。
@@ -83,7 +90,8 @@ MIT   ·   node >= 22.19   ·   host 半边 + 浏览器半边合在一包
 dsh-engram 补的是对 token 纪律真正重要的三个空白：
 
 1. **写入路径没有模型** — 捕获是确定性的模式匹配。
-2. **提示词里不灌原文** — 只注入有界的符号索引，检索按需进行（"检索到 ≠ 注入"）。
+2. **提示词里不灌全文** — 只注入有界的符号索引 + 会话启动时自动召回的最相关 ≤3 条（预算内），
+   更深的检索按需进行（"检索到≠灌全文"）。
 3. **诚实的任务闭环** — 没有证据就不能宣布 STABLE。
 
 DSH 已经提供跨会话 FTS（`ctx.sessionQuery`）、存储（`ctx.storageDomain`）、提示词注入钩子和设置槽位；
@@ -454,7 +462,11 @@ ESR 操作协议（静态，每轮逐字节相同）
 [ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: engram_store (user asks to remember) | engram_recall <query> | engram_detail <id> | esr_task / esr_close / esr_link
+drill: use [RECALL] below · engram_detail <id> (full record) · engram_recall <query> (more) · esr_task/esr_node/esr_link (work)
+
+[RECALL] recall · 1 hit(s) · first msg: retrieval
+- [D] 06-18 Decided: use sqlite-vec for retrieval upgrade #a2331d87 ×2
+context: use above · engram_detail <id> · engram_recall <query>
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -472,6 +484,11 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 `#` id 通过 `engram_detail` 取完整记录。工作区没有任务时，`[ESR]` 仍会渲染一行点名 `esr_task`/`esr_close`，
 让机制对模型保持可见，而不是整体消失。
 
+`[RECALL]`（会话启动自动召回，`autoRecallOnStart`）按会话首条消息对工作区做确定性 BM25 召回，
+把命中前 `autoRecallLimit` 条注入，受 `autoRecallMaxChars` 字符预算约束；无命中或空工作区时不渲染。
+它是一条**提示**而不是全文灌入——模型该把它当成"这条相关，可能需要用 `engram_detail` 看细节"。
+纯读、不 bump 命中、superseded 过期真相不占槽位；随 `[ENGRAM]` 一起按会话冻结。
+
 ## 配置
 
 默认值以 token 为优先；可通过 profile 补丁（`~/.dsh/profiles/web/cordis.patch.yml`）或 Web 配置卡片覆盖任意键：
@@ -481,6 +498,9 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
   config:
     autoCapture: true        # 零 LLM 工具结果捕获
     sessionSearch: true      # engram_recall 也可对历史会话 FTS
+    autoRecallOnStart: true  # 会话启动自动召回：按首条消息注入 [RECALL] 块（false=回到纯拉取）
+    autoRecallLimit: 3       # [RECALL] 最多注入条数（少而准）
+    autoRecallMaxChars: 700  # [RECALL] 字符预算
     autoCapturePerSession: 40
     indexMaxLines: 12        # [ENGRAM] 行数上限
     indexMaxChars: 700       # [ENGRAM] 字符上限（token 预算）

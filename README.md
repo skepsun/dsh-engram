@@ -40,6 +40,17 @@ with one goal: **save tokens**.
   tokenization), recall runs a bounded substring scan over the newest session
   logs (zstd-decompressed, LRU-cached) and appends matched past sessions —
   deterministic `# past sessions` lines, capped files and bytes.
+- **Session-start auto-recall (`autoRecallOnStart`, default on)** — the pull-only
+  design had a gap proven in real use: recall tools relied on model initiative,
+  and in practice the model almost never calls `engram_recall` on its own (19
+  real sessions, thousands of tool calls, ~5 recall calls total). So at the FIRST
+  assembly of a new session the host runs one deterministic BM25 recall keyed on
+  the session's first user message and injects the top ≤ `autoRecallLimit` hits
+  as a `[RECALL]` block (default 700-char budget, "few and precise" — agentmemory
+  candidate ①). Relevant memory is in context even without a single recall call.
+  Pure rule, zero LLM, pure read (never bumps `hits`); superseded stale truth does
+  not occupy an injection slot (still fetchable via `engram_detail`); frozen per
+  session together with `[ENGRAM]` for prefix stability.
 - **Memory-to-memory semantics** — `engram_store` accepts optional
   `supersedes` / `contradicts` memory ids (validated against the same
   workspace). A superseded ("stale truth") memory is demoted to the tail of
@@ -128,8 +139,9 @@ LLM-distillation and vector/graph niches are already crowded. dsh-engram fills t
 three gaps that matter for token discipline:
 
 1. **No model in the write path** — capture is deterministic pattern matching.
-2. **No raw text in the prompt** — a bounded symbolic index is injected, retrieval
-   stays on demand ("retrieved ≠ injected").
+2. **No raw text in the prompt** — a bounded symbolic index is injected, plus the
+   top ≤ N memories auto-recalled for the session's first message (within budget);
+   deeper retrieval stays on demand ("retrieved ≠ full-text injected").
 3. **Honest task closure** — STABLE cannot be declared without evidence.
 
 DSH already provides cross-session FTS (`ctx.sessionQuery`), storage
@@ -632,7 +644,11 @@ ESR operating protocol (static, byte-identical every turn)
 [ENGRAM] workspace: symbolic-index · 2 memories · 1 task(s) active · 0 links
 [D] 06-18 Decided: use sqlite-vec for retrieval #a2331d87
 [T] 06-18 Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref #tsk_8b26
-drill: engram_store (user asks to remember) | engram_recall <query> | engram_detail <id> | esr_task / esr_close / esr_link
+drill: use [RECALL] below · engram_detail <id> (full record) · engram_recall <query> (more) · esr_task/esr_node/esr_link (work)
+
+[RECALL] recall · 1 hit(s) · first msg: retrieval
+- [D] 06-18 Decided: use sqlite-vec for retrieval upgrade #a2331d87 ×2
+context: use above · engram_detail <id> · engram_recall <query>
 
 [ESR] tasks: 1 active / 1 stable
 - tsk_0d: Retrieval upgrade — ACTIVE · gap: artifact, evaluation, memory_ref
@@ -654,6 +670,14 @@ records via `engram_detail`. When a workspace has no tasks, `[ESR]` still render
 one line naming `esr_task`/`esr_close` so the mechanism stays visible to the
 model instead of vanishing.
 
+`[RECALL]` (session-start auto recall, `autoRecallOnStart`) runs one deterministic
+BM25 pass over the workspace keyed on the session's first user message and injects
+the top `autoRecallLimit` hits, bounded by the `autoRecallMaxChars` character
+budget; nothing renders on zero hits or an empty workspace. It is a *pointer* — the
+model should treat it as "this is relevant; `engram_detail` for the full record" —
+rather than full-text dumping. It is a pure read (never bumps `hits`), superseded
+stale truth never occupies a slot, and it freezes per session with `[ENGRAM]`.
+
 ## Config
 
 Defaults are token-conscious; override any key via the profile patch
@@ -664,6 +688,9 @@ Defaults are token-conscious; override any key via the profile patch
   config:
     autoCapture: true        # zero-LLM tool-result capture
     sessionSearch: true      # engram_recall may also FTS past sessions
+    autoRecallOnStart: true  # session-start auto recall (false = back to pure pull)
+    autoRecallLimit: 3       # [RECALL] max injected hits (few and precise)
+    autoRecallMaxChars: 700  # [RECALL] char budget
     autoCapturePerSession: 40
     indexMaxLines: 12        # [ENGRAM] line cap
     indexMaxChars: 700       # [ENGRAM] char cap (token budget)
