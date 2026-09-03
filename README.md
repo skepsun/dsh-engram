@@ -136,6 +136,96 @@ DSH already provides cross-session FTS (`ctx.sessionQuery`), storage
 (`ctx.storageDomain`), prompt-injection hooks and settings slots; dsh-engram is a
 thin composition layer over them, not a re-implementation.
 
+## Security model
+
+The DSH plugin ecosystem is young and unvetted — there is no official directory,
+no signature check, and the harness's read/write permission tiers do **not**
+constrain what a plugin's own code can do. So the trust bar for a memory plugin
+is higher than for a tool: a memory plugin sits on your prompt prefix and writes
+to disk on your behalf. dsh-engram's model, stated plainly:
+
+- **No network, ever.** The plugin has no outbound socket, no telemetry, no
+  update pinger. Nothing here can leak your sessions off the machine.
+- **No shell, no filesystem access beyond one storage file.** It never executes
+  commands and never touches arbitrary paths. All data lives in the single
+  storage-domain unit `~/.dsh/storages/dsh_engram.json` (plus the session-log
+  reads it makes through DSH's own `ctx.sessionQuery`).
+- **Secrets are redacted before they can land on disk.** Every write path —
+  `engram_store`, auto-capture, and the import/restore route — runs text through
+  the deterministic `redactText` rule engine (API keys, JWTs, `Bearer` tokens,
+  private keys, `key=value` secret shapes) *before* the dedup hash, the char
+  cap, and storage. Nothing sensitive is ever persisted, so nothing sensitive
+  can be recalled later.
+- **Doing harm requires your harness's own permissions.** The plugin only *asks*
+  the host to do things via the same seams the tools you already trust use. It
+  does not widen sandbox policy or escalate to `danger-full-access` — if you
+  keep your profile's defaults, engram inherits exactly those bounds.
+- **Read-mostly web API, loopback-fenced.** The GUI routes under
+  `/api/dsh-engram` reject any non-loopback caller unless you explicitly
+  whitelist a hostname via `trustedHosts`; even then the same-origin fence holds.
+- **Verifiable.** `npm run dsh-engram -- doctor` (`/scripts/dsh-engram.mjs
+  doctor`) reports what the plugin is configured to touch; the whole store is
+  inspectable, nothing is opaque. If you ever doubt a claim in this section, the
+  code to check is `lib/redact.js`, `lib/store.js` and this plugin's
+  `cordis.patch.yml`.
+
+What this deliberately does **not** claim: it is not an air-gap. If your profile
+grants the agent `danger-full-access` or a shell, the agent can use those —
+engram is a memory layer, not a sandbox. The point above is that *dsh-engram
+itself* adds no surface of its own.
+
+## Data contract: export / import
+
+Memory should not be a hostage. The four tables (memories / tasks / links /
+entities) can be dumped and restored through a stable, versioned, machine-readable
+shape — so the corpus survives a reinstall, a machine move, or (when a thin
+adapter is written) a move to another harness, MCP end-point or Claude Code
+skill. The contract is plain JSON with a self-describing header:
+
+```http
+GET  /api/dsh-engram/export?workspace=/path/to/project   # one workspace
+GET  /api/dsh-engram/export                              # every workspace
+```
+
+```jsonc
+{
+  "meta": { "format": "dsh-engram/export", "version": 1, "exportedAt": 1724…, "workspace": "/path/to/project" },
+  "memories": [ /* all rows, archived included — a backup never loses provenance */ ],
+  "tasks":    [ /* draft/active/stable + archived */ ],
+  "links":    [ /* typed edges */ ],
+  "entities": [ /* graph nodes */ ]
+}
+```
+
+Restore is idempotent by default and gated when destructive:
+
+```http
+POST /api/dsh-engram/import          # body: { payload, mode, dryRun?, workspace?, confirm? }
+```
+
+- **`mode: "merge"`** (default) — writes only rows whose `id` is absent, so a
+  backup can be re-applied any number of times without duplicating anything. Each
+  row keeps its own `workspace`.
+- **`mode: "replace"`** — wipes the target `workspace` from all four tables, then
+  restores only its rows. Destructive, so it additionally requires
+  `confirm: "restore"` in the body.
+- **`dryRun: true`** — computes the identical plan (what would be written /
+  skipped) without writing a single row.
+- **Import honors the same invariants as `storeMemory`**: memory text passes the
+  secret redactor before touching disk, and rows that would break the contract
+  (missing id/workspace, empty text, over `maxMemoryChars`, id already present
+  in merge, over the workspace memory cap) are skipped and listed in the
+  response report instead of aborting the batch.
+
+A restore round-trip for one workspace is then:
+
+```sh
+curl -s "http://127.0.0.1:3080/api/dsh-engram/export?workspace=$PWD" -o engram-backup.json
+curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
+  -H "content-type: application/json" \
+  -d "{\"payload\": $(cat engram-backup.json), \"mode\": \"merge\"}"
+```
+
 ## Install
 
 ```sh

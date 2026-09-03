@@ -89,6 +89,58 @@ dsh-engram 补的是对 token 纪律真正重要的三个空白：
 DSH 已经提供跨会话 FTS（`ctx.sessionQuery`）、存储（`ctx.storageDomain`）、提示词注入钩子和设置槽位；
 dsh-engram 只是这些能力之上的一层薄组合层，而非重新实现。
 
+## 安全模型
+
+DSH 插件生态还很年轻、缺乏背书：没有官方目录、没有签名校验，且 harness 的读写权限三档**约束不了插件自身代码**。因此记忆插件面对的信任何题比工具更高——它趴在你的提示词前缀上，还替你在磁盘上写东西。dsh-engram 的模型，直说如下：
+
+- **永远不联网。** 本插件没有出口 socket、没有遥测、没有更新探针。任何东西都不可能把会话带出本机。
+- **无 shell、除一个存储文件外不碰文件系统。** 不执行命令、不碰任意路径。全部数据只落在一个 storage-domain 单元 `~/.dsh/storages/dsh_engram.json`（外加经 DSH 自身 `ctx.sessionQuery` 做的会话日志读取）。
+- **密钥在落盘之前就被脱敏。** 每条写入路径——`engram_store`、自动捕获，以及本节的**导入/恢复**——都先把文本过一遍确定性的 `redactText` 规则引擎（API Key、JWT、`Bearer` token、私钥、`key=value` 密钥形态），*之后*才做去重哈希、字符上限与落盘。敏感文本永不落盘，召回时自然也不会有。
+- **要做什么坏事，必须借你 harness 自己的权限。** 插件只通过你已信任的工具同款的 seam 向宿主"请求"做事；不扩沙箱策略、不拉高到 `danger-full-access`——你保持 profile 默认，engram 就只继承那些边界。
+- **Web API 只读为主、loopback 栅栏。** `/api/dsh-engram` 下的 GUI 路由拒绝任何非回环调用方，除非你用 `trustedHosts` 显式放行某个主机名；即便放行，同源栅栏依然生效。
+- **可核验。** `npm run dsh-engram -- doctor`（`scripts/dsh-engram.mjs doctor`）报告插件被配置去碰什么；整个 store 可检视、不透明的东西为零。如果对这一段有怀疑，要查的代码就是 `lib/redact.js`、`lib/store.js` 和本插件的 `cordis.patch.yml`。
+
+这**不是**说它是个气闸：如果你的 profile 给了 agent `danger-full-access` 或 shell，agent 可以用——engram 是记忆层而不是沙箱。上面这句话的意思是：*dsh-engram 自己*不新增任何攻击面。
+
+## 数据契约：导出 / 导入
+
+记忆不该当人质。四张表（memories / tasks / links / entities）可以用一个稳定、带版本号的机器可读格式整体倒出再恢复——重装、换机，或者（写一层薄适配器之后）搬到别的 harness / MCP 端点 / Claude Code skill，语料都跟得走。契约是带自描述头的纯 JSON：
+
+```http
+GET  /api/dsh-engram/export?workspace=/path/to/project   # 单个工作区
+GET  /api/dsh-engram/export                              # 全部工作区
+```
+
+```jsonc
+{
+  "meta": { "format": "dsh-engram/export", "version": 1, "exportedAt": 1724…, "workspace": "/path/to/project" },
+  "memories": [ /* 全部行，含归档——备份不丢溯源 */ ],
+  "tasks":    [ /* draft/active/stable + 归档 */ ],
+  "links":    [ /* 类型化边 */ ],
+  "entities": [ /* 图节点 */ ]
+}
+```
+
+恢复默认幂等、破坏性操作有门禁：
+
+```http
+POST /api/dsh-engram/import          # body: { payload, mode, dryRun?, workspace?, confirm? }
+```
+
+- **`mode: "merge"`**（默认）— 只写 `id` 尚不存在的行，备份可以随便重复套用而不会重复；每行保留自己的 `workspace`。
+- **`mode: "replace"`** — 先把目标 `workspace` 的四张表清空，再只恢复属于它的行。破坏性操作，因此 body 里还要求 `confirm: "restore"`。
+- **`dryRun: true`** — 只算出完全相同的执行计划（会写什么 / 跳过什么），不写任何一行。
+- **导入遵守与 `storeMemory` 相同的不可变约定**：记忆文本落盘前先过密钥脱敏；会破坏契约的行（缺 id/workspace、空文本、超 `maxMemoryChars`、merge 时 id 已存在、超工作区记忆上限）会被跳过并写进响应报告，而不是中止整批。
+
+单工作区的恢复往返：
+
+```sh
+curl -s "http://127.0.0.1:3080/api/dsh-engram/export?workspace=$PWD" -o engram-backup.json
+curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
+  -H "content-type: application/json" \
+  -d "{\"payload\": $(cat engram-backup.json), \"mode\": \"merge\"}"
+```
+
 ## 安装
 
 ```sh
