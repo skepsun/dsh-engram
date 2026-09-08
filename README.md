@@ -419,8 +419,8 @@ npm run build:client
 
 | Tool | Purpose | Kind |
 |---|---|---|
-| `engram_store` | Explicitly store one memory (kind, tags, optional entity anchor, optional supersedes/contradicts memory ids) | write |
-| `engram_recall` | Deterministic keyword recall over workspace memories; optional `search_sessions` FTS over past sessions | read |
+| `engram_store` | Explicitly store one memory (kind, tags, optional entity anchor, optional supersedes/contradicts ids, optional `source`/`conditions`) | write |
+| `engram_recall` | Deterministic keyword recall over workspace memories; optional `search_sessions` FTS over past sessions; opt-in `scope=global`/`recallScope` cross-workspace recall with `[W:<ws>]` origin markers | read |
 | `engram_detail` | Full record of one memory id (provenance, tags, hits) | read |
 | `esr_task` | Create a task entity (draft → active) | write |
 | `esr_close` | Close a task via the evidence protocol (artifact + evaluation + memory_ref) | write |
@@ -688,6 +688,7 @@ Defaults are token-conscious; override any key via the profile patch
   config:
     autoCapture: true        # zero-LLM tool-result capture
     sessionSearch: true      # engram_recall may also FTS past sessions
+    recallScope: workspace   # recall scope: "workspace" (strict isolation, default) | "global" (opt-in cross-workspace recall with [W:<ws>] origin markers)
     autoRecallOnStart: true  # session-start auto recall (false = back to pure pull)
     autoRecallLimit: 3       # [RECALL] max injected hits (few and precise)
     autoRecallMaxChars: 700  # [RECALL] char budget
@@ -733,7 +734,11 @@ dedup 1.0.
 **/api/dsh-engram/stats + the observability panel** is the real-session layer —
 it answers how the model actually uses the memory in production (ESR
 proactivity ratio, recall hit rate, detail conversion), while the eval
-answers how good the retrieval layer itself is.
+answers how good the retrieval layer itself is. The stats read the
+concatenated multi-frame `session.jsonl.zstd` logs with Node's built-in
+`node:zlib` (frame scan + one reused decoder handle) — **no system `zstd` CLI
+is required**, so the telemetry works out-of-the-box on Windows and other
+hosts without an external codec.
 
 Repo layout: `lib/` (host half: store / capture / index-block / tools / api /
 settings), `client/` (browser half, TSX + `build.mjs`), `test/` (node:test).

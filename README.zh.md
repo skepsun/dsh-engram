@@ -284,8 +284,8 @@ npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/
 
 | 工具 | 用途 | 类型 |
 |---|---|---|
-| `engram_store` | 显式存入一条记忆（kind、tags、可选实体锚点、可选 supersedes/contradicts 记忆 id） | 写 |
-| `engram_recall` | 工作区记忆的确定性关键词召回；可选 `search_sessions` 跨会话 FTS | 读 |
+| `engram_store` | 显式存入一条记忆（kind、tags、可选实体锚点、可选 supersedes/contradicts id，可选 `source`/`conditions`） | 写 |
+| `engram_recall` | 工作区记忆的确定性关键词召回；可选 `search_sessions` 跨会话 FTS；可选 `scope=global`/`recallScope` 跨工作区召回（带 `[W:<ws>]` 来源标记） | 读 |
 | `engram_detail` | 一条记忆 id 的完整记录（来源、标签、命中数） | 读 |
 | `esr_task` | 创建任务实体（draft → active） | 写 |
 | `esr_close` | 按证据协议关闭任务（artifact + evaluation + memory_ref） | 写 |
@@ -498,6 +498,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
   config:
     autoCapture: true        # 零 LLM 工具结果捕获
     sessionSearch: true      # engram_recall 也可对历史会话 FTS
+    recallScope: workspace   # 召回范围：workspace（严格工作区隔离，默认）| global（可选跨工作区召回，带 [W:<ws>] 来源标记）
     autoRecallOnStart: true  # 会话启动自动召回：按首条消息注入 [RECALL] 块（false=回到纯拉取）
     autoRecallLimit: 3       # [RECALL] 最多注入条数（少而准）
     autoRecallMaxChars: 700  # [RECALL] 字符预算

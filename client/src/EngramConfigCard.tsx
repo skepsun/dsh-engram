@@ -27,6 +27,8 @@ import { useEngramTheme } from "./theme";
 export interface EngramConfigValue {
   autoCapture?: boolean;
   sessionSearch?: boolean;
+  /** 召回范围：workspace=严格当前工作区隔离（默认）；global=本工作区命中弱/空时跨工作区召回并标 [W:<ws>]。 */
+  recallScope?: "workspace" | "global";
   /** 会话启动自动召回：按首条消息注入 [RECALL] 块（默认开；关掉=纯拉取）。 */
   autoRecallOnStart?: boolean;
   /** [RECALL] 块最多注入的记忆条数（少而准）。 */
@@ -58,7 +60,7 @@ export interface EngramConfigCardFace {
   scope: EngramScope<EngramConfigValue>;
 }
 
-type FieldKind = "bool" | "num" | "text";
+type FieldKind = "bool" | "num" | "text" | "select";
 
 export interface EngramConfigField {
   key: keyof EngramConfigValue;
@@ -69,6 +71,8 @@ export interface EngramConfigField {
   min?: number;
   max?: number;
   width?: number;
+  /** For kind === "select": the allowed choices. */
+  options?: string[];
 }
 
 export interface EngramConfigGroup {
@@ -99,6 +103,7 @@ export const ADVANCED_GROUPS: EngramConfigGroup[] = [
       { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
       { key: "autoRecallLimit", label: "自动召回条数", hint: "[RECALL] 块最多注入的记忆条数（少而准）", kind: "num", min: 1, max: 8 },
       { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
+      { key: "recallScope", label: "召回范围", hint: "workspace=严格当前工作区隔离（默认，token 纪律）；global=本工作区命中弱/空时从其它工作区池召回并标 [W:<workspace>] 来源（会打破隔离）", kind: "select", options: ["workspace", "global"] },
     ],
   },
   {
@@ -413,6 +418,17 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
                             disabled={!writable}
                             onChange={(e) => setField(field.key, e.target.checked)}
                           />
+                        ) : field.kind === "select" ? (
+                          <select
+                            style={{ ...s.input, width: field.width ?? 160 }}
+                            value={raw === undefined ? "" : String(raw)}
+                            disabled={!writable}
+                            onChange={(e) => setField(field.key, e.target.value)}
+                          >
+                            {(field.options ?? []).map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
                         ) : field.kind === "text" ? (
                           <input
                             type="text"

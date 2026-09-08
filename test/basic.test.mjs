@@ -108,6 +108,22 @@ test("storeMemory dedups exact duplicates and honors caps", async () => {
   await domain.close();
 });
 
+test("storeMemory round-trips optional source and conditions fields", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const { stored } = await domain.storeMemory(
+    { workspace: "/ws", kind: "decision", text: "audit gate requires manual sign-off", tags: [], entity: null, sessionId: "s1", seq: 1, signal: 0.6, source: "manual", conditions: "DSH upgrade check" },
+    CONFIG,
+  );
+  const got = domain.getMemory("/ws", stored.id);
+  assert.equal(got.source, "manual");
+  assert.equal(got.conditions, "DSH upgrade check");
+  // absent fields default to null (back-compat)
+  const plain = await domain.storeMemory({ workspace: "/ws", kind: "fact", text: "plain row", tags: [], sessionId: "s2", seq: 1 }, CONFIG);
+  assert.equal(domain.getMemory("/ws", plain.id).source, null);
+  assert.equal(domain.getMemory("/ws", plain.id).conditions, null);
+  await domain.close();
+});
+
 test("recall: tag-exact first, recency ties, expiry skipped", async () => {
   const domain = await openEngramDomain(fakeFacility());
   const cfg = { ...CONFIG };
@@ -380,6 +396,48 @@ test("engram_recall: entity neighborhood appended from the ESR relation table", 
   assert.ok(!out2.includes("entity neighborhood"), "no neighborhood for non-entity hits");
 
   await Promise.all([domain.close(), domain2.close()]);
+});
+
+test("recallGlobal ranks across workspaces with _origin tag and preserves isolation by default", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  await domain.storeMemory({ workspace: "/wsA", kind: "decision", text: "launch strategy alpha", tags: [], sessionId: "s1", seq: 1, signal: 0.7 }, CONFIG);
+  await domain.storeMemory({ workspace: "/wsB", kind: "decision", text: "launch strategy beta", tags: [], sessionId: "s2", seq: 1, signal: 0.7 }, CONFIG);
+  // recall (workspace-scoped) never sees the other workspace...
+  assert.equal(domain.recall("/wsA", "launch strategy").length, 1);
+  // ...but recallGlobal spans every workspace and tags the origin.
+  const global = domain.recallGlobal("launch strategy", 10, {});
+  assert.deepEqual(new Set(global.map((m) => m._origin)), new Set(["/wsA", "/wsB"]));
+  assert.equal(global.length, 2);
+  // excludeWorkspace drops the caller's own pool (pure cross-workspace fallback).
+  const cross = domain.recallGlobal("launch strategy", 10, { excludeWorkspace: "/wsA" });
+  assert.ok(cross.every((m) => m._origin === "/wsB") && cross.length === 1);
+  await domain.close();
+});
+
+test("engram_recall: scope=global surfaces a cross-workspace hit with a [W:...] origin marker", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  // memory exists ONLY in workspace B — invisible to a workspace-A session.
+  await domain.storeMemory(
+    { workspace: "/wsB", kind: "decision", text: "cross-ws decision about launch strategy", tags: [], entity: null, sessionId: "sB", seq: 1, signal: 0.7 },
+    CONFIG,
+  );
+  const service = { config: { ...CONFIG, recallScope: "workspace" }, getDomain: () => Promise.resolve(domain), openedDomain: () => domain, log: { warn: () => {} } };
+  const tools = new Map();
+  const ctx = { effect: (fn) => fn(), tools: { register: (tool) => { tools.set(tool.name, tool); return () => {}; } } };
+  registerTools(ctx, service);
+  const agent = { session: { id: "sA", header: { cwd: "/wsA" }, events: { length: 5 } } };
+  const recall = tools.get("engram_recall");
+
+  // scope=workspace (default): strict isolation, no cross-workspace hit.
+  const local = await recall.execute({ query: "launch strategy" }, { agent, signal: undefined });
+  assert.match(local, /no active memories match/);
+
+  // scope=global: cross-workspace hit surfaces with an origin marker.
+  const globalOut = await recall.execute({ query: "launch strategy", scope: "global" }, { agent, signal: undefined });
+  assert.ok(globalOut.includes("cross-ws decision about launch strategy"));
+  assert.match(globalOut, /\[W:wsB\]/);
+
+  await domain.close();
 });
 
 test("error revival: recurring failures re-warm one entry and resurface in [ENGRAM]", async () => {

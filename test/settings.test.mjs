@@ -19,9 +19,11 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(defaults.verifyArtifact, true);
   assert.equal(defaults.autoSinkTodosOnEnd, true, "session-end todo auto-sink defaults ON");
   assert.equal(defaults.autoWebCompaction, true, "web auto-wiring of Context GC defaults ON");
+  assert.equal(defaults.recallScope, "workspace", "recallScope defaults to strict workspace isolation");
 
   // base (composition layer) includes both keys
   const base = settingsBaseFrom(defaults);
+  assert.ok("recallScope" in base && base.recallScope === "workspace");
   assert.ok("autoSupersede" in base && base.autoSupersede === false);
   assert.ok("verifyArtifact" in base && base.verifyArtifact === true);
   assert.ok("autoSinkTodosOnEnd" in base && base.autoSinkTodosOnEnd === true);
@@ -37,6 +39,8 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(schema.dict.autoSinkTodosOnEnd.meta.default, true);
   assert.equal(schema.dict.autoWebCompaction.type, "boolean");
   assert.equal(schema.dict.autoWebCompaction.meta.default, true);
+  assert.equal(schema.dict.recallScope.type, "union");
+  assert.equal(schema.dict.recallScope.meta.default, "workspace");
 
   // the onChange propagation loop iterates SETTINGS_KEYS — any GUI knob that
   // is not listed there writes to storage without ever reaching live config.
@@ -44,6 +48,7 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.ok(SETTINGS_KEYS.includes("verifyArtifact"), "verifyArtifact propagates to live");
   assert.ok(SETTINGS_KEYS.includes("autoSinkTodosOnEnd"), "autoSinkTodosOnEnd propagates to live");
   assert.ok(SETTINGS_KEYS.includes("autoWebCompaction"), "autoWebCompaction propagates to live");
+  assert.ok(SETTINGS_KEYS.includes("recallScope"), "recallScope propagates to live");
 });
 
 test("settingsBaseFrom picks exactly the curated keys", () => {

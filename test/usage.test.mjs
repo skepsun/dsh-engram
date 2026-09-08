@@ -7,14 +7,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 
-import { execFileSync } from "node:child_process";
+import { zstdCompressSync } from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { openEngramDomain } from "../lib/store.js";
 import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
-import { collectUsageStats, dayKey, recallStatsFromOutput } from "../lib/usage.js";
+import { collectUsageStats, dayKey, decodeZstd, recallStatsFromOutput } from "../lib/usage.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -67,15 +67,32 @@ test("recallStatsFromOutput counts item lines and zero-hit messages", () => {
   assert.deepEqual(timeline, { withHits: 1, hitsTotal: 2 });
 });
 
-/** Write one zstd-compressed session log under a temp sessions root. */
+test("decodeZstd decodes concatenated multi-frame zstd without an external CLI", () => {
+  // Three independent frames (like append-per-batch session logs).
+  const frames = ["alpha\n", "beta\n", "gamma\n"].map((s) => zstdCompressSync(Buffer.from(s, "utf8")));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-usage-multi-"));
+  const file = path.join(dir, "session.jsonl.zstd");
+  fs.writeFileSync(file, Buffer.concat(frames));
+  const text = decodeZstd(file);
+  assert.equal(text, "alpha\nbeta\ngamma\n");
+});
+
+/**
+ * Write one zstd session log under a temp sessions root. Real session logs are
+ * concatenated zstd frames (append-per-batch), so we split long inputs into
+ * several frames to exercise the multi-frame decode path — no external CLI.
+ */
 function seedSession(root, bucket, sid, lines, mtimeMs = Date.now()) {
   const dir = path.join(root, bucket, sid);
   fs.mkdirSync(dir, { recursive: true });
-  const plain = path.join(dir, "session.jsonl");
-  fs.writeFileSync(plain, lines.join("\n") + "\n");
+  const text = lines.join("\n") + "\n";
+  const frameBytes = Math.max(1, Math.ceil(text.length / 3));
+  const frames = [];
+  for (let i = 0; i < text.length; i += frameBytes) {
+    frames.push(zstdCompressSync(Buffer.from(text.slice(i, i + frameBytes), "utf8")));
+  }
   const out = path.join(dir, "session.jsonl.zstd");
-  execFileSync("zstd", ["-q", "-f", plain, "-o", out]);
-  fs.rmSync(plain);
+  fs.writeFileSync(out, Buffer.concat(frames));
   fs.utimesSync(out, new Date(mtimeMs), new Date(mtimeMs));
   return out;
 }

@@ -6,7 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { zstdCompressSync } from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,13 +26,9 @@ function tmpRoot() {
 function writeSession(root, bucket, sid, lines, mtimeMs = Date.now()) {
   const dir = path.join(root, bucket, sid);
   fs.mkdirSync(dir, { recursive: true });
-  const plain = path.join(dir, "session.jsonl");
-  fs.writeFileSync(plain, lines.join("\n") + "\n");
   const out = path.join(dir, "session.jsonl.zstd");
-  execFileSync("zstd", ["-q", "-f", plain, "-o", out]);
-  const st = fs.statSync(out);
+  fs.writeFileSync(out, zstdCompressSync(Buffer.from(lines.join("\n") + "\n", "utf8")));
   fs.utimesSync(out, new Date(mtimeMs), new Date(mtimeMs));
-  void st;
 }
 
 test("hasCJK detects CJK ideographs and ignores ASCII-only text", () => {
