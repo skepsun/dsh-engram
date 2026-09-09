@@ -238,6 +238,33 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
   -d "{\"payload\": $(cat engram-backup.json), \"mode\": \"merge\"}"
 ```
 
+## DSH compatibility
+
+This release declares support for DSH `>=0.1.2-alpha.2 <0.2.0-0` and was fully
+validated against the `dsh-v0.1.5-alpha.1` source and web runtime from the local
+`deepseek-harness` checkout.
+
+| Component | Supported range |
+| --- | --- |
+| DSH runtime / host / client package family | `>=0.1.2-alpha.2 <0.2.0-0` |
+| `@deepseek-ai/cordis` | `^4.0.2` |
+| `@deepseek-ai/schemastery` | `^3.18.2` |
+| Node.js | `>=22.19.0` |
+
+`0.1.2-alpha.2` is the minimum version for this API family: host settings use
+`settings.installSection`, and the browser settings card uses
+`ctx.remote.settings`. Host import and settings-registration smoke checks pass
+on `0.1.2-alpha.2` and `0.1.3-alpha.2`; the full regression suite is validated
+on `0.1.5-alpha.1`. The older `0.1.0-rc.7` and `0.1.1` API graphs are outside
+this release's compatibility range.
+
+To install the DSH version used for validation:
+
+```sh
+npm install --global @deepseek-ai/dsh@0.1.5-alpha.1
+dsh --version
+```
+
 ## Install
 
 ```sh

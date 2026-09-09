@@ -6,15 +6,48 @@
  * loopback-origin connection — e.g. the GUI opened through an
  * operator-authorized cloudflare tunnel. That makes every plugin's config
  * card render empty and gray off-loopback, a DSH design decision dsh-engram
- * cannot change. But the underlying RPCs (`connection.api.settings.describe` /
- * `.mutate`) DO work over a trusted host, which is exactly how the card gets
- * dispatched at all. So this controller drives the same namespace through the
- * connection's API client directly — same persistence (the host's settings
- * document), no isLoopback gate. Values are plain JSON; we skip schemastery
- * validation to keep the bundle's value-import surface to react only.
+ * cannot change. The previous connection transport was removed in DSH 0.1.5;
+ * the same host-backed calls now live on the typed `ctx.remote.settings`
+ * namespace. This controller drives that namespace directly, preserving host
+ * persistence without the `isLoopback` gate. Values are plain JSON; we skip
+ * schemastery validation to keep the bundle's value-import surface to React
+ * only.
  */
 
-import type { IApiClient } from "@deepseek-ai/dsh-client-connection/api";
+export interface SettingsNamespaceView {
+  ns: string;
+  value?: unknown;
+  base?: unknown;
+  user?: unknown;
+  revision?: number;
+  applies?: "live" | "restart";
+}
+
+export interface SettingsDescribeValue {
+  namespaces?: SettingsNamespaceView[];
+  writable?: boolean;
+}
+
+export interface SettingsMutation {
+  op: "set" | "unset";
+  path: string[];
+  value?: unknown;
+}
+
+export interface SettingsRemoteResult<T> {
+  ok: boolean;
+  value?: T;
+  error?: { code?: string; message?: string };
+}
+
+export interface SettingsRemote {
+  describe(): Promise<SettingsRemoteResult<SettingsDescribeValue>>;
+  mutate(
+    ns: string,
+    ops: SettingsMutation[],
+    expectedRevision: number | undefined,
+  ): Promise<SettingsRemoteResult<SettingsNamespaceView>>;
+}
 
 export type EngramScopeStatus = "loading" | "ready" | "unavailable" | "error";
 
@@ -42,15 +75,6 @@ export interface EngramScope<T> {
   unset<U extends keyof T>(key: U): Promise<void>;
 }
 
-interface NamespaceView {
-  ns: string;
-  value?: unknown;
-  base?: unknown;
-  user?: unknown;
-  revision?: number;
-  applies?: "live" | "restart";
-}
-
 /** Snapshot while the first read is still in flight. */
 const LOADING: EngramScopeSnapshot<unknown> = {
   status: "loading",
@@ -66,7 +90,7 @@ export class EngramScopeImpl<T> implements EngramScope<T> {
   private snapshot: EngramScopeSnapshot<T> = LOADING as EngramScopeSnapshot<T>;
   private disposed = false;
 
-  constructor(private api: IApiClient, private ns: string, private opts: { writable: boolean } = { writable: true }) {}
+  constructor(private api: SettingsRemote, private ns: string, private opts: { writable: boolean } = { writable: true }) {}
 
   getSnapshot(): EngramScopeSnapshot<T> {
     return this.snapshot;
@@ -91,14 +115,13 @@ export class EngramScopeImpl<T> implements EngramScope<T> {
     this.snapshot = LOADING as EngramScopeSnapshot<T>;
     this.notify();
     try {
-      const response = await this.api.settings.describe({});
-      const result = response?.result;
+      const result = await this.api.describe();
       if (!result || result.ok !== true) {
-        const err = result && "error" in result ? result.error : { code: "settings.describe", message: "unreachable" };
+        const err = result?.error ?? { code: "settings.describe", message: "unreachable" };
         this.fail(`settings.describe failed: ${String(err?.code ?? err)}: ${String(err?.message ?? "")}`);
         return;
       }
-      const payload = result.value as { namespaces?: NamespaceView[]; writable?: boolean };
+      const payload = result.value ?? {};
       const view = payload.namespaces?.find((n) => n.ns === this.ns);
       if (!view) {
         this.fail(`the '${this.ns}' settings namespace is not served by this host.`);
@@ -122,17 +145,12 @@ export class EngramScopeImpl<T> implements EngramScope<T> {
 
   private async mutate(op: { op: "set" | "unset"; path: string[]; value?: unknown }): Promise<void> {
     const revision = this.snapshot.revision;
-    const response = await this.api.settings.mutate({
-      ns: this.ns,
-      ops: [op],
-      ...(revision ? { expectedRevision: revision } : {}),
-    });
-    const result = response?.result;
+    const result = await this.api.mutate(this.ns, [op], revision);
     if (!result || result.ok !== true) {
-      const err = result && "error" in result ? result.error : { code: "settings.mutate", message: "unreachable" };
+      const err = result?.error ?? { code: "settings.mutate", message: "unreachable" };
       throw new Error(`settings.mutate failed: ${String(err?.code ?? err)}: ${String(err?.message ?? "")}`);
     }
-    const view = result.value as NamespaceView | undefined;
+    const view = result.value;
     if (view) this.snapshot = { ...this.snapshot, revision: view.revision ?? revision };
   }
 

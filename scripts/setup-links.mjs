@@ -94,6 +94,11 @@ function buildPlan(harness) {
   const zodDir = findStoreZod(harness);
   const plan = [
     {
+      label: "@deepseek-ai/cordis",
+      mount: join(SCOPE, "cordis"),
+      target: join(harness, "vendor", "cordis"),
+    },
+    {
       label: "zod",
       mount: join(NODE_MODULES, "zod"),
       target: zodDir,
@@ -141,7 +146,9 @@ function buildPlan(harness) {
 function isInstalled(mount, expected) {
   if (existsSync(mount)) {
     try {
-      if (resolve(readlinkSync(mount)) === resolve(expected)) return true;
+      // readlinkSync() returns a relative target for pnpm-created links; resolve
+      // it from the mount's parent, rather than from the process cwd.
+      return resolve(dirname(mount), readlinkSync(mount)) === resolve(expected);
     } catch {
       /* not a symlink — fall through */
     }
@@ -185,24 +192,27 @@ function ensureLink(item) {
       return;
     }
     // 允许替换：符号链接直接 unlink；pnpm 预建的空目录用 rmdir 清掉。
+    let removed = false;
     try {
       unlinkSync(mount);
       console.log(`  ~ ${label}: 替换旧链接`);
-      return;
+      removed = true;
     } catch {
       /* not a symlink */
     }
-    try {
-      if (readdirSync(mount).length === 0) {
-        rmdirSync(mount);
-        console.log(`  ~ ${label}: 移除空目录后重建`);
-      } else {
-        console.log(`  ! ${label}: ${mount} 是含文件的真实目录，无法自动替换，请手动清理后重试`);
+    if (!removed) {
+      try {
+        if (readdirSync(mount).length === 0) {
+          rmdirSync(mount);
+          console.log(`  ~ ${label}: 移除空目录后重建`);
+        } else {
+          console.log(`  ! ${label}: ${mount} 是含文件的真实目录，无法自动替换，请手动清理后重试`);
+          return;
+        }
+      } catch {
+        console.log(`  ! ${label}: ${mount} 无法自动替换，请手动清理后重试`);
         return;
       }
-    } catch {
-      console.log(`  ! ${label}: ${mount} 无法自动替换，请手动清理后重试`);
-      return;
     }
   }
   if (CHECK_ONLY) {

@@ -17,9 +17,11 @@
  * the compiled bundle stays clean.
  */
 
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
+import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import type {} from "@deepseek-ai/dsh-client-ui-slots";
-import type {} from "@deepseek-ai/dsh-client-ui-settings";
+import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
+import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 import type {} from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
 // Type-only: pulls the ui-conversation SlotMap merge so the
 // 'conversation.input.dock' dock entry typechecks against PropsRuntime.
@@ -29,8 +31,24 @@ import { EngramApi } from "./api";
 import { EngramTaskDock } from "./EngramTaskDock";
 import { EngramSection, type EngramSectionFace } from "./EngramSection";
 import { EngramConfigCard, type EngramConfigCardFace, type EngramConfigValue } from "./EngramConfigCard";
-import { EngramScopeImpl } from "./scope";
+import { EngramScopeImpl, type SettingsRemote } from "./scope";
 import { mountEngramBoard } from "./EngramBoardMount";
+
+interface ClientSlots {
+  inject(key: string, callback: () => unknown): unknown;
+  register(options: Record<string, unknown>, component: unknown): unknown;
+}
+
+interface ClientLocale {
+  register(namespace: string, dictionaries: { zh: EngramKey; en: EngramKey }): () => void;
+  bind(namespace: string): (key: string) => string;
+}
+
+type EngramClientContext = ClientContext & {
+  slots: ClientSlots;
+  locale: ClientLocale;
+  remote: { settings: SettingsRemote };
+};
 
 /** Locale namespace this plugin owns. */
 const NS = "dsh-engram";
@@ -60,13 +78,13 @@ export const en: EngramKey = {
   error: "Load failed",
 };
 
-export const inject = ["slots", "locale", "connection", "sessions", "workspaces"];
+export const inject = ["slots", "locale", "remote", "remote.settings", "sessions", "workspaces"];
 
 /**
  * Mount the ESR surfaces. A failure here must never take the GUI down —
  * wrap registrations so a slot absence degrades instead of breaking boot.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: EngramClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-engram: dictionaries");
 
   const api = new EngramApi();
@@ -119,13 +137,12 @@ export function apply(ctx: ClientContext): void {
   }
 
   // Config card: drive the `dsh-engram` settings namespace through the
-  // connection's own settings RPCs. DSH's blessed settingsScope binder pins
+  // typed Remote settings API. DSH's blessed settingsScope binder pins
   // non-loopback browsers (e.g. the GUI reached through an authorized tunnel)
   // to memory persistence — every plugin card renders empty and gray there.
   // A self-sufficient transport keeps this card usable regardless of how the
   // GUI is reached, while still persisting into the same settings document.
-  const connection = ctx.get("connection");
-  const scope = new EngramScopeImpl<EngramConfigValue>(connection.api, "dsh-engram");
+  const scope = new EngramScopeImpl<EngramConfigValue>(ctx.remote.settings, "dsh-engram");
   const cardInjected = (): EngramConfigCardFace => ({ scope });
   try {
     // The card is dispatched by the configurable-plugins tab only when the

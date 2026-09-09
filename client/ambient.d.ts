@@ -11,38 +11,22 @@
  * real shell guarantees, extend the shim rather than widening it to `any`.
  */
 
-declare module "@deepseek-ai/dsh-client-runtime/client" {
-  /** Runtime client context injected by the shell; resolved types come from
-   *  the real package in a full harness typecheck. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export type ClientContext = any;
-}
-
-declare module "@deepseek-ai/dsh-client-connection/api" {
-  /** Minimal surface used by scope.ts (settings describe/mutate RPCs). */
-  interface SettingsResult {
-    ok?: boolean;
-    value?: unknown;
-    error?: { code?: string; message?: string };
-  }
-  export interface IApiClient {
-    settings: {
-      describe(opts?: unknown): Promise<{ result?: SettingsResult }>;
-      mutate(opts: unknown): Promise<{ result?: SettingsResult }>;
-    };
-    [key: string]: unknown;
-  }
-}
-
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface LocaleNamespaceMap {
     [ns: string]: unknown;
   }
 }
 
-/* Side-effect slot registrations — the declared module only needs to exist
-   for the type-only imports in entry.tsx to resolve. */
-declare module "@deepseek-ai/dsh-client-ui-settings" {
+/* Side-effect client contracts — these modules contribute Context/SlotMap
+   declarations in a full DSH install. The shims keep the standalone client
+   typecheck independent of the harness checkout's package links. */
+declare module "@deepseek-ai/dsh-api-remotes/client" {
+  export {};
+}
+declare module "@deepseek-ai/dsh-client-ui-renderer/client" {
+  export {};
+}
+declare module "@deepseek-ai/dsh-client-ui-settings/client" {
   export {};
 }
 declare module "@deepseek-ai/dsh-client-ui-settings-plugins/client" {

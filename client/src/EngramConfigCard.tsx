@@ -350,7 +350,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
     return off;
   }, [scope]);
 
-  const setField = useCallback((key: keyof EngramConfigValue, value: boolean | number | string[] | undefined) => {
+  const setField = useCallback((key: keyof EngramConfigValue, value: boolean | number | string | string[] | undefined) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 

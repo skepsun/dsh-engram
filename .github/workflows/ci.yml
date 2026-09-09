@@ -33,13 +33,13 @@ jobs:
       - name: Install optional peers + client toolchain
         run: >
           npm install --no-audit --no-fund --no-save
-          @deepseek-ai/cordis@^4.0.1
-          @deepseek-ai/dsh-storage-domain@^0.1.0-rc.7
-          @deepseek-ai/dsh-settings@^0.1.0-rc.7
-          @deepseek-ai/schemastery@^3.18.1
-          @deepseek-ai/dsh-compaction@^0.1.0-rc.7
-          @deepseek-ai/dsh-compaction-basic@^0.1.0-rc.7
-          @deepseek-ai/dsh-llm@^0.1.0-rc.7
+          @deepseek-ai/cordis@^4.0.2
+          @deepseek-ai/dsh-storage-domain@">=0.1.2-alpha.2 <0.2.0-0"
+          @deepseek-ai/dsh-settings@">=0.1.2-alpha.2 <0.2.0-0"
+          @deepseek-ai/schemastery@^3.18.2
+          @deepseek-ai/dsh-compaction@">=0.1.2-alpha.2 <0.2.0-0"
+          @deepseek-ai/dsh-compaction-basic@">=0.1.2-alpha.2 <0.2.0-0"
+          @deepseek-ai/dsh-llm@">=0.1.2-alpha.2 <0.2.0-0"
           esbuild typescript @types/react @types/react-dom
 
       - name: Host unit tests

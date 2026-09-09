@@ -23,10 +23,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tmp = mkdtempSync(join(tmpdir(), "dsh-engram-pack-"));
 const PEERS = [
-  "@deepseek-ai/cordis@^4.0.1",
-  "@deepseek-ai/dsh-settings@^0.1.0-rc.7",
-  "@deepseek-ai/dsh-storage-domain@^0.1.0-rc.7",
-  "@deepseek-ai/schemastery@^3.18.1",
+  "@deepseek-ai/cordis@^4.0.2",
+  "@deepseek-ai/dsh-settings@>=0.1.2-alpha.2 <0.2.0-0",
+  "@deepseek-ai/dsh-storage-domain@>=0.1.2-alpha.2 <0.2.0-0",
+  "@deepseek-ai/schemastery@^3.18.2",
 ];
 
 function sh(cmd, args, cwd) {

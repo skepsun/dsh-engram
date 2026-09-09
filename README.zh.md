@@ -149,6 +149,31 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
   -d "{\"payload\": $(cat engram-backup.json), \"mode\": \"merge\"}"
 ```
 
+## 兼容性
+
+当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地
+`deepseek-harness` 的 `dsh-v0.1.5-alpha.1` 代码和 Web 运行时完成完整验证。
+
+| 组件 | 适配版本 |
+| --- | --- |
+| DSH runtime / host / client 包族 | `>=0.1.2-alpha.2 <0.2.0-0` |
+| `@deepseek-ai/cordis` | `^4.0.2` |
+| `@deepseek-ai/schemastery` | `^3.18.2` |
+| Node.js | `>=22.19.0` |
+
+`0.1.2-alpha.2` 是这组 API 的最低版本：宿主设置注册使用
+`settings.installSection`，浏览器端设置读写使用 `ctx.remote.settings`。
+`0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
+`0.1.5-alpha.1` 已完成完整回归。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
+本发布版本的兼容范围内。
+
+如需按验证版本安装 DSH：
+
+```sh
+npm install --global @deepseek-ai/dsh@0.1.5-alpha.1
+dsh --version
+```
+
 ## 安装
 
 ```sh
