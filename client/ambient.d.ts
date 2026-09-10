@@ -20,9 +20,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 /* Side-effect client contracts — these modules contribute Context/SlotMap
    declarations in a full DSH install. The shims keep the standalone client
    typecheck independent of the harness checkout's package links. */
-declare module "@deepseek-ai/dsh-api-remotes/client" {
-  export {};
-}
 declare module "@deepseek-ai/dsh-client-ui-renderer/client" {
   export {};
 }

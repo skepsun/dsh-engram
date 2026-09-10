@@ -18,7 +18,6 @@
  */
 
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
-import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import type {} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
@@ -31,7 +30,7 @@ import { EngramApi } from "./api";
 import { EngramTaskDock } from "./EngramTaskDock";
 import { EngramSection, type EngramSectionFace } from "./EngramSection";
 import { EngramConfigCard, type EngramConfigCardFace, type EngramConfigValue } from "./EngramConfigCard";
-import { EngramScopeImpl, type SettingsRemote } from "./scope";
+import { EngramScopeImpl } from "./scope";
 import { mountEngramBoard } from "./EngramBoardMount";
 
 interface ClientSlots {
@@ -47,7 +46,6 @@ interface ClientLocale {
 type EngramClientContext = ClientContext & {
   slots: ClientSlots;
   locale: ClientLocale;
-  remote: { settings: SettingsRemote };
 };
 
 /** Locale namespace this plugin owns. */
@@ -78,7 +76,7 @@ export const en: EngramKey = {
   error: "Load failed",
 };
 
-export const inject = ["slots", "locale", "remote", "remote.settings", "sessions", "workspaces"];
+export const inject = ["slots", "locale", "sessions", "workspaces"];
 
 /**
  * Mount the ESR surfaces. A failure here must never take the GUI down —
@@ -136,13 +134,16 @@ export function apply(ctx: EngramClientContext): void {
     console.warn("[dsh-engram] settings.section registration failed:", error);
   }
 
-  // Config card: drive the `dsh-engram` settings namespace through the
-  // typed Remote settings API. DSH's blessed settingsScope binder pins
+  // Config card: drive the `dsh-engram` settings namespace through OUR OWN
+  // HTTP API (EngramApi.getSettings/updateSettings → /api/dsh-engram/settings).
+  // DSH's blessed settingsScope binder pins
   // non-loopback browsers (e.g. the GUI reached through an authorized tunnel)
   // to memory persistence — every plugin card renders empty and gray there.
   // A self-sufficient transport keeps this card usable regardless of how the
   // GUI is reached, while still persisting into the same settings document.
-  const scope = new EngramScopeImpl<EngramConfigValue>(ctx.remote.settings, "dsh-engram");
+  // The plugin-owned transport keeps the card generation-agnostic (no
+  // connection/remote RPC whose shape changed at DSH 0.1.2-alpha.2).
+  const scope = new EngramScopeImpl<EngramConfigValue>(api, "dsh-engram");
   const cardInjected = (): EngramConfigCardFace => ({ scope });
   try {
     // The card is dispatched by the configurable-plugins tab only when the

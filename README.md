@@ -240,6 +240,45 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 ## DSH compatibility
 
+> **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
+> the **old** DSH API graph (`0.1.0-rc.7` / `0.1.1`, peers `^0.1.0-rc.7`)
+> **only**. DSH `0.1.2-alpha.2` and newer are **not** compatible with those
+> releases — the settings/client API family broke there. New-DSH support ships
+> with the next release built from `master` (described below).
+
+| dsh-engram release | Status | DSH support | Declared via |
+| --- | --- | --- | --- |
+| `0.2.0` … `0.3.6` (npm, GitHub v0.3.3–v0.3.6) | published | **old DSH only** — `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
+| `master` (next release, after v0.3.6) | unreleased | **new DSH only** — `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.2.0-0` |
+
+### Where the API family broke — `0.1.2-alpha.2`
+
+`0.1.2-alpha.2` is the first version of the new API family and the first that
+**breaks** the released plugin versions:
+
+- `@deepseek-ai/dsh-settings` **removed** `settingsNamespace()` and
+  `installSettingsSection()` — the exact imports every release ≤ `0.3.6` uses —
+  and replaced them with `settings.installSection`. The old host half fails to
+  load on `0.1.2-alpha.2+`.
+- The web client half swapped its inject set: `@deepseek-ai/dsh-client-runtime`
+  no longer exists in the new family (replaced by `dsh-api-remotes` plus
+  `dsh-client-locale` / `-conversation` / `-renderer` / `-ui-settings-plugins`),
+  and the settings card used to talk through `ctx.remote.settings`.
+- Supporting bumps at the same boundary: `@deepseek-ai/cordis` `^4.0.1 → ^4.0.2`,
+  `@deepseek-ai/schemastery` `^3.18.1 → ^3.18.2`, and `@deepseek-ai/dsh` stopped
+  shipping `config/agent-presets` in the package (moved to `dsh.configTrees`).
+
+The web config card no longer depends on any of this: since the `master`
+line it reads and writes the `dsh-engram` settings namespace through the
+plugin's **own** HTTP route (`/api/dsh-engram/settings`, same-origin fetch
+like the memory viewer), so the card is generation-agnostic on both sides of
+the `0.1.2-alpha.2` boundary.
+
+So: keep DSH on `0.1.1-rc.2` or older while running a published release, and
+upgrade the plugin to `master` before moving DSH to `0.1.2-alpha.2`.
+
+### Current (next) release
+
 This release declares support for DSH `>=0.1.2-alpha.2 <0.2.0-0` and was fully
 validated against the `dsh-v0.1.5-alpha.1` source and web runtime from the local
 `deepseek-harness` checkout.

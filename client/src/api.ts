@@ -205,6 +205,26 @@ export interface EngramOverview {
   config: EngramConfig;
 }
 
+/** Wire view of the `dsh-engram` settings namespace served by our own
+ *  `/api/dsh-engram/settings` route (mirrors the host settings describe
+ *  descriptor so the config card keeps the same semantics as the RPC
+ *  transport it replaces). */
+export interface SettingsNamespaceView {
+  ns: string;
+  value?: unknown;
+  base?: unknown;
+  user?: unknown;
+  revision?: number;
+  applies?: "live" | "restart";
+}
+
+/** One path-addressed edit to the namespace's user section. */
+export interface SettingsMutation {
+  op: "set" | "unset";
+  path: string[];
+  value?: unknown;
+}
+
 /** Cost + count metadata for one injected block. */
 export interface BlockMeta {
   chars: number;
@@ -368,5 +388,41 @@ export class EngramApi {
         }),
       }),
     );
+  }
+
+  /** Settings card transport — read the `dsh-engram` namespace through our
+   *  own HTTP API instead of the host connection/remote RPC. */
+  async getSettings(): Promise<{ namespaces: SettingsNamespaceView[] }> {
+    return readJson(await fetch(`${API_PREFIX}/settings`));
+  }
+
+  /** Settings card transport — persist one or more path ops into the
+   *  `dsh-engram` namespace. Non-2xx surfaces the server's message. */
+  async updateSettings(ops: SettingsMutation[], expectedRevision?: number): Promise<{ ok: boolean }> {
+    const response = await fetch(`${API_PREFIX}/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ops,
+        ...(expectedRevision !== undefined ? { expectedRevision } : {}),
+      }),
+    });
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      // fall through to the status-line error below
+    }
+    if (!response.ok) {
+      const err = body as { error?: unknown } | null;
+      const message =
+        typeof err?.error === "string"
+          ? err.error
+          : typeof err?.error === "object" && err.error !== null && typeof (err.error as { message?: unknown }).message === "string"
+            ? (err.error as { message: string }).message
+            : `HTTP ${response.status}`;
+      throw new EngramApiError(message);
+    }
+    return (body ?? { ok: true }) as { ok: boolean };
   }
 }

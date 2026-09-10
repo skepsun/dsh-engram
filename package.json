@@ -48,7 +48,8 @@
     "web-compaction:enable": "node scripts/dsh-engram.mjs enable",
     "web-compaction:revert": "node scripts/dsh-engram.mjs revert",
     "dsh-engram": "node scripts/dsh-engram.mjs",
-    "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor"
+    "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor",
+    "release-notes": "node scripts/gen-release-notes.mjs"
   },
   "publishConfig": {
     "access": "public"
@@ -60,8 +61,6 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-renderer",

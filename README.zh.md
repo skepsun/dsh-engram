@@ -151,6 +151,39 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 ## 兼容性
 
+> **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
+> DSH**（`0.1.0-rc.7` / `0.1.1` API 图，peers `^0.1.0-rc.7`）。DSH
+> `0.1.2-alpha.2` 及更新版本与它们**不兼容**——settings/client API 族在该版本
+> 断裂。新版 DSH 支持随 `master` 的下一个发布（见下文）提供。
+
+| dsh-engram 发布版本 | 状态 | 支持的 DSH | 声明方式 |
+| --- | --- | --- | --- |
+| `0.2.0` … `0.3.6`（npm 全量 + GitHub v0.3.3–v0.3.6） | 已发布 | **仅旧版** —— `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
+| `master`（下一个发布，v0.3.6 之后） | 未发布 | **仅新版** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
+
+### API 族断裂点:`0.1.2-alpha.2`
+
+`0.1.2-alpha.2` 是新 API 族的第一个版本，也是第一个**让已发布插件失效**的版本：
+
+- `@deepseek-ai/dsh-settings` **移除了** `settingsNamespace()` 与
+  `installSettingsSection()`（≤ `0.3.6` 的每个发布都直接 import 这两个符号），
+  改为 `settings.installSection`——旧宿主端在 `0.1.2-alpha.2+` 上直接加载失败。
+- Web 客户端注入集整体更换：`@deepseek-ai/dsh-client-runtime` 在新代际**已不存在**
+  （被 `dsh-api-remotes` + `dsh-client-locale` / `-conversation` / `-renderer` /
+  `-ui-settings-plugins` 取代），设置卡此前改走 `ctx.remote.settings`。
+- 同一边界的伴随升级：`@deepseek-ai/cordis` `^4.0.1 → ^4.0.2`、
+  `@deepseek-ai/schemastery` `^3.18.1 → ^3.18.2`、`@deepseek-ai/dsh` 不再随包
+  发布 `config/agent-presets`（改为 `dsh.configTrees` 机制）。
+
+**web 设置卡已不依赖上面任何一项**：自 `master` 起，配置卡通过插件**自有**
+HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetch）读写
+`dsh-engram` settings namespace，因此在 `0.1.2-alpha.2` 分界线两侧都是代际无关的。
+
+所以：跑已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级 DSH 到
+`0.1.2-alpha.2` 之前，先升级插件到 `master`。
+
+### 当前（下一个）发布版本
+
 当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地
 `deepseek-harness` 的 `dsh-v0.1.5-alpha.1` 代码和 Web 运行时完成完整验证。
 

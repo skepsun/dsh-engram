@@ -540,3 +540,137 @@ test("api: /triggerstats without a recorder returns null stats (host not upgrade
   assert.equal(json(r).stats, null);
   await domain.close();
 });
+
+test("api: /settings reads and mutates the dsh-engram namespace through the service.settings seam", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const calls = [];
+  // Mirror the REAL dsh-settings provider shape: `describe()` returns a BARE
+  // array of namespace descriptors (in registration order), not {namespaces}.
+  // The route normalizes it onto the HTTP contract {namespaces:[...]}.
+  const fakeSettings = {
+    describe: () => [
+      {
+        ns: "llm-deepseek",
+        value: { maxTokens: 256000 },
+        revision: 0,
+        applies: "live",
+      },
+      {
+        ns: "dsh-engram",
+        value: { autoCapture: true, recallScope: "workspace" },
+        base: { autoCapture: true, recallScope: "workspace" },
+        user: undefined,
+        revision: 3,
+        applies: "live",
+        secrets: [],
+      },
+    ],
+    mutate: async (ns, ops, expectedRevision) => {
+      calls.push({ ns, ops, expectedRevision });
+    },
+    update: async (ns, patch, expectedRevision) => {
+      calls.push({ ns, patch, expectedRevision });
+    },
+  };
+  const service = {
+    config: CONFIG,
+    captureStats: { total: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+    settings: fakeSettings,
+  };
+  const routes = makeEngramRoutes(service);
+
+  // GET returns only the dsh-engram namespace view (filtered from the bare
+  // array, exactly what the real provider serves).
+  const r = res();
+  await route(routes, `${API_PREFIX}/settings`).handler(req({ url: `${API_PREFIX}/settings` }), r);
+  assert.equal(r._out.status, 200);
+  const body = json(r);
+  assert.equal(body.namespaces.length, 1);
+  assert.equal(body.namespaces[0].ns, "dsh-engram");
+  assert.equal(body.namespaces[0].value.autoCapture, true);
+  assert.equal(body.namespaces[0].revision, 3);
+
+  // PUT with path ops routes to service.settings.mutate (the exact shape the
+  // config card used through the RPC transport).
+  const w = res();
+  await route(routes, `${API_PREFIX}/settings`, "PUT").handler(
+    req({ method: "PUT", url: `${API_PREFIX}/settings`, body: { ops: [{ op: "set", path: ["autoCapture"], value: false }], expectedRevision: 3 } }),
+    w,
+  );
+  assert.equal(w._out.status, 200);
+  assert.deepEqual(calls[0], {
+    ns: "dsh-engram",
+    ops: [{ op: "set", path: ["autoCapture"], value: false }],
+    expectedRevision: 3,
+  });
+
+  // PUT with a plain patch routes to service.settings.update.
+  const w2 = res();
+  await route(routes, `${API_PREFIX}/settings`, "PUT").handler(
+    req({ method: "PUT", url: `${API_PREFIX}/settings`, body: { patch: { recallScope: "global" } } }),
+    w2,
+  );
+  assert.equal(w2._out.status, 200);
+  assert.equal(calls[1].ns, "dsh-engram");
+  assert.deepEqual(calls[1].patch, { recallScope: "global" });
+
+  // PUT with neither ops nor patch is rejected.
+  const w3 = res();
+  await route(routes, `${API_PREFIX}/settings`, "PUT").handler(
+    req({ method: "PUT", url: `${API_PREFIX}/settings`, body: { expectedRevision: 1 } }),
+    w3,
+  );
+  assert.equal(w3._out.status, 400);
+
+  await domain.close();
+});
+
+test("api: /settings surfaces SETTINGS_CONFLICT as 409 and degrades to 503 without a settings seam", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const conflict = new Error("settings moved since read");
+  conflict.code = "SETTINGS_CONFLICT";
+  conflict.expected = 3;
+  conflict.actual = 4;
+  const fakeSettings = {
+    describe: () => ({ namespaces: [] }),
+    mutate: async () => {
+      throw conflict;
+    },
+    update: async () => {
+      throw new Error("unreachable");
+    },
+  };
+  const withSeam = {
+    config: CONFIG,
+    captureStats: { total: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+    settings: fakeSettings,
+  };
+  const routes = makeEngramRoutes(withSeam);
+  const r = res();
+  await route(routes, `${API_PREFIX}/settings`, "PUT").handler(
+    req({ method: "PUT", url: `${API_PREFIX}/settings`, body: { ops: [{ op: "set", path: ["autoCapture"], value: true }], expectedRevision: 3 } }),
+    r,
+  );
+  assert.equal(r._out.status, 409);
+  const body = json(r);
+  assert.equal(body.error.code, "SETTINGS_CONFLICT");
+  assert.equal(body.error.actual, 4);
+  await domain.close();
+
+  // A service without a settings seam (headless profile, or settings service
+  // absent) reads as 503 — the card renders unavailable instead of dead.
+  const noSeam = {
+    config: CONFIG,
+    captureStats: { total: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+  };
+  const noSeamRoutes = makeEngramRoutes(noSeam);
+  const r2 = res();
+  await route(noSeamRoutes, `${API_PREFIX}/settings`).handler(req({ url: `${API_PREFIX}/settings` }), r2);
+  assert.equal(r2._out.status, 503);
+});

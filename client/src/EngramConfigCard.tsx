@@ -1,12 +1,14 @@
 /**
  * dsh-engram client: the Plugins → 配置 card (settings.plugin.item, keyed by the
  * `dsh-engram` namespace the host registers). Reads/writes the namespace through
- * EngramScope — a self-sufficient transport over the connection's settings RPCs
- * that keeps working when the GUI is reached through an operator-authorized
- * tunnel (DSH's own settingsScope binder hard-codes off-loopback browsers to
- * read-only memory persistence for every plugin card). The host applies
- * changes to the live config for new sessions (already-frozen [ENGRAM] blocks
- * are stable by design).
+ * EngramScope — a self-sufficient transport over the plugin's own
+ * `/api/dsh-engram/settings` HTTP route (see scope.ts), generation-agnostic
+ * across the DSH 0.1.2-alpha.2 client API break and working when the GUI is
+ * reached through an operator-authorized tunnel under the same trustedHosts
+ * opt-in as the memory viewer (DSH's own settingsScope binder hard-codes
+ * off-loopback browsers to read-only memory persistence for every plugin card).
+ * The host applies changes to the live config for new sessions (already-frozen
+ * [ENGRAM] blocks are stable by design).
  *
  * Card chrome mirrors the built-in "Shell / Agent loop / Web search" plugin
  * cards in the same Plugins configuration tab: a header naming the plugin with
