@@ -151,6 +151,12 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 ## 兼容性
 
+<!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
+
+- **DSH 版本**：`>=0.1.2-alpha.2 <0.2.0-0`（dsh-engram `0.3.7`；`0.2.0`–`0.3.6` 仅旧代际 —— 见下文矩阵）
+- **最后验证日期**：2026-09-10 —— `dsh-v0.1.5-alpha.1` 完整回归；`dsh 0.1.5-rc.1` 隔离 profile 真机验证设置 GET/PUT/冲突/复位/跨重启持久化
+- **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
+
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
 > DSH**（`0.1.0-rc.7` / `0.1.1` API 图，peers `^0.1.0-rc.7`）。DSH
 > `0.1.2-alpha.2` 及更新版本与它们**不兼容**——settings/client API 族在该版本

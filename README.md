@@ -238,7 +238,14 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
   -d "{\"payload\": $(cat engram-backup.json), \"mode\": \"merge\"}"
 ```
 
-## DSH compatibility
+## Compatibility
+
+<!-- dsh-market compatibility block — keep labels bilingual and in sync with
+     docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
+
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.2.0-0` (dsh-engram `0.3.7`; releases `0.2.0`–`0.3.6` support the old generation only — see matrix below)
+- **最后验证日期 / Last verified**: 2026-09-10 — full regression on `dsh-v0.1.5-alpha.1`; real-machine settings GET/PUT/conflict/reset/restart-persistence on `dsh 0.1.5-rc.1` (isolated profile)
+- **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
 > the **old** DSH API graph (`0.1.0-rc.7` / `0.1.1`, peers `^0.1.0-rc.7`)
