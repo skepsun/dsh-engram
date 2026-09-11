@@ -154,12 +154,12 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
 > DSH**（`0.1.0-rc.7` / `0.1.1` API 图，peers `^0.1.0-rc.7`）。DSH
 > `0.1.2-alpha.2` 及更新版本与它们**不兼容**——settings/client API 族在该版本
-> 断裂。新版 DSH 支持随 `master` 的下一个发布（见下文）提供。
+> 断裂。新版 DSH 支持**自 `0.3.7` 起**提供——它是新 API 代际的第一个发布（见下文）。
 
 | dsh-engram 发布版本 | 状态 | 支持的 DSH | 声明方式 |
 | --- | --- | --- | --- |
 | `0.2.0` … `0.3.6`（npm 全量 + GitHub v0.3.3–v0.3.6） | 已发布 | **仅旧版** —— `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
-| `master`（下一个发布，v0.3.6 之后） | 未发布 | **仅新版** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
+| `0.3.7`（npm + GitHub v0.3.7） | 已发布 | **仅新版** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
@@ -175,14 +175,14 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
   `@deepseek-ai/schemastery` `^3.18.1 → ^3.18.2`、`@deepseek-ai/dsh` 不再随包
   发布 `config/agent-presets`（改为 `dsh.configTrees` 机制）。
 
-**web 设置卡已不依赖上面任何一项**：自 `master` 起，配置卡通过插件**自有**
+**web 设置卡已不依赖上面任何一项**：自 `0.3.7` 起，配置卡通过插件**自有**
 HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetch）读写
 `dsh-engram` settings namespace，因此在 `0.1.2-alpha.2` 分界线两侧都是代际无关的。
 
-所以：跑已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级 DSH 到
-`0.1.2-alpha.2` 之前，先升级插件到 `master`。
+所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
+DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前（下一个）发布版本
+### 当前发布版本 —— `0.3.7`
 
 当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地
 `deepseek-harness` 的 `dsh-v0.1.5-alpha.1` 代码和 Web 运行时完成完整验证。
@@ -195,9 +195,11 @@ HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetc
 | Node.js | `>=22.19.0` |
 
 `0.1.2-alpha.2` 是这组 API 的最低版本：宿主设置注册使用
-`settings.installSection`，浏览器端设置读写使用 `ctx.remote.settings`。
+`settings.installSection`，浏览器端设置卡通过插件自有 HTTP 路由
+（`/api/dsh-engram/settings`，见上文 Route B）读写。
 `0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
-`0.1.5-alpha.1` 已完成完整回归。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
+`0.1.5-alpha.1` 已完成完整回归（并在 `dsh 0.1.5-rc.1` 隔离 profile 上真机验证
+设置 GET/PUT/冲突/复位/跨重启持久化全通）。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
 
 如需按验证版本安装 DSH：
