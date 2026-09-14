@@ -3,7 +3,7 @@
 > 依据:[SoL-Pi](https://nvlabs.github.io/SoL-Pi/) 四幸存机制之二(ObservationPack:归档载荷、上下文留 handle+摘录、按页召回)
 > 与提案池 C11「Reduce tool output before its first prompt insertion」/ C23「Build observation packs before paying for full bodies」。
 > 数据:[Oracle Analysis](./ORACLE-ANALYSIS.zh.md)(97 真实会话、13.9K 请求、15.0K 工具调用)。
-> **状态:提案待审(未实施)。**
+> **状态:L1 已实现(`lib/boundary-prune.js`,默认关;L0 见 §6,全量干跑见 §6.1)。L2 归档召回未实施。**
 
 ---
 
@@ -111,7 +111,25 @@ L1 剪掉的中段今天直接丢弃(仅 session 日志保留原文,模型取不
 - 偿还门:预期剩余请求数 ≥ 50(剩余数用 workspace 历史会话长度中位数估计,oracle 数据已有);
 - 默认关,`boundaryPrune` 配置项 + 激活遥测(每次 fire 记一条 `boundary-prune` 事件计数,进 /stats)。
 
-## 7. 决策请求
+## 7. L1 实现与全量干跑(已完成)
 
-L0 已完成,数字支持 **L1 进入实现**(todo 边界 + T4096 + 偿还门 50,默认关):预期缓存感知净节省 +44.5Mc/语料(naive 口径 ~500Mc,≈18% M1 cut 暴露),且机制完全确定性、零 LLM、可回退(不 fire 即无副作用)。T2048 与 L2 归档(中段存储 + `result_recall`)绑定,作为 L1 验证后的第二步。
+`lib/boundary-prune.js`(~170 行):`ctx.on("session/event")` 监听 todo/goal 边界 → 偿还门 → `ctx.get("toolResultPruner").pruneSession(session)`(DSH 原生确定性 surface-replace,8192/4096/1024)。配置 `boundaryPrune`(默认关)+ `boundaryPruneMinRemaining`(默认 50);pruner 服务缺席即禁用并打一条日志;全程 fail-contained。测试:`test/boundary-prune.test.mjs`(边界判定、高水位、偿还门算术、外推策略;npm test 279/279 过)。
+
+**偿还门外推修正**(实现期发现):初版用经验中位数 120 作期望总长,干跑暴露它把 1247 请求的长会话在 71 请求处永久挡死——经验先验对长会话是灾难性低估,而 L0 恰恰显示暴露集中在长会话。修正:先验只作下界锚点,会话超过先验后按当前请求数 ×2 外推(有界乐观)。这正是 SoL-Pi P11「不要从训练命中泛化」的现场复现。
+
+**全量干跑**(`eval/dryrun-boundary-prune.mjs`,77 会话 >10 请求,DSH 默认阈值 8192,门 50):
+
+- **29/77 会话激活(38%),303 个结果被剪,≈3.47M 字符**;
+- 命中分布健康:最大会话(eb2eb,1399 请求)fired 2 次;57 请求的中会话也命中(6be70);
+- 偿还门拦掉 21 个不划算边界(对照 L0 的 +12%~+32% 净收益提升);
+- 注意:此为「首剪节省」而非完整重放乘数节省——每次 fire 之后的后续请求才持续省;完整口径即 L0 仿真的 ~18% M1 cut 暴露。
+
+**干跑同时确认的边界稀疏性现实**:多个大会话(如 216e8/34940,goal=0 且无 todo 递增)完全不触发——机制对「无计划工作流」天然不激活,这不是 bug 而是激活面诚实性:无边界就不剪,零副作用。覆盖更多工作流需要 L2 的其他边界源(如 step 空转),已列入后续。
+
+## 8. 后续
+
+- **L2(未实施)**:pruned 中段归档 + `result_recall` 按页召回 + handle 行;T2048 阈值与 L2 绑定。
+- **激活遥测**:fire 事件已可从 session log 的 `compaction/prune` 序列读出;建议 /stats 加一个「boundary-prune vs overflow-prune 来源区分」计数(用 fire 前后日志行归属判定)。
+- **上游提案(L3)**:ToolRuntime 开放 finalizeContent 链,附 oracle 数据。
+
 
