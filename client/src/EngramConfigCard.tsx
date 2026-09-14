@@ -345,6 +345,13 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
     const off = scope.subscribe(() => {
       const next = scope.getSnapshot();
       setSnap(next);
+      // Leave a breadcrumb for "where did my card go": a hidden card gives
+      // no UI surface to explain itself, so the failure reason goes to the
+      // console (silently swallowing it is the anti-pattern issue #4 called
+      // out for decodeZstd).
+      if (next.status === "unavailable") {
+        console.warn("[dsh-engram] settings scope unavailable — Plugins 配置卡已隐藏:", next.reason ?? "no reason served");
+      }
       const value = (next.value ?? next.base) as EngramConfigValue | undefined;
       if (value) setDraft((prev) => ({ ...value, ...prev }));
     });
@@ -403,6 +410,17 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
   const writable = snap?.writable !== false && snap?.status !== "unavailable";
   const available = snap?.status === "ready";
   const { vars } = useEngramTheme();
+
+  // Issue #7: while the scope isn't ready the card must render NOTHING. The
+  // kernel's slot anchor is `display: contents`, so this component's own root
+  // is what becomes the flex item of the Plugins card list (flex column,
+  // gap 10px). The old `display: "none"` root still generated a 0-height flex
+  // item that doubled the gap between the neighboring cards; a null render
+  // leaves the anchor childless — no box, no flex item, no gap. The scope
+  // subscription above keeps this component mounted, so the card still
+  // appears the moment the scope turns ready (and re-mount retries load()).
+  if (!available) return null;
+
   const renderField = (field: EngramConfigField) => {
                   const raw = value[field.key];
                   const overridden = snap?.user !== undefined && field.key in (snap.user as object);
@@ -488,7 +506,7 @@ export function EngramConfigCard({ scope }: EngramConfigCardFace) {
 
   return (
     <div style={vars}>
-      <div style={available ? { ...s.card, ...(open ? s.cardOpen : undefined) } : { display: "none" }}>
+      <div style={{ ...s.card, ...(open ? s.cardOpen : undefined) }}>
         <button
           type="button"
           style={s.header}
