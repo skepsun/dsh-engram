@@ -188,7 +188,7 @@ HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetc
 所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
 DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前发布版本 —— `0.3.7`
+### 当前发布版本 —— `0.4.0`
 
 当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地
 `deepseek-harness` 的 `dsh-v0.1.5-alpha.1` 代码和 Web 运行时完成完整验证。
@@ -333,8 +333,16 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 152 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发）
+npm test    # 279 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
+```
+
+另有三个**会话语料分析工具**（零 LLM、确定性，读 `~/.dsh/sessions` 真实日志）：
+
+```sh
+node eval/oracle-analysis.mjs             # 浪费源量化：结果重放暴露 / 融合候选 / 机制激活率
+node eval/simulate-boundary-prune.mjs     # L0 反事实仿真：边界剪枝的预期节省与偿还门扫掠
+node eval/dryrun-boundary-prune.mjs       # BoundaryPrune 全量干跑：真实激活面与节省
 ```
 
 `npm run eval` 的检索部分参照 LongMemEval 的问答式评测：受控语料（ASCII + CJK、标签/实体/时间戳已知），
@@ -493,6 +501,26 @@ Context GC 的装配在**两个平面**——web 现在**全部自动**，零配
 - （若见 `… keeping the existing compaction service` 说明同域已有 provider、未替换成功；`web-provision … skipped (custom)`
   说明某预设是自定义/无 compaction 布局、未被触碰；`dsh-compaction-basic unavailable` 说明环境缺依赖，自动回退默认压缩。）
 
+### BoundaryPrune（子任务边界剪枝，默认关）
+
+Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝的触发时机」——
+在 todo 完成推进 / goal 终态这些子任务边界，主动调用 DSH 自带的
+`toolResultPruner`（确定性 surface-replace，零 LLM），把早已超阈值的旧工具
+结果剪掉头尾保留，省掉它们在后续每个请求里的整段重放。两个开关互相独立。
+
+- **证据链**（[docs/ORACLE-ANALYSIS.zh.md](docs/ORACLE-ANALYSIS.zh.md) +
+  [docs/PROPOSAL-resultpack.zh.md](docs/PROPOSAL-resultpack.zh.md)）：97 个真实
+  会话实测，工具结果重放暴露 2.77B–7.53B 字符（≈692M–1.88M token），96% 的
+  结果字节来自 bash/read/run_code；反事实仿真显示 todo 边界覆盖 79% 的暴露，
+  且偿还门在所有配置下提升净收益 12–32%。
+- **偿还门**：剪枝会重写前缀（KV 缓存击穿一次），只有当会话预计还要跑
+  `boundaryPruneMinRemaining`（默认 50）个以上请求时才 fire——预计长度用
+  workspace 历史先验 + 超过后 ×2 外推（有界乐观），长会话不会被挡死。
+- **诚实激活面**：goal=0 且无 todo 推进的会话天然不触发（无边界不剪，零副作用）；
+  全量干跑 77 会话激活 38%。pruner 服务缺席即自动禁用并打一条日志。
+- 默认**关**：`boundaryPrune: false`。开启后启动日志出现
+  `engram boundary-prune (todo @N reqs): pruned …`。
+
 ## 自动捕获策略
 
 捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
@@ -581,6 +609,8 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
     gcReplacesCompaction: true # Context GC：接管 DSH 自动 compact（false=回退默认 LLM 压缩）
     gcNarrative: true        # 无锚轮次走 scoped LLM 叙事；false=纯机械（零 LLM）
+    boundaryPrune: false     # BoundaryPrune：todo/goal 边界主动剪超阈值旧工具结果（默认关）
+    boundaryPruneMinRemaining: 50  # 偿还门：预计剩余请求数低于此值不剪
     engramIndexOrder: 40    # systemPrompt section 顺序（位于 tools 段之前）
     esrOrder: 41
 ```

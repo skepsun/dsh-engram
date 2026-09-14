@@ -285,7 +285,7 @@ viewer), so the card is generation-agnostic on both sides of the
 So: keep DSH on `0.1.1-rc.2` or older while running a release ≤ `0.3.6`, and
 upgrade the plugin to `>=0.3.7` before moving DSH to `0.1.2-alpha.2`.
 
-### Current release — `0.3.7`
+### Current release — `0.4.0`
 
 This release declares support for DSH `>=0.1.2-alpha.2 <0.2.0-0` and was fully
 validated against the `dsh-v0.1.5-alpha.1` source and web runtime from the local
@@ -682,6 +682,32 @@ means that preset was customized (or has no compaction group) and was left untou
 `dsh-compaction-basic unavailable` means the backend is missing and everything
 falls back to the default compressor.
 
+### BoundaryPrune (subtask-boundary pruning, default OFF)
+
+Context GC owns *what a compaction summary says*; BoundaryPrune owns *when a
+deterministic prune fires*: at todo-completion progress and goal terminal
+events, it calls DSH's own `toolResultPruner` (deterministic surface-replace,
+zero LLM) so long-stale over-threshold tool results stop replaying in every
+later request. The two switches are independent.
+
+- **Evidence chain** ([oracle analysis](docs/ORACLE-ANALYSIS.zh.md) +
+  [proposal](docs/PROPOSAL-resultpack.zh.md)): 97 real sessions measured —
+  2.77B–7.53B chars of tool-result replay exposure (~692M–1.88M tokens), 96%
+  of result bytes from bash/read/run_code; the counterfactual simulation says
+  todo boundaries cover 79% of that exposure and a repayment gate lifts
+  cache-aware net savings 12–32% on every threshold config.
+- **Repayment gate**: a prune rewrites the prefix (one KV-cache break), so it
+  fires only while the session is still expected to run at least
+  `boundaryPruneMinRemaining` (default 50) more requests — expectation is a
+  workspace-history prior with ×2 growth projection past it, so long sessions
+  are never starved.
+- **Honest activation surface**: sessions with no goal and no todo progress
+  simply never trigger (no boundary → no prune, zero side effects); the
+  corpus-wide dry run activates on 38% of sessions. If the pruner service is
+  absent the mechanism disables itself with one log line.
+- Default **off**: `boundaryPrune: false`. When on, the log shows
+  `engram boundary-prune (todo @N reqs): pruned …`.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -790,7 +816,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 152 tests: core + web API + GC + usage-observability + Context GC + ESR triggers (node:test)
+npm test            # 279 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```
