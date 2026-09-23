@@ -244,7 +244,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
 - **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.2.0-0` (dsh-engram `0.3.7`; releases `0.2.0`–`0.3.6` support the old generation only — see matrix below)
-- **最后验证日期 / Last verified**: 2026-09-10 — full regression on `dsh-v0.1.5-alpha.1`; real-machine settings GET/PUT/conflict/reset/restart-persistence on `dsh 0.1.5-rc.1` (isolated profile)
+- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.5-rc.2` dependency set (npm test 275 / eval BENCH PASS); earlier full regression on `dsh-v0.1.5-alpha.1` and real-machine settings persistence on `dsh 0.1.5-rc.1` still valid
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -288,8 +288,8 @@ upgrade the plugin to `>=0.3.7` before moving DSH to `0.1.2-alpha.2`.
 ### Current release — `0.4.0`
 
 This release declares support for DSH `>=0.1.2-alpha.2 <0.2.0-0` and was fully
-validated against the `dsh-v0.1.5-alpha.1` source and web runtime from the local
-`deepseek-harness` checkout.
+validated against the `dsh 0.1.5-rc.2` dependency set (the whole
+`@deepseek-ai/dsh-*` family at 0.1.5-rc.2, matching the global DSH CLI).
 
 | Component | Supported range |
 | --- | --- |
@@ -303,15 +303,16 @@ validated against the `dsh-v0.1.5-alpha.1` source and web runtime from the local
 through the plugin's own HTTP route (`/api/dsh-engram/settings`, see Route B
 above). Host import and settings-registration smoke checks pass on
 `0.1.2-alpha.2` and `0.1.3-alpha.2`; the full regression suite is validated
-on `0.1.5-alpha.1` (real-machine GET/PUT/conflict/reset/persist-across-restart
-all verified on `dsh 0.1.5-rc.1` with an isolated profile). The older
-`0.1.0-rc.7` and `0.1.1` API graphs are outside this release's compatibility
-range.
+on the `dsh 0.1.5-rc.2` dependency set (npm test 275 / eval BENCH PASS).
+Earlier full regression on `0.1.5-alpha.1` and real-machine
+GET/PUT/conflict/reset/persist-across-restart on `dsh 0.1.5-rc.1` (isolated
+profile) remain valid. The older `0.1.0-rc.7` and `0.1.1` API graphs are
+outside this release's compatibility range.
 
 To install the DSH version used for validation:
 
 ```sh
-npm install --global @deepseek-ai/dsh@0.1.5-alpha.1
+npm install --global @deepseek-ai/dsh@0.1.5-rc.2
 dsh --version
 ```
 
