@@ -259,7 +259,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
 - **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.2.0-0` (dsh-engram `0.3.7`; releases `0.2.0`–`0.3.6` support the old generation only — see matrix below)
-- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.7-alpha.2` dependency set (npm test 291/291 / eval BENCH PASS); `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` also tested clean
+- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.7-alpha.2` dependency set (npm test 311/311 / eval BENCH PASS); `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` also tested clean
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -319,7 +319,7 @@ matching the global DSH CLI).
 through the plugin's own HTTP route (`/api/dsh-engram/settings`, see Route B
 above). Host import and settings-registration smoke checks pass on
 `0.1.2-alpha.2` and `0.1.3-alpha.2`; the full regression suite is validated
-on the `dsh 0.1.7-alpha.2` dependency set (npm test 291/291 / eval
+on the `dsh 0.1.7-alpha.2` dependency set (npm test 311/311 / eval
 BENCH PASS). `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` were also tested
 clean (the latter with real-machine GET/PUT/conflict/reset/persist-across-restart
 on an isolated profile). The older `0.1.0-rc.7` and `0.1.1` API graphs are
@@ -725,6 +725,29 @@ later request. The two switches are independent.
 - Default **off**: `boundaryPrune: false`. When on, the log shows
   `engram boundary-prune (todo @N reqs): pruned …`.
 
+### ResultPack L2 (archive + `result_recall`, default OFF)
+
+BoundaryPrune makes pruning lossless: the removed middle of every pruned
+tool result is redacted (same rules as the memory write path) and archived to
+`~/.dsh/engram/resultpack/<callId>.json`, and the pruned surface node gets a
+tail handle — `[middle archived: result_recall(<callId>) 可取]` — so the model
+knows the full result is one step away. `result_recall(callId, offset?)`
+returns the archived middle in paged text blocks (progressive disclosure, the
+same philosophy as `[ENGRAM]` → `engram_detail`, and the complete
+ObservationPack pattern from SoL-Pi mechanism ③).
+
+- **Lossless by construction**: L1 pruning shrinks the replay; L2 keeps the
+  original recoverable on demand — the "model rereads a pruned result" failure
+  mode goes to zero.
+- **Scoped cost**: archives live outside the memory domain (big blobs never
+  bloat the domain JSON or the [ENGRAM] index); retention is a mtime sweep
+  (`resultPackRetentionDays`, default 7) riding the same GC cadence.
+- **Self-disabling**: L2 without `boundaryPrune` has nothing to archive, so it
+  registers no tool and emits one warning.
+- Default **off**: `resultPack: false` (must be on together with
+  `boundaryPrune: true`). When active the log shows
+  `engram result-pack enabled: result_recall(callId, offset) registered`.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -809,6 +832,9 @@ Defaults are token-conscious; override any key via the profile patch
     autoCapture: true        # zero-LLM tool-result capture
     autoCapturePreferences: true  # zero-LLM user-correction/preference capture (prefer/avoid/switch-to cues)
     preferenceCapturePerSession: 8  # per-session preference memory cap
+    boundaryPrune: false       # ResultPack L1: prune stale over-threshold tool results at todo/goal boundaries (default OFF)
+    resultPack: false          # ResultPack L2: archive pruned middles + result_recall paged recall (default OFF; needs L1 on)
+    resultPackRetentionDays: 7 # archive retention days (mtime sweep on the GC cadence)
     sessionSearch: true      # engram_recall may also FTS past sessions
     recallScope: workspace   # recall scope: "workspace" (strict isolation, default) | "global" (opt-in cross-workspace recall with [W:<ws>] origin markers)
     autoRecallOnStart: true  # session-start auto recall (false = back to pure pull)

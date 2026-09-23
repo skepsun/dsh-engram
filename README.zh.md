@@ -163,7 +163,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
 - **DSH 版本**：`>=0.1.2-alpha.2 <0.2.0-0`（dsh-engram `0.3.7`；`0.2.0`–`0.3.6` 仅旧代际 —— 见下文矩阵）
-- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 291/291 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
+- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 311/311 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -213,7 +213,7 @@ DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 `settings.installSection`，浏览器端设置卡通过插件自有 HTTP 路由
 （`/api/dsh-engram/settings`，见上文 Route B）读写。
 `0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
-`0.1.7-alpha.2` 已完成完整回归（npm test 291/291 / eval BENCH PASS，插件在
+`0.1.7-alpha.2` 已完成完整回归（npm test 311/311 / eval BENCH PASS，插件在
 `dsh 0.1.7-alpha.2` 依赖集全量通过）；`0.1.5-rc.2`、`0.1.5-alpha.1`、
 `0.1.5-rc.1` 亦已实测通过（后者含设置 GET/PUT/冲突/复位/跨重启持久化真机验证）。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
@@ -343,7 +343,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 291 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
+npm test    # 311 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -531,6 +531,24 @@ Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝�
 - 默认**关**：`boundaryPrune: false`。开启后启动日志出现
   `engram boundary-prune (todo @N reqs): pruned …`。
 
+### ResultPack L2（结果归档 + `result_recall`，默认关）
+
+让 BoundaryPrune 剪枝**无损**：每个被剪工具结果的被移除中段，按与记忆写入
+相同的规则脱敏后归档到 `~/.dsh/engram/resultpack/<callId>.json`，并在剪枝
+节点尾部追加 handle——`[middle archived: result_recall(<callId>) 可取]`——
+模型知道完整结果就在一步之遥。`result_recall(callId, offset?)` 按页返回
+归档中段（渐进披露，与 `[ENGRAM]` → `engram_detail` 同一哲学，也是 SoL-Pi
+机制③ ObservationPack 的完整形态）。
+
+- **构造性无损**：L1 剪掉的是重放、L2 保留的是可随时取回的原文——「模型回头
+  找被剪结果」的失败模式归零。
+- **成本受控**：归档在记忆域之外（大块内容永远不会撑大 domain JSON 或
+  [ENGRAM] 索引）；保留期 `resultPackRetentionDays`（默认 7 天）按 mtime 清理，
+  搭 GC 同一节奏。
+- **自我禁用**：只开 L2 不开 L1 将无内容可归档，故不注册工具并打一条警告。
+- 默认**关**：`resultPack: false`（须与 `boundaryPrune: true` 同开）。开启后
+  启动日志出现 `engram result-pack enabled: result_recall(callId, offset) registered`。
+
 ## 自动捕获策略
 
 捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
@@ -603,6 +621,9 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     autoCapture: true        # 零 LLM 工具结果捕获
     autoCapturePreferences: true  # 零 LLM 用户纠正/偏好捕获（prefer/avoid/switch-to 句式）
     preferenceCapturePerSession: 8  # 每会话偏好记忆条数上限
+    boundaryPrune: false       # ResultPack L1：todo/goal 边界剪掉超阈值旧工具结果（默认关）
+    resultPack: false          # ResultPack L2：剪掉的中段脱敏归档 + result_recall 按页召回（默认关，须与 L1 同开）
+    resultPackRetentionDays: 7 # 归档保留天数（mtime 清理，走 GC 节奏）
     sessionSearch: true      # engram_recall 也可对历史会话 FTS
     recallScope: workspace   # 召回范围：workspace（严格工作区隔离，默认）| global（可选跨工作区召回，带 [W:<ws>] 来源标记）
     autoRecallOnStart: true  # 会话启动自动召回：按首条消息注入 [RECALL] 块（false=回到纯拉取）

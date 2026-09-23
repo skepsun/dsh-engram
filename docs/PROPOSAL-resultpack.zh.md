@@ -3,7 +3,7 @@
 > 依据:[SoL-Pi](https://nvlabs.github.io/SoL-Pi/) 四幸存机制之二(ObservationPack:归档载荷、上下文留 handle+摘录、按页召回)
 > 与提案池 C11「Reduce tool output before its first prompt insertion」/ C23「Build observation packs before paying for full bodies」。
 > 数据:[Oracle Analysis](./ORACLE-ANALYSIS.zh.md)(97 真实会话、13.9K 请求、15.0K 工具调用)。
-> **状态:L1 已实现(`lib/boundary-prune.js`,默认关;L0 见 §6,全量干跑见 §6.1)。L2 归档召回未实施。**
+> **状态:L1 已实现(`lib/boundary-prune.js`,默认关;L0 见 §6,全量干跑见 §6.1)。L2 已实现(`lib/result-pack.js`,默认关)。**
 
 ---
 
@@ -55,6 +55,8 @@ L1 剪掉的中段今天直接丢弃(仅 session 日志保留原文,模型取不
 - 剪枝时把中段存入插件存储域,键 = callId,带脱敏(复用 lib/redact.js);
 - 注册 `result_recall(callId, offset?)` 工具,按页返回归档中段 —— 与 [ENGRAM] 渐进披露同一哲学:索引行→详情下钻;
 - 剪枝结果尾部追加一行 handle:`[middle pruned: result_recall(callId) 可取]`,模型可自主决定是否下钻(M3 遥测将能看到激活率)。
+
+> **已实现(2026-09-23,§8)**:实现细节与设计中两处修正——①归档落 `~/.dsh/engram/resultpack/<callId>.json`(独立文件而非域表,大块内容不撑 domain JSON);②handle 走宿主 surface-replace 协议(`session.append("tool/result", …, surfaceOp replace)`),replay-safe 零 LLM;脱敏先于持久化。17 项单测 + L1→L2 钩子 3 项 + 进程内端到端(归档→分页→缺档)验证通过。
 
 ### L3 · 上游提案(严格 C11)
 
@@ -128,7 +130,7 @@ L1 剪掉的中段今天直接丢弃(仅 session 日志保留原文,模型取不
 
 ## 8. 后续
 
-- **L2(未实施)**:pruned 中段归档 + `result_recall` 按页召回 + handle 行;T2048 阈值与 L2 绑定。
+- ~~**L2**~~ **已实现**(2026-09-23, `lib/result-pack.js`):pruned 中段归档 + `result_recall` 按页召回 + handle 行;默认关(`resultPack`,须与 `boundaryPrune` 同开),保留 7 天走 GC;T2048 阈值与 L2 绑定,**现已满足开低阈值的归档前提**。
 - **激活遥测**:fire 事件已可从 session log 的 `compaction/prune` 序列读出;建议 /stats 加一个「boundary-prune vs overflow-prune 来源区分」计数(用 fire 前后日志行归属判定)。
 - **上游提案(L3)**:ToolRuntime 开放 finalizeContent 链,附 oracle 数据。
 
