@@ -131,7 +131,9 @@ L1 剪掉的中段今天直接丢弃(仅 session 日志保留原文,模型取不
 ## 8. 后续
 
 - ~~**L2**~~ **已实现**(2026-09-23, `lib/result-pack.js`):pruned 中段归档 + `result_recall` 按页召回 + handle 行;默认关(`resultPack`,须与 `boundaryPrune` 同开),保留 7 天走 GC;T2048 阈值与 L2 绑定,**现已满足开低阈值的归档前提**。
-- **激活遥测**:fire 事件已可从 session log 的 `compaction/prune` 序列读出;建议 /stats 加一个「boundary-prune vs overflow-prune 来源区分」计数(用 fire 前后日志行归属判定)。
+- ~~**激活遥测**~~ **已实现**(2026-09-23):`/stats` 与 GUI overview 返回 `activation: { boundaryPrune, recall }` —— BoundaryPrune fire 每次落盘 `~/.dsh/engram/boundary-prune.status.json`(fires/prunedResults/charsRemoved/byKind,与 resultPack 无关),[RECALL] 注入计数落盘 `recall-injections.json`,与 session-log 已统计的 recall 漏斗(查询→命中→detail 下钻)闭合(SoL-Pi M15/C13)。
+- ~~**step 空转边界**~~ **已实现**(2026-09-23):`boundaryPruneIdleCadence`(默认 0=关)——请求计数边界,覆盖无 todo/goal 会话。侦察 105 会话:65 个无边界、含 5.23M over-threshold 暴露(38%);反事实仿真(cadence 50):激活面 36→64 会话、首剪节省 4.23M→7.84M(+85%),仍受偿还门约束。
+- **T2048 落地**(2026-09-23):`boundaryPruneThresholdChars`/`HeadChars`/`TailChars`(默认 0=宿主)——插件以 `Object.create(pruner)` 原型克隆宿主 pruner 实例、仅覆盖 config,宿主不变。真实语料干跑:T2048 H1024/T256 首剪 10.14M vs 宿主默认 4.23M(+2.4x)。
 - **上游提案(L3)**:ToolRuntime 开放 finalizeContent 链,附 oracle 数据。
 
 

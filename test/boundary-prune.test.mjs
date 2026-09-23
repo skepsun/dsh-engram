@@ -197,3 +197,157 @@ test("installBoundaryPrune: absent pruner or disabled config → no hook registr
   d2();
   assert.ok(warns2.some((w) => w.includes("toolResultPruner service unavailable")), "feature-detection warning");
 });
+
+test("installBoundaryPrune: threshold override clones the pruner at a lower budget (T2048 landing)", async () => {
+  const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
+  const listeners = new Map();
+  const ctx = {
+    on(name, fn) {
+      listeners.set(name, fn);
+      return () => listeners.delete(name);
+    },
+  };
+  // host pruner at 8192 with a measurable config so we can assert the clone
+  const hostPruner = {
+    config: { thresholdChars: 8192, headChars: 4096, tailChars: 1024 },
+    pruneSession(session) {
+      this._calls = (this._calls ?? 0) + 1;
+      // prune 1 result; report budget attached here as the real host does
+      const report = {
+        pruned: [{ callId: "bash-t-2048", originalSeq: 7, replacementSeq: 9, charsBefore: 3000, charsAfter: 500 }],
+        charsRemoved: 2500,
+      };
+      for (const item of report.pruned) Object.assign(item, this.config);
+      return report;
+    },
+  };
+  const infos = [];
+  const dispose = installBoundaryPrune(
+    { ...ctx, get: (name) => {
+      if (name === "toolResultPruner") return hostPruner;
+      if (name === "tokenMeter") return { estimateMessage: () => 1 };
+      return undefined;
+    } },
+    {
+      boundaryPrune: true,
+      boundaryPruneMinRemaining: 5,
+      boundaryPruneThresholdChars: 2048,
+      boundaryPruneHeadChars: 1024,
+      boundaryPruneTailChars: 256,
+    },
+    { warn: () => {}, info: (m) => infos.push(m) },
+    { onPruned: (_s, report) => {
+      // the L2 hook must receive the CLONE's budgets (2048-clamped edges),
+      // not the host's 8192 ones
+      lastReport = report;
+    } },
+    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+  );
+  let lastReport = null;
+  const session = { id: "sess-t2048", header: { cwd: "/ws" } };
+  await listeners.get("session/event")(session, { type: "assistant/message" });
+  await listeners.get("session/event")(session, { type: "todo/write", data: { todos: [{ status: "completed" }, { status: "pending" }] } });
+  assert.ok(lastReport, "L2 hook received the report");
+  // budgets on the items reflect the override (1024/256), not host (4096/1024)
+  assert.equal(lastReport.pruned[0].headChars, 1024);
+  assert.equal(lastReport.pruned[0].tailChars, 256);
+  // the info log records the override activation
+  assert.ok(infos.some((m) => m.includes("threshold 2048")), `info mentions override: ${infos.join(" | ")}`);
+  // host pruner still exists and was NOT mutated
+  assert.equal(hostPruner.config.thresholdChars, 8192, "host config untouched");
+  dispose();
+});
+
+test("installBoundaryPrune: invalid threshold override falls back to host pruner with a warn", async () => {
+  const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
+  const listeners = new Map();
+  const ctx = {
+    on(name, fn) {
+      listeners.set(name, fn);
+      return () => listeners.delete(name);
+    },
+  };
+  const hostPruner = {
+    config: { thresholdChars: 8192, headChars: 4096, tailChars: 1024 },
+    pruneSession: () => ({ pruned: [{ callId: "x", originalSeq: 1, replacementSeq: 2, charsBefore: 9000, charsAfter: 400 }], charsRemoved: 8600 }),
+  };
+  const warns = [];
+  // threshold 0 / negative / non-number → ignored
+  const d1 = installBoundaryPrune(
+    { ...ctx, get: (n) => (n === "toolResultPruner" ? hostPruner : n === "tokenMeter" ? { estimateMessage: () => 1 } : undefined) },
+    { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneThresholdChars: 0 },
+    { warn: (m) => warns.push(m), info: () => {} },
+    {},
+    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+  );
+  d1();
+  // no warn about fallback since 0 is treated as "no override"
+  assert.equal(warns.some((w) => w.includes("threshold override")), false);
+});
+
+test("installBoundaryPrune: request-count cadence fires in sessions with no todo/goal (step-idle boundary)", async () => {
+  const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
+  const listeners = new Map();
+  const ctx = {
+    on(name, fn) {
+      listeners.set(name, fn);
+      return () => listeners.delete(name);
+    },
+  };
+  const hostPruner = {
+    config: { thresholdChars: 8192, headChars: 4096, tailChars: 1024 },
+    pruneSession: () => ({ pruned: [{ callId: "bash-step", originalSeq: 5, replacementSeq: 8, charsBefore: 9000, charsAfter: 400 }], charsRemoved: 8600 }),
+  };
+  const fired = [];
+  const info = [];
+  const dispose = installBoundaryPrune(
+    { ...ctx, get: (n) => (n === "toolResultPruner" ? hostPruner : n === "tokenMeter" ? { estimateMessage: () => 1 } : undefined) },
+    { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneIdleCadence: 20 },
+    { warn: () => {}, info: (m) => info.push(m) },
+    { onPruned: (_s, _r, boundary) => fired.push(boundary.kind) },
+    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+  );
+  const onEvent = listeners.get("session/event");
+  const session = { id: "sess-idle", header: { cwd: "/ws" } };
+  // No todo/goal events — 24 assistant messages with a 20-request cadence
+  for (let i = 1; i <= 24; i++) {
+    await onEvent(session, { type: "assistant/message" });
+  }
+  assert.equal(fired.length, 1, "fires once at the cadence boundary");
+  assert.equal(fired[0], "step", "boundary kind is step");
+  assert.ok(info.some((m) => m.includes("step @20")), `info shows step source: ${info.join("|")}`);
+  // cadence is per-session cadence: a second cross of the boundary minus the
+  // same cadence fires again
+  for (let i = 1; i <= 20; i++) await onEvent(session, { type: "assistant/message" });
+  assert.equal(fired.length, 2, "fires again after another full cadence");
+  dispose();
+});
+
+test("installBoundaryPrune: cadence off (null/0) never fires the step boundary", async () => {
+  const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
+  const listeners = new Map();
+  const ctx = {
+    on(name, fn) {
+      listeners.set(name, fn);
+      return () => listeners.delete(name);
+    },
+  };
+  const hostPruner = {
+    config: { thresholdChars: 8192, headChars: 4096, tailChars: 1024 },
+    pruneSession: () => ({ pruned: [{ callId: "x", originalSeq: 1, replacementSeq: 2, charsBefore: 9000, charsAfter: 400 }], charsRemoved: 8600 }),
+  };
+  const fired = [];
+  const d = installBoundaryPrune(
+    { ...ctx, get: (n) => (n === "toolResultPruner" ? hostPruner : n === "tokenMeter" ? { estimateMessage: () => 1 } : undefined) },
+    { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneIdleCadence: null },
+    { warn: () => {}, info: () => {} },
+    { onPruned: (_s, _r, boundary) => fired.push(boundary.kind) },
+    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+  );
+  const onEvent = listeners.get("session/event");
+  const session = { id: "sess-idle-off", header: { cwd: "/ws" } };
+  for (let i = 1; i <= 60; i++) await onEvent(session, { type: "assistant/message" });
+  assert.equal(fired.length, 0, "no step boundary when cadence is off");
+  d();
+});
+

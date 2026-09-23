@@ -44,6 +44,10 @@
   agentmemory 候选①）——相关记忆不依赖模型想起来就已在上下文里。纯规则、零 LLM、
   纯读不 bump 命中；superseded 过期真相不占注入槽（仍可 `engram_detail` 重取）；
   与 `[ENGRAM]` 一起按会话冻结保持前缀稳定。
+- **读路径激活（D）** — 命中条目的单行预览被截断（>140 字符）时带 `…` 标记，且块尾
+  引导行点名该具体 id：`#<id> truncated — engram_detail <id> (full) · engram_recall <query>`。
+  模型由此知道完整记录就在一次确定性 `engram_detail` 之后，而不是以为预览就是全文
+  （实证盲区：66 个会话 0 次 `engram_detail`——下钻路径此前对模型不可见）。
 - **记忆间语义（supersede/contradict）** — `engram_store` 可选收 `supersedes` / `contradicts`
   记忆 id（同工作区校验）。被 supersede 的「过期真相」在召回里**降级到尾部**、并从 `[ENGRAM]`
   块中**剔除**（新陈述占行）；被 contradicts 的记忆保留排序但标注 `· contradicted by <id>`。
@@ -528,6 +532,14 @@ Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝�
   workspace 历史先验 + 超过后 ×2 外推（有界乐观），长会话不会被挡死。
 - **诚实激活面**：goal=0 且无 todo 推进的会话天然不触发（无边界不剪，零副作用）；
   全量干跑 77 会话激活 38%。pruner 服务缺席即自动禁用并打一条日志。
+- **边界源**：默认 todo 完成推进 / goal 终态事件；可选**空闲步数边界**
+  （`boundaryPruneIdleCadence`，默认 0=关）——覆盖约 62% 从不动 todo/goal 的
+  会话（侦察：`eval/recon-idle-boundary.mjs`；反事实：`eval/simulate-idle-cadence.mjs`
+  显示 cadence 50 时节省 +85%），仍受偿还门约束。
+- **阈值覆盖**：`boundaryPruneThresholdChars`（默认 0=宿主 8192）。设为 2048
+  并配更小保留边缘（`boundaryPruneHeadChars`/`boundaryPruneTailChars`）可更早
+  开剪——T2048+小边缘在真实语料上首剪节省是宿主默认的 2.4 倍（10.14M vs 4.23M
+  字符）。降阈值在 `resultPack` 开启时安全（被剪中段有归档兜底）。
 - 默认**关**：`boundaryPrune: false`。开启后启动日志出现
   `engram boundary-prune (todo @N reqs): pruned …`。
 
@@ -548,6 +560,19 @@ Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝�
 - **自我禁用**：只开 L2 不开 L1 将无内容可归档，故不注册工具并打一条警告。
 - 默认**关**：`resultPack: false`（须与 `boundaryPrune: true` 同开）。开启后
   启动日志出现 `engram result-pack enabled: result_recall(callId, offset) registered`。
+
+### 激活遥测（SoL-Pi M15/C13）
+
+机制必须可证明在激活，休眠机制默认关。`/api/dsh-engram/stats`（以及 GUI
+overview）现在返回 `activation: { boundaryPrune, recall }`：
+
+- `boundaryPrune`——BoundaryPrune 真实 fire 的累计持久记录（fires /
+  prunedResults / charsRemoved / byKind todo|goal|step / lastFire），每次剪枝
+  落盘到 `~/.dsh/engram/boundary-prune.status.json`，与 `resultPack` 无关。
+- `recall`——召回漏斗的**注入腿**：实际进过会话的 `[RECALL]` 块数量
+  （`recall-injections.json`），与从 session log 已统计的另一端
+  （engram_recall 查询 → 命中 → engram_detail 下钻）闭合，可看到
+  注入→查询→下钻的完整激活。
 
 ## 自动捕获策略
 
@@ -622,6 +647,10 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     autoCapturePreferences: true  # 零 LLM 用户纠正/偏好捕获（prefer/avoid/switch-to 句式）
     preferenceCapturePerSession: 8  # 每会话偏好记忆条数上限
     boundaryPrune: false       # ResultPack L1：todo/goal 边界剪掉超阈值旧工具结果（默认关）
+    boundaryPruneThresholdChars: 0   # 阈值覆盖（0=宿主 8192；如 2048 可更早开剪）
+    boundaryPruneHeadChars: 0  # 覆盖时的保留头部（0=宿主 4096）
+    boundaryPruneTailChars: 0  # 覆盖时的保留尾部（0=宿主 1024）
+    boundaryPruneIdleCadence: 0   # 空闲步数边界（0=仅事件边界；覆盖无 todo/goal 会话）
     resultPack: false          # ResultPack L2：剪掉的中段脱敏归档 + result_recall 按页召回（默认关，须与 L1 同开）
     resultPackRetentionDays: 7 # 归档保留天数（mtime 清理，走 GC 节奏）
     sessionSearch: true      # engram_recall 也可对历史会话 FTS

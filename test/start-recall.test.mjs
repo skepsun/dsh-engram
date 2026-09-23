@@ -173,3 +173,32 @@ test("renderStartRecall recency fallback works with query:null for headless star
   assert.ok(out.length > 0);
   assert.match(out, /newest memory/);
 });
+
+test("renderStartRecall flags truncated hits and points engram_detail at a concrete id (read-path activation)", async () => {
+  const { domain, ws } = await seededDomain();
+  // a long memory (>140 chars after whitespace collapse) that must win a recall
+  const longText = "The full command sequence for the migration was: " +
+    "sed -i replace import paths, then re-run the benchmark with the new index " +
+    "schema while observing the token meter and recording telemetry, then verify " +
+    "against the lockfile hash before tagging. This is the complete procedural record.";
+  await domain.storeMemory(
+    {
+      workspace: ws, kind: "procedure", text: longText, tags: ["migration"],
+      entity: null, filePath: null, supersedes: null, contradicts: null,
+      sessionId: "s2", seq: 2, signal: 0.9,
+    },
+    CONFIG,
+  );
+  const out = renderStartRecall(domain, ws, CONFIG, { query: "migration command full sequence", allowRecencyFallback: false });
+  assert.match(out, /…/, "truncated hit carries an explicit ellipsis marker");
+  const id = (out.match(/#([0-9a-f]{8})/))?.[1];
+  assert.ok(id, "a hit id is present");
+  assert.match(out, new RegExp(`engram_detail ${id} \\(full\\)`), "guidance names the concrete truncated id for detail follow");
+});
+
+test("renderStartRecall keeps the generic drill when no hit is truncated", async () => {
+  const { domain, ws } = await seededDomain();
+  const out = renderStartRecall(domain, ws, CONFIG, { query: "sqlite vec retrieval", allowRecencyFallback: false });
+  assert.match(out, /engram_detail <id>/);
+  assert.ok(!out.includes("truncated"), "no truncated-hint when nothing was cut");
+});

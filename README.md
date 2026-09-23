@@ -66,6 +66,12 @@ with one goal: **save tokens**.
   Pure rule, zero LLM, pure read (never bumps `hits`); superseded stale truth does
   not occupy an injection slot (still fetchable via `engram_detail`); frozen per
   session together with `[ENGRAM]` for prefix stability.
+- **Read-path activation (D)** — a hit whose one-line preview is truncated
+  (>140 chars) carries a `…` marker and the block's trailing guidance names that
+  concrete id: `#<id> truncated — engram_detail <id> (full) · engram_recall <query>`.
+  So the model knows the full record is one deterministic `engram_detail` call
+  away instead of assuming the preview is the whole memory (proven gap in real
+  use: 66 sessions, zero `engram_detail` calls — the detail path was invisible).
 - **Memory-to-memory semantics** — `engram_store` accepts optional
   `supersedes` / `contradicts` memory ids (validated against the same
   workspace). A superseded ("stale truth") memory is demoted to the tail of
@@ -722,6 +728,18 @@ later request. The two switches are independent.
   simply never trigger (no boundary → no prune, zero side effects); the
   corpus-wide dry run activates on 38% of sessions. If the pruner service is
   absent the mechanism disables itself with one log line.
+- **Boundary sources**: todo-progress completion and goal terminal events
+  (default), plus an optional **request-count cadence**
+  (`boundaryPruneIdleCadence`, default 0/off) — the "step idle" source that
+  covers the ~62% of sessions which never touch todo/goal (recon:
+  `eval/recon-idle-boundary.mjs`; +85% saved chars at cadence 50 in the
+  counterfactual `eval/simulate-idle-cadence.mjs`), still repayment-gated.
+- **Threshold override**: `boundaryPruneThresholdChars` (default 0 → host's
+  8192). Set e.g. 2048 with smaller retained edges
+  (`boundaryPruneHeadChars`/`boundaryPruneTailChars`) to prune earlier —
+  T2048+small-edges lands 2.4× the first-prune savings of the host default on
+  the real corpus (10.14M vs 4.23M chars). Lowering the threshold is safe with
+  `resultPack` on, which archives the removed middles.
 - Default **off**: `boundaryPrune: false`. When on, the log shows
   `engram boundary-prune (todo @N reqs): pruned …`.
 
@@ -747,6 +765,21 @@ ObservationPack pattern from SoL-Pi mechanism ③).
 - Default **off**: `resultPack: false` (must be on together with
   `boundaryPrune: true`). When active the log shows
   `engram result-pack enabled: result_recall(callId, offset) registered`.
+
+### Activation telemetry (SoL-Pi M15/C13)
+
+Mechanisms must be provably activating, and dormant ones are off by default.
+`/api/dsh-engram/stats` (and the GUI overview) now answer
+`activation: { boundaryPrune, recall }`:
+
+- `boundaryPrune` — cumulative, durable record of real BoundaryPrune fires
+  (fires / prunedResults / charsRemoved / byKind todo|goal|step / lastFire),
+  written to `~/.dsh/engram/boundary-prune.status.json` on every landed prune,
+  independent of `resultPack`.
+- `recall` — the injection leg of the recall funnel: how many `[RECALL]`
+  blocks actually made it into sessions (`recall-injections.json`), closing
+  the loop already measured from session logs (engram_recall queries → hits →
+  engram_detail follows) so you can see injection→query→detail activation.
 
 ## Auto-capture policy
 
@@ -833,6 +866,10 @@ Defaults are token-conscious; override any key via the profile patch
     autoCapturePreferences: true  # zero-LLM user-correction/preference capture (prefer/avoid/switch-to cues)
     preferenceCapturePerSession: 8  # per-session preference memory cap
     boundaryPrune: false       # ResultPack L1: prune stale over-threshold tool results at todo/goal boundaries (default OFF)
+    boundaryPruneThresholdChars: 0   # threshold override (0 = host 8192; e.g. 2048 prunes earlier)
+    boundaryPruneHeadChars: 0  # retained head under an override (0 = host 4096)
+    boundaryPruneTailChars: 0  # retained tail under an override (0 = host 1024)
+    boundaryPruneIdleCadence: 0   # request-count boundary for todo/goal-less sessions (0 = event-only)
     resultPack: false          # ResultPack L2: archive pruned middles + result_recall paged recall (default OFF; needs L1 on)
     resultPackRetentionDays: 7 # archive retention days (mtime sweep on the GC cadence)
     sessionSearch: true      # engram_recall may also FTS past sessions

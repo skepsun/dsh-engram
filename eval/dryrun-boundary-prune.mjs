@@ -13,7 +13,13 @@ import { isBoundary, expectedSessionRequests, workspaceHistory } from "/Users/su
 
 const root = path.join(os.homedir(), ".dsh", "sessions");
 const MIN_REMAINING = 50;
-const TH = 8192, PRUNED_SIZE = 4096 + 42 + 1024; // DSH ToolResultPruner defaults
+// Threshold and retained-edges budgets: `--threshold N` lets the dry run
+// replay the T2048 landing (lower budget) vs the host 8192 default, so the
+// override's real activation surface can be measured before flipping it on.
+const argIdx = process.argv.indexOf("--threshold");
+const TH = argIdx >= 0 ? Number(process.argv[argIdx + 1]) : 8192;
+const HEAD_CHARS = 4096, TAIL_CHARS = 1024; // host defaults (unchanged by override)
+const PRUNED_SIZE = HEAD_CHARS + 42 + TAIL_CHARS; // DSH ToolResultPruner marker + edges
 const history = workspaceHistory();
 
 async function* events(file) {
@@ -68,7 +74,7 @@ for (const bucket of fs.readdirSync(root)) {
 summarize.sort((a, b) => b.savedTotal - a.savedTotal);
 const fired = summarize.filter((s) => s.fired > 0);
 const totalSaved = fired.reduce((a, s) => a + s.savedTotal, 0);
-console.log(`sessions(>10 reqs)=${summarize.length}  fired-sessions=${fired.length} (${((fired.length / summarize.length) * 100).toFixed(0)}%)`);
+console.log(`threshold=${TH}  sessions(>10 reqs)=${summarize.length}  fired-sessions=${fired.length} (${((fired.length / summarize.length) * 100).toFixed(0)}%)`);
 console.log(`total results pruned=${fired.reduce((a, s) => a + s.prunedTotal, 0)}  chars saved≈${(totalSaved / 1e6).toFixed(2)}M`);
 console.log("\ntop-8 sessions by saved chars:");
 for (const s of fired.slice(0, 8)) {
