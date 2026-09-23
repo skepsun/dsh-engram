@@ -154,7 +154,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
 - **DSH 版本**：`>=0.1.2-alpha.2 <0.2.0-0`（dsh-engram `0.3.7`；`0.2.0`–`0.3.6` 仅旧代际 —— 见下文矩阵）
-- **最后验证日期**：2026-09-23 —— `dsh 0.1.5-rc.2` 完整回归（npm test 275 项 / eval BENCH PASS）；此前 `dsh-v0.1.5-alpha.1` 完整回归、`dsh 0.1.5-rc.1` 真机验证设置持久化
+- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 279/279 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -190,8 +190,8 @@ DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
 ### 当前发布版本 —— `0.4.0`
 
-当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地 `dsh 0.1.5-rc.2`
-依赖集（@deepseek-ai/dsh-* 全族 0.1.5-rc.2，与全局 DSH CLI 同版本）完成完整验证。
+当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地 `dsh 0.1.7-alpha.2`
+依赖集（@deepseek-ai/dsh-* 全族 0.1.7-alpha.2 + cordis 4.0.4 + schemastery 3.18.4，与全局 DSH CLI 同版本）完成完整验证。
 
 | 组件 | 适配版本 |
 | --- | --- |
@@ -204,15 +204,15 @@ DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 `settings.installSection`，浏览器端设置卡通过插件自有 HTTP 路由
 （`/api/dsh-engram/settings`，见上文 Route B）读写。
 `0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
-`0.1.5-rc.2` 已完成完整回归（npm test 275 / eval BENCH PASS，插件在
-`dsh 0.1.5-rc.2` 依赖集上全量通过）；`0.1.5-alpha.1` 与 `0.1.5-rc.1` 的早期
-回归/真机验证（设置 GET/PUT/冲突/复位/跨重启持久化）仍有效。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
+`0.1.7-alpha.2` 已完成完整回归（npm test 279/279 / eval BENCH PASS，插件在
+`dsh 0.1.7-alpha.2` 依赖集全量通过）；`0.1.5-rc.2`、`0.1.5-alpha.1`、
+`0.1.5-rc.1` 亦已实测通过（后者含设置 GET/PUT/冲突/复位/跨重启持久化真机验证）。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
 
 如需按验证版本安装 DSH：
 
 ```sh
-npm install --global @deepseek-ai/dsh@0.1.5-rc.2
+npm install --global @deepseek-ai/dsh@0.1.7-alpha.2
 dsh --version
 ```
 
