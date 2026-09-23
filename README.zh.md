@@ -17,6 +17,15 @@
   + 失败行）自动捕获为 `tags:["error","test"]`、信号上调。DSH **goal 域打通**：completed/blocked 的
   goal（`goal/change` 会话事件）自动沉淀为 `handoff`/`error` 记忆（`tag:goal`），目标结局不随会话消散
   （读取面见 `GET /api/dsh-engram/goals`）。
+- **用户纠正/偏好学习（`autoCapturePreferences`，默认开，零 LLM）** — 「AI 犯错被纠正后，教训要留存」
+  （[correx](https://github.com/ozoz5/correx)、[PAHF](https://arxiv.org/abs/2602.16173)、Mem0 偏好提取）：
+  一个 `session/event` 监听器盯 `user/message`，用确定性纠正/偏好句式把用户话语沉淀为独立的
+  `preference` 记忆 kind——中文（`不要用X`、`改用X`、`以后统一用X`…）与英文（`don't use X`、
+  `switch to X`、`prefer X`、`never use X`…）模式，三种方向（`avoid` / `switch-to` / `prefer`），
+  并带疑问句 / 一次性操作指令 / 记忆工具元话语过滤器抑制误报。`preference` 记忆在 `[ENGRAM]`
+  块里**压过其它所有 kind**（`[R]` 前缀），让用户的长期规则成为每会话模型看到的第一行；
+  每会话上限 + 近期窗口去重与自动捕获同纪律。零 LLM、零向量、确定性纯函数——提取片段有界，
+  每条写入依旧先过密钥脱敏器。
 - **符号索引 + 渐进披露** — 一个紧凑的 `[ENGRAM]` 块（默认预算 700 字符 ≈ 175 token；每条记忆一行）在
   组装提示词时注入，并**按会话冻结**，让请求前缀字节稳定以复用 KV 缓存。模型需要细节时用
   `engram_recall` / `engram_detail` 下钻，而不是把命中的原文灌进上下文。召回对内存池做
@@ -154,7 +163,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
 - **DSH 版本**：`>=0.1.2-alpha.2 <0.2.0-0`（dsh-engram `0.3.7`；`0.2.0`–`0.3.6` 仅旧代际 —— 见下文矩阵）
-- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 279/279 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
+- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 291/291 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -204,7 +213,7 @@ DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 `settings.installSection`，浏览器端设置卡通过插件自有 HTTP 路由
 （`/api/dsh-engram/settings`，见上文 Route B）读写。
 `0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
-`0.1.7-alpha.2` 已完成完整回归（npm test 279/279 / eval BENCH PASS，插件在
+`0.1.7-alpha.2` 已完成完整回归（npm test 291/291 / eval BENCH PASS，插件在
 `dsh 0.1.7-alpha.2` 依赖集全量通过）；`0.1.5-rc.2`、`0.1.5-alpha.1`、
 `0.1.5-rc.1` 亦已实测通过（后者含设置 GET/PUT/冲突/复位/跨重启持久化真机验证）。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
@@ -334,7 +343,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 279 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
+npm test    # 291 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -592,6 +601,8 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 - id: engram
   config:
     autoCapture: true        # 零 LLM 工具结果捕获
+    autoCapturePreferences: true  # 零 LLM 用户纠正/偏好捕获（prefer/avoid/switch-to 句式）
+    preferenceCapturePerSession: 8  # 每会话偏好记忆条数上限
     sessionSearch: true      # engram_recall 也可对历史会话 FTS
     recallScope: workspace   # 召回范围：workspace（严格工作区隔离，默认）| global（可选跨工作区召回，带 [W:<ws>] 来源标记）
     autoRecallOnStart: true  # 会话启动自动召回：按首条消息注入 [RECALL] 块（false=回到纯拉取）

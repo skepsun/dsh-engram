@@ -26,6 +26,7 @@ export interface EngramSectionFace {
 }
 
 const KIND_COLORS: Record<string, string> = {
+  preference: "#b45309",
   decision: "#2563eb",
   error: "#dc2626",
   procedure: "#7c3aed",
@@ -36,6 +37,7 @@ const KIND_COLORS: Record<string, string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
+  preference: "偏好",
   decision: "决定",
   error: "错误",
   procedure: "流程",
@@ -509,6 +511,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview.totals.nodes ?? 0))} label={wsCounts ? "节点" : "节点 (全局)"} />
           <StatCard num={String(workspaces.length)} label="工作区" />
           <StatCard num={String(overview.captures.total)} label="自动捕获" />
+          <StatCard num={String(overview.captures.preference ?? 0)} label="偏好捕获" />
           <StatCard
             num={indexCost ? `~${indexCost.tokens}` : "–"}
             label="[ENGRAM] 索引 token / 工作区"

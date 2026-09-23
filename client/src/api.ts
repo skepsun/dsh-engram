@@ -199,7 +199,7 @@ export interface EngramOverview {
   kinds: Record<string, number>;
   totals: WorkspaceCounts;
   indexes: Record<string, IndexCost>;
-  captures: { total: number; git: number; file: number; error: number };
+  captures: { total: number; git: number; file: number; error: number; preference: number };
   gc: GcStats;
   compaction: CompactionStatus;
   config: EngramConfig;

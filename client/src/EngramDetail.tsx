@@ -32,6 +32,7 @@ interface EngramDetailFace {
 }
 
 const KIND_COLORS: Record<string, string> = {
+  preference: "#b45309",
   decision: "#2563eb",
   error: "#dc2626",
   procedure: "#7c3aed",
@@ -42,6 +43,7 @@ const KIND_COLORS: Record<string, string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
+  preference: "偏好",
   decision: "决定",
   error: "错误",
   procedure: "流程",

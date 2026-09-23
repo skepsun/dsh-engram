@@ -23,6 +23,21 @@ with one goal: **save tokens**.
   integration**: a completed or blocked goal (`goal/change` session event)
   auto-sediments as a `handoff`/`error` memory (`tag:goal`), so the outcome of
   a goal survives its session (see the `GET /api/dsh-engram/goals` read surface).
+- **User-correction / preference learning (`autoCapturePreferences`, default on,
+  zero LLM)** — the lesson that "when the AI makes a mistake and gets corrected,
+  that lesson should persist" ([correx](https://github.com/ozoz5/correx),
+  [PAHF](https://arxiv.org/abs/2602.16173), Mem0 preference extraction): a
+  `session/event` listener watches `user/message` and turns deterministic
+  correction/preference cues into a dedicated `preference` memory kind —
+  Chinese (`不要用X`, `改用X`, `以后统一用X`…) and English (`don't use X`,
+  `switch to X`, `prefer X`, `never use X`…) patterns, three directions
+  (`avoid` / `switch-to` / `prefer`), with interrogative/one-shot-instruction/
+  memory-tool-meta-talk filters to keep false positives out. `preference`
+  memories outrank every other kind in the `[ENGRAM]` block (`[R]` prefix) so a
+  standing user rule is the first line the model sees each session; per-session
+  cap + recent-window dedup mirror the auto-capture discipline. Zero LLM, zero
+  embeddings, deterministic and pure — extracted clauses are bounded, and every
+  write still goes through the secret redactor.
 - **Symbolic index + progressive disclosure** — a compact `[ENGRAM]` block (default
   budget 700 chars ≈ 175 tokens; one line per memory) is injected at prompt
   assembly and **frozen per session**, keeping the request prefix byte-stable for
@@ -244,7 +259,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
 - **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.2.0-0` (dsh-engram `0.3.7`; releases `0.2.0`–`0.3.6` support the old generation only — see matrix below)
-- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.7-alpha.2` dependency set (npm test 279/279 / eval BENCH PASS); `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` also tested clean
+- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.7-alpha.2` dependency set (npm test 291/291 / eval BENCH PASS); `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` also tested clean
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -304,7 +319,7 @@ matching the global DSH CLI).
 through the plugin's own HTTP route (`/api/dsh-engram/settings`, see Route B
 above). Host import and settings-registration smoke checks pass on
 `0.1.2-alpha.2` and `0.1.3-alpha.2`; the full regression suite is validated
-on the `dsh 0.1.7-alpha.2` dependency set (npm test 279/279 / eval
+on the `dsh 0.1.7-alpha.2` dependency set (npm test 291/291 / eval
 BENCH PASS). `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` were also tested
 clean (the latter with real-machine GET/PUT/conflict/reset/persist-across-restart
 on an isolated profile). The older `0.1.0-rc.7` and `0.1.1` API graphs are
@@ -792,6 +807,8 @@ Defaults are token-conscious; override any key via the profile patch
 - id: engram
   config:
     autoCapture: true        # zero-LLM tool-result capture
+    autoCapturePreferences: true  # zero-LLM user-correction/preference capture (prefer/avoid/switch-to cues)
+    preferenceCapturePerSession: 8  # per-session preference memory cap
     sessionSearch: true      # engram_recall may also FTS past sessions
     recallScope: workspace   # recall scope: "workspace" (strict isolation, default) | "global" (opt-in cross-workspace recall with [W:<ws>] origin markers)
     autoRecallOnStart: true  # session-start auto recall (false = back to pure pull)
@@ -818,7 +835,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 279 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune (node:test)
+npm test            # 291 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```
