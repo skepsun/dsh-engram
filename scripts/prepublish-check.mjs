@@ -24,8 +24,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tmp = mkdtempSync(join(tmpdir(), "dsh-engram-pack-"));
 const PEERS = [
   "@deepseek-ai/cordis@^4.0.2",
-  "@deepseek-ai/dsh-settings@>=0.1.2-alpha.2 <0.2.0-0",
-  "@deepseek-ai/dsh-storage-domain@>=0.1.2-alpha.2 <0.2.0-0",
+  "@deepseek-ai/dsh-settings@>=0.1.2-alpha.2 <0.3.0-0",
+  "@deepseek-ai/dsh-storage-domain@>=0.1.2-alpha.2 <0.3.0-0",
   "@deepseek-ai/schemastery@^3.18.2",
 ];
 
@@ -85,8 +85,11 @@ try {
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
   const host = await import(pathToFileURL(join(installed, manifest.main)).href);
   // resolveConfig is a deliberate public export (settings test builds the
-  // real DEFAULTS from it); widen the host surface consciously, not silently.
-  const expected = ["apply", "inject", "name", "resolveConfig"].sort().join(",");
+  // real DEFAULTS from it); Config is read by cordis as runtime.Config (the
+  // entry-id / volatile settings model); collectVolatileRefs/syncVolatileRefs
+  // back that model's live re-sync and are unit-tested directly. Widen the
+  // host surface consciously, not silently.
+  const expected = ["Config", "apply", "collectVolatileRefs", "inject", "name", "resolveConfig", "syncVolatileRefs"].sort().join(",");
   const actual = Object.keys(host).sort().join(",");
   if (actual !== expected) {
     throw new Error(`host exports mismatch: got ${actual}, want ${expected}`);

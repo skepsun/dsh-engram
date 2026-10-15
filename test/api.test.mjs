@@ -544,10 +544,13 @@ test("api: /triggerstats without a recorder returns null stats (host not upgrade
 test("api: /settings reads and mutates the dsh-engram namespace through the service.settings seam", async () => {
   const domain = await openEngramDomain(fakeFacility());
   const calls = [];
-  // Mirror the REAL dsh-settings provider shape: `describe()` returns a BARE
-  // array of namespace descriptors (in registration order), not {namespaces}.
-  // The route normalizes it onto the HTTP contract {namespaces:[...]}.
+  // Mirror the REAL dsh-settings ≥0.1.7 provider shape: `describe()` returns
+  // a BARE array of per-entry descriptors keyed by PROFILE ENTRY ID (here
+  // `engram` for our plugin row), and the seam carries the ACTIVE ns. The
+  // route normalizes onto the HTTP contract and re-labels the view onto the
+  // stable wire ns `dsh-engram` the client card filters on.
   const fakeSettings = {
+    ns: "engram",
     describe: () => [
       {
         ns: "llm-deepseek",
@@ -556,7 +559,7 @@ test("api: /settings reads and mutates the dsh-engram namespace through the serv
         applies: "live",
       },
       {
-        ns: "dsh-engram",
+        ns: "engram",
         value: { autoCapture: true, recallScope: "workspace" },
         base: { autoCapture: true, recallScope: "workspace" },
         user: undefined,
@@ -581,8 +584,7 @@ test("api: /settings reads and mutates the dsh-engram namespace through the serv
   };
   const routes = makeEngramRoutes(service);
 
-  // GET returns only the dsh-engram namespace view (filtered from the bare
-  // array, exactly what the real provider serves).
+  // GET returns only the engram entry view, relabelled to the wire ns.
   const r = res();
   await route(routes, `${API_PREFIX}/settings`).handler(req({ url: `${API_PREFIX}/settings` }), r);
   assert.equal(r._out.status, 200);
@@ -592,8 +594,8 @@ test("api: /settings reads and mutates the dsh-engram namespace through the serv
   assert.equal(body.namespaces[0].value.autoCapture, true);
   assert.equal(body.namespaces[0].revision, 3);
 
-  // PUT with path ops routes to service.settings.mutate (the exact shape the
-  // config card used through the RPC transport).
+  // PUT with path ops routes to service.settings.mutate against the ACTIVE ns
+  // (the exact shape the config card used through the RPC transport).
   const w = res();
   await route(routes, `${API_PREFIX}/settings`, "PUT").handler(
     req({ method: "PUT", url: `${API_PREFIX}/settings`, body: { ops: [{ op: "set", path: ["autoCapture"], value: false }], expectedRevision: 3 } }),
@@ -601,7 +603,7 @@ test("api: /settings reads and mutates the dsh-engram namespace through the serv
   );
   assert.equal(w._out.status, 200);
   assert.deepEqual(calls[0], {
-    ns: "dsh-engram",
+    ns: "engram",
     ops: [{ op: "set", path: ["autoCapture"], value: false }],
     expectedRevision: 3,
   });
@@ -613,7 +615,7 @@ test("api: /settings reads and mutates the dsh-engram namespace through the serv
     w2,
   );
   assert.equal(w2._out.status, 200);
-  assert.equal(calls[1].ns, "dsh-engram");
+  assert.equal(calls[1].ns, "engram");
   assert.deepEqual(calls[1].patch, { recallScope: "global" });
 
   // PUT with neither ops nor patch is rejected.

@@ -264,8 +264,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market compatibility block — keep labels bilingual and in sync with
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
-- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.2.0-0` (dsh-engram `0.3.7`; releases `0.2.0`–`0.3.6` support the old generation only — see matrix below)
-- **最后验证日期 / Last verified**: 2026-09-23 — full regression on the `dsh 0.1.7-alpha.2` dependency set (npm test 311/311 / eval BENCH PASS); `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` also tested clean
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.5.0`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
+- **最后验证日期 / Last verified**: 2026-10-15 — 设置模型迁移（entry-id volatile Config，兼容 DSH `0.2.x`）落地，npm test 329/329 通过；真实 `dsh 0.2.0-rc.2` 隔离 profile 运行烟测通过（见下方“当前发布”）
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -278,7 +278,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | dsh-engram release | Status | DSH support | Declared via |
 | --- | --- | --- | --- |
 | `0.2.0` … `0.3.6` (npm, GitHub v0.3.3–v0.3.6) | published | **old DSH only** — `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
-| `0.3.7` (npm, GitHub v0.3.7) | published | **new DSH only** — `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.2.0-0` |
+| `0.3.7` / `0.4.0` (npm) | published | **new DSH, settings `installSection`** — `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.2.0-0` |
+| `0.5.0` (本期 / this release) | pre-release | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** — 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 
@@ -303,38 +304,72 @@ HTTP route (`/api/dsh-engram/settings`, same-origin fetch like the memory
 viewer), so the card is generation-agnostic on both sides of the
 `0.1.2-alpha.2` boundary.
 
+**One more settings break, at `0.1.7` / `0.2.0`** — and the reason `0.4.0` was
+not actually loadable on the current DSH: `@deepseek-ai/dsh-settings` **removed
+`settings.installSection` again** in `0.1.7-alpha.2` (and keeps it removed in
+`0.2.x`). The new settings model is **entry-keyed**: editable fields are
+`.volatile()` fields of the plugin's own `Config` (validated + hot-committed by
+the loader), and the settings form is keyed by the profile entry id (`engram`),
+so nothing needs "mounting". `0.5.0` feature-detects the two generations in
+`installEngramSettings`:
+
+- DSH `≥0.1.7` / `0.2.x` — the 27 GUI knobs are the volatile `Config` fields
+  (`lib/settings.js` `makeEngineConfigSchema`, exported as `Config` from
+  `lib/index.js`); the card reads/writes entry `engram` through the same
+  `/api/dsh-engram/settings` HTTP route, and the `service.settings` seam
+  re-syncs `resolved` on `loader/volatile-update` so card edits land live on
+  new sessions.
+- DSH `≤0.1.5` — the legacy `settings.installSection` namespace (`dsh-engram`)
+  is registered as before; nothing changes.
+
+The declared range `>=0.1.2-alpha.2 <0.3.0-0` covers both, and the HTTP wire
+namespace stays `dsh-engram` on both generations (the seam's active namespace
+drives mutations).
+
 So: keep DSH on `0.1.1-rc.2` or older while running a release ≤ `0.3.6`, and
 upgrade the plugin to `>=0.3.7` before moving DSH to `0.1.2-alpha.2`.
 
-### Current release — `0.4.0`
+### Current release — `0.5.0`
 
-This release declares support for DSH `>=0.1.2-alpha.2 <0.2.0-0` and was fully
-validated against the `dsh 0.1.7-alpha.2` dependency set (the whole
-`@deepseek-ai/dsh-*` family at 0.1.7-alpha.2 + cordis 4.0.4 + schemastery 3.18.4,
-matching the global DSH CLI).
+The published `0.4.0` declared `>=0.1.2-alpha.2 <0.2.0-0` — which the semver
+gate **rejects on every DSH `0.2.0-0` prerelease** (`<0.2.0-0` excludes
+`0.2.0-rc.x`), and its host settings half still called the `installSection`
+API that `dsh-settings 0.1.7+` removed. `0.5.0` fixes **both**: the range
+opens to `<0.3.0-0` (verified against DSH's own `includePrerelease` check, so
+`0.2.0-rc.2` and the whole `0.2.x` line pass), and the settings card is
+migrated onto the entry-id **volatile Config** model described above (with a
+feature-detected legacy fallback).
 
 | Component | Supported range |
 | --- | --- |
-| DSH runtime / host / client package family | `>=0.1.2-alpha.2 <0.2.0-0` |
+| DSH runtime / host / client package family | `>=0.1.2-alpha.2 <0.3.0-0` |
 | `@deepseek-ai/cordis` | `^4.0.2` |
 | `@deepseek-ai/schemastery` | `^3.18.2` |
 | Node.js | `>=22.19.0` |
 
-`0.1.2-alpha.2` is the minimum version for this API family: host settings use
-`settings.installSection`, and the browser settings card reads and writes
-through the plugin's own HTTP route (`/api/dsh-engram/settings`, see Route B
-above). Host import and settings-registration smoke checks pass on
-`0.1.2-alpha.2` and `0.1.3-alpha.2`; the full regression suite is validated
-on the `dsh 0.1.7-alpha.2` dependency set (npm test 311/311 / eval
-BENCH PASS). `0.1.5-rc.2`, `0.1.5-alpha.1` and `0.1.5-rc.1` were also tested
-clean (the latter with real-machine GET/PUT/conflict/reset/persist-across-restart
-on an isolated profile). The older `0.1.0-rc.7` and `0.1.1` API graphs are
-outside this release's compatibility range.
+`0.1.2-alpha.2` is the minimum version for this API family: host settings are
+**feature-detected** — on DSH `≤0.1.5` they register the `dsh-engram`
+namespace via `settings.installSection`; on `≥0.1.7` / `0.2.x` the form is the
+plugin's `Config` with the 27 GUI knobs marked `.volatile()` (entry id
+`engram`). The browser settings card reads and writes through the plugin's own
+HTTP route (`/api/dsh-engram/settings`, see Route B above) on both. The full
+regression suite (npm test 329/329, incl. the new settings-v2 coverage for the
+volatile-Config model) passes against the DSH `0.2.0-rc.2` dependency set
+(cordis 4.0.4 + schemastery 3.18.4 + cosmokit, matching the global DSH CLI).
+The `.volatile()`/loader hot-commit path and the describe-side projection were
+verified against the real `dsh-settings 0.2.0-rc.2` utilities, and a full
+real-machine boot smoke on an isolated `dsh 0.2.0-rc.2` profile **passed**:
+the plugin boots with no version-range denial, the settings card form is
+served for entry `engram` (all 27 GUI knobs, incl. `trustedHosts`), and a
+GET → PUT (`mutate` ops, revision 0→1) → unset round trip on
+`/api/dsh-engram/settings` lands in the profile row and reads back. The older
+`0.1.0-rc.7` and `0.1.1` API graphs are outside this release's compatibility
+range.
 
 To install the DSH version used for validation:
 
 ```sh
-npm install --global @deepseek-ai/dsh@0.1.7-alpha.2
+npm install --global @deepseek-ai/dsh@0.2.0-rc.2
 dsh --version
 ```
 

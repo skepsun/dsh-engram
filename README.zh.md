@@ -166,8 +166,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
-- **DSH 版本**：`>=0.1.2-alpha.2 <0.2.0-0`（dsh-engram `0.3.7`；`0.2.0`–`0.3.6` 仅旧代际 —— 见下文矩阵）
-- **最后验证日期**：2026-09-23 —— `dsh 0.1.7-alpha.2` 完整回归（npm test 311/311 / eval BENCH PASS）；`0.1.5-rc.2`、`0.1.5-alpha.1`、`0.1.5-rc.1` 均已实测通过
+- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.5.0`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
+- **最后验证日期**：2026-10-15 —— 设置模型迁移（entry-id volatile Config，兼容 DSH `0.2.x`）落地，npm test 329/329 通过；真实 `dsh 0.2.0-rc.2` 隔离 profile 运行烟测通过（见下文“当前发布”）
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -178,7 +178,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | dsh-engram 发布版本 | 状态 | 支持的 DSH | 声明方式 |
 | --- | --- | --- | --- |
 | `0.2.0` … `0.3.6`（npm 全量 + GitHub v0.3.3–v0.3.6） | 已发布 | **仅旧版** —— `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
-| `0.3.7`（npm + GitHub v0.3.7） | 已发布 | **仅新版** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
+| `0.3.7` / `0.4.0`（npm） | 已发布 | **新版 DSH，settings `installSection`** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
+| `0.5.0`（本期 / this release） | 预发布 | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** —— 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
@@ -198,34 +199,59 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetch）读写
 `dsh-engram` settings namespace，因此在 `0.1.2-alpha.2` 分界线两侧都是代际无关的。
 
+**`0.1.7` / `0.2.0` 还有一次 settings 断裂**——`0.4.0` 在最新 DSH 上启动被拒的
+真正原因：`@deepseek-ai/dsh-settings` 在 `0.1.7-alpha.2` **再次移除了
+`settings.installSection`**（`0.2.x` 一路保留）。新设置模型是**条目式**的：可编辑字段
+是插件自身 `Config` 的 `.volatile()` 字段（由 loader 校验并热提交），设置表单以
+profile 条目 id（`engram`）为命名空间，不再需要任何“挂载”调用。`0.5.0`
+在 `installEngramSettings` 里对两代际做特性检测：
+
+- DSH `≥0.1.7` / `0.2.x` —— 27 个 GUI 旋钮即 `Config` 的 volatile 字段
+  （`lib/settings.js` `makeEngineConfigSchema`，由 `lib/index.js` 导出为
+  `Config`）；卡片仍走同一 `/api/dsh-engram/settings` HTTP 路由读写条目 `engram`，
+  `service.settings` 接缝在 `loader/volatile-update` 事件上把 `resolved`
+  重新同步，卡片编辑对新会话即时生效。
+- DSH `≤0.1.5` —— 照旧注册旧 `settings.installSection` 命名空间（`dsh-engram`）。
+
+声明范围 `>=0.1.2-alpha.2 <0.3.0-0` 同时覆盖两代际；HTTP wire 命名空间在两代际都保持
+`dsh-engram`（由接缝的活动命名空间驱动写入）。
+
 所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
 DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前发布版本 —— `0.4.0`
+### 当前发布版本 —— `0.5.0`
 
-当前发布版本声明适配 DSH `>=0.1.2-alpha.2 <0.2.0-0`，并以本地 `dsh 0.1.7-alpha.2`
-依赖集（@deepseek-ai/dsh-* 全族 0.1.7-alpha.2 + cordis 4.0.4 + schemastery 3.18.4，与全局 DSH CLI 同版本）完成完整验证。
+已发布的 `0.4.0` 声明 `>=0.1.2-alpha.2 <0.2.0-0`——这个范围被 semver 门槛在
+**所有 DSH `0.2.0-0` 预发布**上拒绝（`<0.2.0-0` 排除 `0.2.0-rc.x`），且其宿主设置端
+仍在调用 `dsh-settings 0.1.7+` 已移除的 `installSection` API。`0.5.0`
+**两处都修复**：范围放宽到 `<0.3.0-0`（用 DSH 自身的 `includePrerelease` 检查验证过，
+`0.2.0-rc.2` 及整个 `0.2.x` 线都放行）；设置卡迁移到上面描述的 entry-id **volatile
+Config** 模型（并带特性检测的旧代际回退）。
 
 | 组件 | 适配版本 |
 | --- | --- |
-| DSH runtime / host / client 包族 | `>=0.1.2-alpha.2 <0.2.0-0` |
+| DSH runtime / host / client 包族 | `>=0.1.2-alpha.2 <0.3.0-0` |
 | `@deepseek-ai/cordis` | `^4.0.2` |
 | `@deepseek-ai/schemastery` | `^3.18.2` |
 | Node.js | `>=22.19.0` |
 
-`0.1.2-alpha.2` 是这组 API 的最低版本：宿主设置注册使用
-`settings.installSection`，浏览器端设置卡通过插件自有 HTTP 路由
-（`/api/dsh-engram/settings`，见上文 Route B）读写。
-`0.1.2-alpha.2` 和 `0.1.3-alpha.2` 已完成宿主导入与设置注册 smoke 验证；
-`0.1.7-alpha.2` 已完成完整回归（npm test 311/311 / eval BENCH PASS，插件在
-`dsh 0.1.7-alpha.2` 依赖集全量通过）；`0.1.5-rc.2`、`0.1.5-alpha.1`、
-`0.1.5-rc.1` 亦已实测通过（后者含设置 GET/PUT/冲突/复位/跨重启持久化真机验证）。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
+`0.1.2-alpha.2` 是这组 API 的最低版本：宿主设置注册按代际**特性检测**——DSH `≤0.1.5`
+走 `settings.installSection` 注册 `dsh-engram` 命名空间；`≥0.1.7` / `0.2.x` 走插件
+`Config`（27 个 GUI 旋钮标记为 `.volatile()`，条目 id `engram`）。浏览器设置卡在两代际
+都经插件自有 HTTP 路由（`/api/dsh-engram/settings`，见上文 Route B）读写。完整回归
+（npm test 329/329，含新增的 volatile-Config 模型 settings-v2 覆盖）在 DSH
+`0.2.0-rc.2` 依赖集（cordis 4.0.4 + schemastery 3.18.4 + cosmokit，与全局 DSH CLI 同版本）
+上通过；`.volatile()`/loader 热提交路径与 describe 侧投影已针对真实 `dsh-settings
+0.2.0-rc.2` 工具函数验证；并在隔离的 `dsh 0.2.0-rc.2` profile 上完成了**真机启动烟测并
+通过**：插件启动无版本范围拒绝、设置卡表单以条目 `engram` 对外提供（全部 27 个 GUI
+旋钮，含 `trustedHosts`）、`/api/dsh-engram/settings` 的 GET → PUT（mutate ops，
+revision 0→1）→ unset 往返落盘并读回。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
 
 如需按验证版本安装 DSH：
 
 ```sh
-npm install --global @deepseek-ai/dsh@0.1.7-alpha.2
+npm install --global @deepseek-ai/dsh@0.2.0-rc.2
 dsh --version
 ```
 
