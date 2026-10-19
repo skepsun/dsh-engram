@@ -16,7 +16,7 @@ import { EngramPreview } from "./EngramPreview";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramTelemetry } from "./EngramTelemetry";
 import { EngramDetail, type DetailTarget } from "./EngramDetail";
-import type { EngramApi, EngramConfig, EngramOverview, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
+import type { EngramApi, EngramConfig, EngramOverview, ImportReport, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
 import { useEngramTheme } from "./theme";
 import { POLL_MS, taskGaps } from "./esrModel";
 
@@ -265,6 +265,15 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [closeEval, setCloseEval] = useState("");
   const [closeRefs, setCloseRefs] = useState("");
   const [closeBusy, setCloseBusy] = useState(false);
+  // 数据备份（issue #3）：GET /export 下载 / POST /import 恢复（merge 幂等、replace 需二次确认）
+  const [importDump, setImportDump] = useState<unknown>(null);
+  const [importName, setImportName] = useState<string>("");
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
+  const [importDryRun, setImportDryRun] = useState(true);
+  const [importReplaceOk, setImportReplaceOk] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -334,6 +343,29 @@ export function EngramSection({ api, t }: EngramSectionFace) {
     return (id: string) => map.get(id) ?? id;
   }, [nodes, tasks]);
 
+  /**
+   * 替换 / 冲突链（issue #3）：m.supersedes 指向被替代的旧行。在已加载列表里
+   * 反查一次，表格行挂「已替换」徽标，详情页沿链双向跳转。
+   */
+  const supersedeIndex = useMemo(() => {
+    const replacedBy = new Map<string, MemoryRecord[]>();
+    const contradictedBy = new Map<string, MemoryRecord[]>();
+    for (const m of memories) {
+      if (m.status !== "active") continue;
+      if (m.supersedes) {
+        const list = replacedBy.get(m.supersedes) ?? [];
+        list.push(m);
+        replacedBy.set(m.supersedes, list);
+      }
+      if (m.contradicts) {
+        const list = contradictedBy.get(m.contradicts) ?? [];
+        list.push(m);
+        contradictedBy.set(m.contradicts, list);
+      }
+    }
+    return { replacedBy, contradictedBy };
+  }, [memories]);
+
   // 新建任务的默认工作区：未选具体工作区且未手动选过时，取第一个。
   useEffect(() => {
     if (!newTaskWs && workspaces.length > 0 && !workspace) setNewTaskWs(workspaces[0]);
@@ -370,6 +402,66 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setGcRunning(false);
+    }
+  };
+
+  /** 数据备份（issue #3）：下载当前工作区（或全部）的 export 转储。 */
+  const downloadExport = async () => {
+    setDataError(null);
+    try {
+      const dump = await api.exportData(workspace || undefined);
+      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safe = (workspace || "all").replace(/[^a-zA-Z0-9._-]+/g, "_");
+      a.href = url;
+      a.download = `dsh-engram-export-${safe}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDataError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  /** 数据备份：选中导出文件（先解析，不写入）。 */
+  const pickImportFile = async (file: File | null) => {
+    setDataError(null);
+    setImportReport(null);
+    setImportDump(null);
+    setImportName("");
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setImportDump(JSON.parse(text) as unknown);
+      setImportName(file.name);
+    } catch (e) {
+      setDataError(`无法解析 ${file.name}：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  /** 数据备份：执行导入（dry-run 先看报告；replace 需勾选确认）。 */
+  const runImport = async () => {
+    if (importDump === null) return;
+    if (importMode === "replace" && !importReplaceOk) {
+      setDataError("替换模式会先清空目标工作区 — 请先勾选确认");
+      return;
+    }
+    setImportBusy(true);
+    setDataError(null);
+    try {
+      const report = await api.importData({
+        payload: importDump,
+        mode: importMode,
+        dryRun: importDryRun,
+        workspace: workspace || undefined,
+        confirm: importMode === "replace" ? "restore" : undefined,
+      });
+      setImportReport(report);
+      if (!report.dryRun) await refresh();
+    } catch (e) {
+      setDataError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImportBusy(false);
     }
   };
 
@@ -562,6 +654,76 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         )}
       </div>
 
+      <div style={s.subPanel}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>数据备份（export / import）</span>
+          <button style={s.btn} title="下载当前工作区（或全部）的 dsh-engram/export v1 转储" onClick={() => void downloadExport()}>
+            导出 JSON
+          </button>
+          <label style={{ ...s.btn, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            选择导入文件…
+            <input
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(e) => { void pickImportFile(e.target.files?.[0] ?? null); e.currentTarget.value = ""; }}
+            />
+          </label>
+          {importName && <span style={s.mono}>{importName}</span>}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
+          导出即可移植备份（记忆/任务/关系/节点，含归档）；<b>merge</b> 只补缺失（幂等），<b>replace</b> 先清空目标工作区再恢复。记忆正文与所有写入路径一样过脱敏。
+        </div>
+        {importDump !== null && (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+              <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                <input type="checkbox" checked={importDryRun} onChange={(e) => setImportDryRun(e.target.checked)} />
+                仅预览（dry run）
+              </label>
+              <select
+                style={s.input}
+                value={importMode}
+                onChange={(e) => {
+                  const mode = e.target.value as "merge" | "replace";
+                  setImportMode(mode);
+                  if (mode !== "replace") setImportReplaceOk(false);
+                }}
+              >
+                <option value="merge">合并（merge，幂等）</option>
+                <option value="replace">替换（replace，先清空工作区）</option>
+              </select>
+              {importMode === "replace" && (
+                <label style={{ display: "inline-flex", gap: 4, alignItems: "center", color: "#b45309" }}>
+                  <input type="checkbox" checked={importReplaceOk} onChange={(e) => setImportReplaceOk(e.target.checked)} />
+                  我确认替换{workspace ? `（${workspace}）` : "（需先选工作区）"}
+                </label>
+              )}
+              <button
+                style={s.btnPrimary}
+                disabled={importBusy || (importMode === "replace" && (!importReplaceOk || !workspace))}
+                onClick={() => void runImport()}
+              >
+                {importBusy ? "…" : importDryRun ? "预览导入" : "执行导入"}
+              </button>
+            </div>
+            {importReport && (
+              <div style={{ fontSize: 12.5 }}>
+                <div>
+                  {importReport.dryRun ? "dry-run 预览：" : "已导入："}
+                  {" "}{Object.entries(importReport.written).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"}
+                  {importReport.skipped.length > 0 ? ` · 跳过 ${importReport.skipped.length}` : ""}
+                </div>
+                {importReport.skipped.slice(0, 5).map((x, i) => (
+                  <div key={`${x.table}-${x.id ?? i}`} style={s.mono}>- {x.table} {x.id ? x.id.slice(0, 8) : "?"}: {x.reason}</div>
+                ))}
+              </div>
+            )}
+            {dataError && <div style={{ fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{dataError}</div>}
+          </div>
+        )}
+      </div>
+
       <div style={s.row}>
         <select style={s.input} value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="">全部类型</option>
@@ -621,6 +783,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                 <td style={{ ...s.td, whiteSpace: "nowrap" }}>
                   <span style={{ ...s.badge, background: KIND_COLORS[r.m.kind] ?? "#6b7280" }}>{KIND_LABEL[r.m.kind] ?? r.m.kind}</span>
                   {r.m.status === "archived" && <span style={{ ...s.tag, color: "#b45309", background: "#fef3c7" }}>archived</span>}
+                  {supersedeIndex.replacedBy.has(r.m.id) && (
+                    <span style={{ ...s.tag, color: "#b45309", background: "#fef3c7" }} title={`已被 ${(supersedeIndex.replacedBy.get(r.m.id) ?? []).map((x) => `#${x.id.slice(0, 8)}`).join(", ")} 替代（旧行保留、召回降级）`}>
+                      已替换
+                    </span>
+                  )}
                 </td>
                 <td style={{ ...s.td, minWidth: 0 }}>
                   <div title={r.m.text} style={expandedRows.has(r.m.id) ? s.expanded : s.clamp3}>{r.m.text}</div>
@@ -629,6 +796,11 @@ export function EngramSection({ api, t }: EngramSectionFace) {
                       {fmtDate(r.m.createdAt)} · {r.m.id.slice(0, 8)}{r.m.entity ? ` · ${r.m.entity}` : ""} · {r.m.signal.toFixed(2)} · hits {r.m.hits} · {daysLeft(r.m.expiresAt)}
                     </div>
                     <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? "收起" : "展开全文"}</button>
+                    {r.m.supersedes && (
+                      <button style={s.linkBtn} title={`打开被替代的旧记忆 ${r.m.supersedes}`} onClick={() => openMemory(r.m.supersedes as string)}>
+                        替代 #{r.m.supersedes.slice(0, 8)}
+                      </button>
+                    )}
                   </div>
                   {r.m.tags.length > 0 && (
                     <div style={{ marginTop: 3, display: "flex", flexWrap: "wrap", gap: 4 }}>{r.m.tags.map((tag) => <span key={tag} style={s.tag}>{tag}</span>)}</div>
@@ -830,6 +1002,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
               tasks={tasks}
               nodes={nodes}
               links={links}
+              memories={memories}
               onClose={() => setDetail(null)}
               onNavigateMemory={openMemory}
               onChanged={() => void refresh()}

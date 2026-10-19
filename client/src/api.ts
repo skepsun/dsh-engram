@@ -21,6 +21,26 @@ export interface MemoryRecord {
   signal: number;
   status: "active" | "archived";
   expiresAt: number | null;
+  /** Memory id this row supersedes (replacement-style update); null = none. */
+  supersedes?: string | null;
+  /** Memory id this row directly contradicts; null = none. */
+  contradicts?: string | null;
+  /** Provenance class: manual | session | report | upstream | handoff. */
+  source?: string | null;
+  /** Trigger/condition under which this memory should be recalled. */
+  conditions?: string | null;
+  /** Optional absolute file anchor. */
+  filePath?: string | null;
+  /** Last recall/access touch (epoch ms); null = never. */
+  lastAccessAt?: number | null;
+}
+
+/** `POST /import` report (store.importAll) — written counts per table + skips. */
+export interface ImportReport {
+  mode: "merge" | "replace";
+  dryRun: boolean;
+  written: Record<string, number>;
+  skipped: { table: string; id: string | null; reason: string }[];
 }
 
 export interface TaskRecord {
@@ -386,6 +406,36 @@ export class EngramApi {
           ...(workspace ? { workspace } : {}),
           dryRun,
         }),
+      }),
+    );
+  }
+
+  /**
+   * Data contract (issue #3) — dump the selected workspace, or every
+   * workspace when omitted, as a `dsh-engram/export` v1 payload. The same
+   * format `POST /import` restores, so the dump is a portable backup.
+   */
+  async exportData(workspace?: string): Promise<unknown> {
+    return readJson(await fetch(`${API_PREFIX}/export${query({ workspace })}`));
+  }
+
+  /**
+   * Data contract (issue #3) — restore a dump. `merge` adds missing rows
+   * (idempotent), `replace` wipes the target workspace first (the host then
+   * requires `confirm: "restore"`). `dryRun` plans without writing.
+   */
+  async importData(body: {
+    payload: unknown;
+    mode: "merge" | "replace";
+    dryRun?: boolean;
+    workspace?: string;
+    confirm?: "restore";
+  }): Promise<ImportReport> {
+    return readJson(
+      await fetch(`${API_PREFIX}/import`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
       }),
     );
   }

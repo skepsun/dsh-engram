@@ -24,6 +24,8 @@ interface EngramDetailFace {
   tasks: TaskRecord[];
   nodes: EntityRecord[];
   links: LinkRecord[];
+  /** Loaded memory rows — resolves supersedes/contradicts chains both ways. */
+  memories?: MemoryRecord[];
   onClose: () => void;
   /** Jump to a memory by id (caller resolves/refetches). */
   onNavigateMemory: (id: string) => void;
@@ -83,7 +85,7 @@ function gapsOf(t: TaskRecord): string[] {
   return gaps;
 }
 
-export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavigateMemory, onChanged }: EngramDetailFace) {
+export function EngramDetail({ target, api, tasks, nodes, links, memories = [], onClose, onNavigateMemory, onChanged }: EngramDetailFace) {
   const { dark, vars } = useEngramTheme();
   const [gArt, setGArt] = useState("");
   const [gEval, setGEval] = useState("");
@@ -108,6 +110,20 @@ export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavi
       .filter((l) => l.source === node.id || l.target === node.id)
       .map((l) => ({ l, outgoing: l.source === node.id }));
   }, [links, node, target.kind]);
+
+  /**
+   * 替换 / 冲突可视化（issue #3）：出边直接来自记录（supersedes / contradicts），
+   * 入边由已加载的记忆列表反查 —— 旧行保留、召回降级，详情里把整条替换链露出来。
+   */
+  const memoryLinks = useMemo(() => {
+    if (target.kind !== "memory") return null;
+    const m = target.memory;
+    return {
+      m,
+      replacedBy: memories.filter((x) => x.status === "active" && x.supersedes === m.id),
+      contradictedBy: memories.filter((x) => x.status === "active" && x.contradicts === m.id),
+    };
+  }, [target, memories]);
 
   const hb: Record<string, React.CSSProperties> = {
     root: {
@@ -139,6 +155,8 @@ export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavi
     badge: { fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, color: "#fff" },
     tag: { fontSize: 11, padding: "1px 8px", borderRadius: 999, background: "var(--dsh-color-hover-bg, #f3f4f6)", color: "var(--dsh-color-muted, #6b7280)", border: "1px solid var(--dsh-color-border, #e5e7eb)" },
     chip: { fontSize: 11, padding: "2px 9px", borderRadius: 999, background: "rgba(37,99,235,.1)", color: "#2563eb", border: "1px solid rgba(37,99,235,.25)", cursor: "pointer" },
+    chipSup: { fontSize: 11, padding: "2px 9px", borderRadius: 999, background: "rgba(124,58,237,.1)", color: "#7c3aed", border: "1px solid rgba(124,58,237,.25)", cursor: "pointer" },
+    chipDanger: { fontSize: 11, padding: "2px 9px", borderRadius: 999, background: "rgba(220,38,38,.1)", color: "#dc2626", border: "1px solid rgba(220,38,38,.25)", cursor: "pointer" },
     input: { fontSize: 12, padding: "5px 8px", border: "1px solid var(--dsh-color-border, #d1d5db)", borderRadius: 8, background: "var(--dsh-color-surface, #ffffff)", color: "var(--dsh-color-muted-strong, #374151)", width: "100%", boxSizing: "border-box" as const },
     btn: { fontSize: 11.5, fontWeight: 600, padding: "5px 10px", borderRadius: 8, cursor: "pointer", border: "1px solid var(--dsh-color-border, #d1d5db)", background: "transparent", color: "var(--dsh-color-muted-strong, #374151)" },
     btnPrimary: { fontSize: 11.5, fontWeight: 700, padding: "5px 12px", borderRadius: 8, cursor: "pointer", border: "none", background: "#2563eb", color: "#fff" },
@@ -280,6 +298,33 @@ export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavi
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>{target.memory.tags.map((t) => <span key={t} style={hb.tag}>#{t}</span>)}</div>
               </div>
             )}
+            {memoryLinks && (memoryLinks.m.supersedes || memoryLinks.m.contradicts || memoryLinks.replacedBy.length > 0 || memoryLinks.contradictedBy.length > 0) && (
+              <div style={hb.section}>
+                <div style={hb.k}>替换 / 冲突</div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>
+                  {memoryLinks.m.supersedes && (
+                    <span style={hb.chipSup} title={`本条替代 ${memoryLinks.m.supersedes}（旧行保留、召回降级）`} onClick={() => onNavigateMemory(memoryLinks.m.supersedes as string)}>
+                      替代 #{memoryLinks.m.supersedes.slice(0, 8)}
+                    </span>
+                  )}
+                  {memoryLinks.m.contradicts && (
+                    <span style={hb.chipDanger} title={`本条与 ${memoryLinks.m.contradicts} 冲突（两条都保留）`} onClick={() => onNavigateMemory(memoryLinks.m.contradicts as string)}>
+                      冲突 #{memoryLinks.m.contradicts.slice(0, 8)}
+                    </span>
+                  )}
+                  {memoryLinks.replacedBy.map((x) => (
+                    <span key={x.id} style={hb.chipSup} title={`已被 ${x.text.slice(0, 40)}… 替代`} onClick={() => onNavigateMemory(x.id)}>
+                      ← 被 #{x.id.slice(0, 8)} 替代
+                    </span>
+                  ))}
+                  {memoryLinks.contradictedBy.map((x) => (
+                    <span key={x.id} style={hb.chipDanger} title={`${x.text.slice(0, 40)}… 与本条冲突`} onClick={() => onNavigateMemory(x.id)}>
+                      ⇄ #{x.id.slice(0, 8)} 冲突
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={hb.section}>
               <div style={hb.k}>元数据</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 3, fontSize: 11.5, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--dsh-color-muted, #6b7280)" }}>
@@ -288,6 +333,9 @@ export function EngramDetail({ target, api, tasks, nodes, links, onClose, onNavi
                 <span>entity {target.memory.entity ?? "—"}</span>
                 <span>session {target.memory.sessionId} · seq {target.memory.seq}</span>
                 <span>created {fmtDate(target.memory.createdAt)} · updated {fmtDate(target.memory.updatedAt)}</span>
+                {target.memory.source && <span>source {target.memory.source}</span>}
+                {target.memory.conditions && <span>conditions {target.memory.conditions}</span>}
+                {target.memory.filePath && <span>file {target.memory.filePath}</span>}
                 <span>TTL {daysLeft(target.memory.expiresAt)}</span>
               </div>
             </div>
