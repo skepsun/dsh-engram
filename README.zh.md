@@ -380,7 +380,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 311 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune）
+npm test    # 347 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -607,6 +607,24 @@ overview）现在返回 `activation: { boundaryPrune, recall }`：
   （engram_recall 查询 → 命中 → engram_detail 下钻）闭合，可看到
   注入→查询→下钻的完整激活。
 
+### Context Ledger（净收益账本）
+
+把「省 token」变成可核对的账。每个模型请求记一笔：注入的 `[ENGRAM]`/`[RECALL]`
+与 `[ESR]` 块按存活请求数计入成本；被 BoundaryPrune 剪掉的结果按后续请求数计入
+节省；每次剪枝按 `(1 − ledgerCacheDiscount)` 计一次前缀重写罚金（KV 缓存击穿）。
+`GET /api/dsh-engram/stats` 与 `/overview` 返回 `ledger`：
+
+- `totals` — `requests / injectedChars / avoidedChars / rewriteCount / rewriteChars /
+  netChars / netTokens`（`net = avoided − injected − rewriteChars × (1 − discount)`）；
+- `byWorkspace` / `byDay` — 按工作区、按天的同一口径，`byDay` 倒序；
+- `openSessions` — 仍在累计、尚未落盘的会话数（进程重启最多丢 `flushEvery` 个请求的账）。
+
+落盘在 `~/.dsh/engram/ledger.json`（原子写、按天滚动、delta 落盘），进程内只做
+整数累加，热路径零 I/O、零模型调用。默认 `ledgerEnabled: true`、
+`ledgerCacheDiscount: 0.1`；关掉 = 不挂监听、不写文件。**口径诚实**：token 按
+`chars / 4` 估算，不含 provider 实际计费与模型质量差；Context GC 的压缩节省暂未
+接入（宿主未暴露前后大小），因此账本只记「可证明」的部分。
+
 ## 自动捕获策略
 
 捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
@@ -704,6 +722,8 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
     gcReplacesCompaction: true # Context GC：接管 DSH 自动 compact（false=回退默认 LLM 压缩）
     gcNarrative: true        # 无锚轮次走 scoped LLM 叙事；false=纯机械（零 LLM）
+    ledgerEnabled: true      # Context Ledger：注入成本/剪枝节省/前缀重写罚金 → 净 token
+    ledgerCacheDiscount: 0.1 # 缓存折价：重写按 (1−0.1) 计罚金；0.1 = 命中只付 10%
     boundaryPrune: false     # BoundaryPrune：todo/goal 边界主动剪超阈值旧工具结果（默认关）
     boundaryPruneMinRemaining: 50  # 偿还门：预计剩余请求数低于此值不剪
     engramIndexOrder: 40    # systemPrompt section 顺序（位于 tools 段之前）
@@ -713,7 +733,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 ## 开发
 
 ```sh
-npm test            # 152 个测试：核心 + Web API + GC + Context GC + ESR 触发（node:test）
+npm test            # 347 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
 npm run build:client
 ```
 

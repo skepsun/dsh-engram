@@ -6,6 +6,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Readable } from "node:stream";
 
 import { openEngramDomain } from "../lib/store.js";
@@ -675,4 +678,37 @@ test("api: /settings surfaces SETTINGS_CONFLICT as 409 and degrades to 503 witho
   const r2 = res();
   await route(noSeamRoutes, `${API_PREFIX}/settings`).handler(req({ url: `${API_PREFIX}/settings` }), r2);
   assert.equal(r2._out.status, 503);
+});
+
+test("api: /stats exposes the Context Ledger, null when disabled", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const statsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "engram-api-stats-"));
+  const snapshot = {
+    version: 1,
+    cacheDiscount: 0.1,
+    openSessions: 1,
+    totals: { requests: 9, injectedChars: 600, avoidedChars: 4000, rewriteCount: 1, netChars: 400, netTokens: 100 },
+  };
+  const base = {
+    config: CONFIG,
+    captureStats: { total: 0, git: 0, file: 0, error: 0 },
+    openedDomain: () => domain,
+    getDomain: () => Promise.resolve(domain),
+    statsRoot,
+  };
+  const routes = makeEngramRoutes({ ...base, ledger: () => snapshot });
+  const r = res();
+  await route(routes, `${API_PREFIX}/stats`).handler(req({ url: `${API_PREFIX}/stats` }), r);
+  assert.equal(r._out.status, 200);
+  assert.deepEqual(json(r).ledger, snapshot);
+  assert.equal(json(r).ledger.totals.netChars, 400);
+
+  const offRoutes = makeEngramRoutes(base);
+  const off = res();
+  await route(offRoutes, `${API_PREFIX}/stats`).handler(req({ url: `${API_PREFIX}/stats` }), off);
+  assert.equal(off._out.status, 200);
+  assert.equal(json(off).ledger, null, "ledger disabled → null, never a fabricated zero");
+
+  await domain.close();
+  fs.rmSync(statsRoot, { recursive: true, force: true });
 });

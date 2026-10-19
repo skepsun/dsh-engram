@@ -824,6 +824,31 @@ Mechanisms must be provably activating, and dormant ones are off by default.
   the loop already measured from session logs (engram_recall queries → hits →
   engram_detail follows) so you can see injection→query→detail activation.
 
+### Context Ledger (net-savings accounting)
+
+Turns "saves tokens" into a checkable number. Every model request is one ledger
+tick: injected `[ENGRAM]`/`[RECALL]` and `[ESR]` blocks are charged per request
+they survive; results removed by BoundaryPrune are credited per later request
+they no longer replay; every prune pays one prefix-rewrite penalty
+`(1 − ledgerCacheDiscount)` (the KV-cache break). `GET /api/dsh-engram/stats`
+and `/overview` return `ledger`:
+
+- `totals` — `requests / injectedChars / avoidedChars / rewriteCount /
+  rewriteChars / netChars / netTokens` with
+  `net = avoided − injected − rewriteChars × (1 − discount)`;
+- `byWorkspace` / `byDay` — the same arithmetic per workspace and calendar day
+  (`byDay` newest first);
+- `openSessions` — sessions still accumulating in memory (a restart loses at
+  most `flushEvery` requests).
+
+Durable rollup at `~/.dsh/engram/ledger.json` (atomic write, daily buckets,
+delta flush); the hot path is an integer add, zero I/O and zero model calls.
+Defaults: `ledgerEnabled: true`, `ledgerCacheDiscount: 0.1`; off = no listeners,
+no writes. **Honest scope**: tokens are `chars / 4` estimates, not provider
+billing, and no quality delta is claimed; Context GC compaction savings are not
+wired yet (the host does not expose before/after sizes), so the ledger only
+counts what it can prove.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -934,6 +959,8 @@ Defaults are token-conscious; override any key via the profile patch
     gcStableRetentionDays: 120  # stable tasks leave [ESR] after this
     gcReplacesCompaction: true # Context GC: take over DSH auto-compact (false = keep the default LLM summarizer)
     gcNarrative: true        # scoped LLM narrative for un-provenanced turns; false = fully mechanical (zero LLM)
+    ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
+    ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
     esrOrder: 41
 ```
@@ -941,7 +968,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 291 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning (node:test)
+npm test            # 347 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```
