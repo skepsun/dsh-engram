@@ -166,8 +166,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
-- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.5.1`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
-- **最后验证日期**：2026-10-19 —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）+ 数据导出/导入与替换/冲突可视化（issue #3），npm test 334/334 通过
+- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.6.0`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
+- **最后验证日期**：2026-10-19 —— Context Ledger / 默认值纠偏 / JIT 推送，npm test 359/359 通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -180,7 +180,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.2.0` … `0.3.6`（npm 全量 + GitHub v0.3.3–v0.3.6） | 已发布 | **仅旧版** —— `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
 | `0.3.7` / `0.4.0`（npm） | 已发布 | **新版 DSH，settings `installSection`** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
 | `0.5.0`（npm） | 已发布 | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** —— 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
-| `0.5.1`（本期 / this release） | 已发布 | 同 `0.5.0` —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
+| `0.5.1` | 已发布 | 同 `0.5.0` —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
+| `0.6.0`（本期 / this release） | 已发布 | 同 `0.5.0` —— Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
@@ -207,7 +208,7 @@ HTTP 路由（`/api/dsh-engram/settings`，与记忆 viewer 同样的同源 fetc
 profile 条目 id（`engram`）为命名空间，不再需要任何“挂载”调用。`0.5.0`
 在 `installEngramSettings` 里对两代际做特性检测：
 
-- DSH `≥0.1.7` / `0.2.x` —— 27 个 GUI 旋钮即 `Config` 的 volatile 字段
+- DSH `≥0.1.7` / `0.2.x` —— 31 个 GUI 旋钮即 `Config` 的 volatile 字段
   （`lib/settings.js` `makeEngineConfigSchema`，由 `lib/index.js` 导出为
   `Config`）；卡片仍走同一 `/api/dsh-engram/settings` HTTP 路由读写条目 `engram`，
   `service.settings` 接缝在 `loader/volatile-update` 事件上把 `resolved`
@@ -220,13 +221,23 @@ profile 条目 id（`engram`）为命名空间，不再需要任何“挂载”�
 所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
 DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前发布版本 —— `0.5.1`
+### 当前发布版本 —— `0.6.0`
 
-在 `0.5.0` 之上的补丁版：会话扫描改为解析**版本化**日志名
-（`session.v3/v4.jsonl.zstd`）而不硬编码 `session.jsonl.zstd`——在当前 DSH 上
-这个错位让 `/stats`、`/toolstats`、BoundaryPrune 的偿还历史、CJK 会话搜索全部
-**静默返回 0**（issue #8）。记忆查看器同时补上数据导出/导入与替换/冲突可视化
-（issue #3）。
+从「记忆插件」转向**上下文投资组合**：先把省 token 变成可审计的账本，再用账本
+纠正默认值、否决不划算的剪枝，并按确定性事件把记忆推给模型。
+
+- **Context Ledger**：每会话/工作区/天记录 `net = 节省 − 注入 − 重写罚金`，
+  `/stats` 与 `/overview` 返回，GUI 遥测页有面板；落盘 `~/.dsh/engram/ledger.json`。
+- **默认值纠偏**：`boundaryPrune` / `resultPack` 默认开（剪枝由归档兜底），
+  `gcReplacesCompaction` / `autoWebCompaction` 改 opt-in（不再主动改写宿主预设）。
+- **账本否决**：`boundaryPruneAdaptive` 在某 workspace 净收益为负且 ≥3 次剪枝时
+  自动停剪（fail-open）。
+- **JIT 推送**：错误复发 / 文件焦点 / goal 完成三类事件，append-only、每会话 ≤3 行、
+  无命中沉默；`[JIT]` section + `jitEnabled`。
+- **迁移**：升级后重启 `dsh web`；若仍要 Context GC 接管，显式打开
+  `gcReplacesCompaction:true`（web 还需 `autoWebCompaction:true`）。
+- `0.5.1` 的会话日志版本化修复（`session.v<N>.jsonl.zstd`，issue #8）与数据备份
+  GUI（issue #3）保持不变。
 
 已发布的 `0.4.0` 声明 `>=0.1.2-alpha.2 <0.2.0-0`——这个范围被 semver 门槛在
 **所有 DSH `0.2.0-0` 预发布**上拒绝（`<0.2.0-0` 排除 `0.2.0-rc.x`），且其宿主设置端
@@ -244,13 +255,13 @@ Config** 模型（并带特性检测的旧代际回退）。
 
 `0.1.2-alpha.2` 是这组 API 的最低版本：宿主设置注册按代际**特性检测**——DSH `≤0.1.5`
 走 `settings.installSection` 注册 `dsh-engram` 命名空间；`≥0.1.7` / `0.2.x` 走插件
-`Config`（27 个 GUI 旋钮标记为 `.volatile()`，条目 id `engram`）。浏览器设置卡在两代际
+`Config`（31 个 GUI 旋钮标记为 `.volatile()`，条目 id `engram`）。浏览器设置卡在两代际
 都经插件自有 HTTP 路由（`/api/dsh-engram/settings`，见上文 Route B）读写。完整回归
 （npm test 329/329，含新增的 volatile-Config 模型 settings-v2 覆盖）在 DSH
 `0.2.0-rc.2` 依赖集（cordis 4.0.4 + schemastery 3.18.4 + cosmokit，与全局 DSH CLI 同版本）
 上通过；`.volatile()`/loader 热提交路径与 describe 侧投影已针对真实 `dsh-settings
 0.2.0-rc.2` 工具函数验证；并在隔离的 `dsh 0.2.0-rc.2` profile 上完成了**真机启动烟测并
-通过**：插件启动无版本范围拒绝、设置卡表单以条目 `engram` 对外提供（全部 27 个 GUI
+通过**：插件启动无版本范围拒绝、设置卡表单以条目 `engram` 对外提供（全部 31 个 GUI
 旋钮，含 `trustedHosts`）、`/api/dsh-engram/settings` 的 GET → PUT（mutate ops，
 revision 0→1）→ unset 往返落盘并读回。旧的 `0.1.0-rc.7` 与 `0.1.1` API 图不在
 本发布版本的兼容范围内。
@@ -357,7 +368,7 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
 面板同时列出各工具调用计数与最近 14 天逐日滚动。这些是真实会话的真实数字——想提升 ESR 主动性，
 就观察面板上 esr 占比并调整注入提示。
 - **设置 → 插件 → 插件配置 → dsh-engram** — 与内置「终端 / Agent 循环 / 网页搜索」同款的
-  **默认折叠卡片**：标题 + 一行描述 + 箭头，点击展开/收起；展开后 12 个设置项按
+  **默认折叠卡片**：标题 + 一行描述 + 箭头，点击展开/收起；展开后常用 11 项 + 高级分组按
   「捕获与检索 / 索引 / 生命周期与 GC / 安全」四个分组展示。改动对新建会话即时生效
   （已冻结的块保持稳定）；支持放弃修改 / 保存，有未保存改动时标题上出现「未保存」徽标。
   卡片通过连接自身的 settings RPC 直连命名空间（不走 isLoopback 门控的 scope），因此即使

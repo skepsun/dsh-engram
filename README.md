@@ -264,8 +264,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market compatibility block — keep labels bilingual and in sync with
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
-- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.5.1`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
-- **最后验证日期 / Last verified**: 2026-10-19 — 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）+ 数据导出/导入与替换/冲突可视化（issue #3），npm test 334/334 通过
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.6.0`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
+- **最后验证日期 / Last verified**: 2026-10-19 — Context Ledger / 默认值纠偏 / JIT 推送，npm test 359/359 通过
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -280,7 +280,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.2.0` … `0.3.6` (npm, GitHub v0.3.3–v0.3.6) | published | **old DSH only** — `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
 | `0.3.7` / `0.4.0` (npm) | published | **new DSH, settings `installSection`** — `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.2.0-0` |
 | `0.5.0` (npm) | published | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** — 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
-| `0.5.1` (本期 / this release) | published | 同 `0.5.0` — 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
+| `0.5.1` | published | 同 `0.5.0` — 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
+| `0.6.0` (本期 / this release) | published | 同 `0.5.0` — Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 
@@ -314,7 +315,7 @@ the loader), and the settings form is keyed by the profile entry id (`engram`),
 so nothing needs "mounting". `0.5.0` feature-detects the two generations in
 `installEngramSettings`:
 
-- DSH `≥0.1.7` / `0.2.x` — the 27 GUI knobs are the volatile `Config` fields
+- DSH `≥0.1.7` / `0.2.x` — the 31 GUI knobs are the volatile `Config` fields
   (`lib/settings.js` `makeEngineConfigSchema`, exported as `Config` from
   `lib/index.js`); the card reads/writes entry `engram` through the same
   `/api/dsh-engram/settings` HTTP route, and the `service.settings` seam
@@ -330,14 +331,27 @@ drives mutations).
 So: keep DSH on `0.1.1-rc.2` or older while running a release ≤ `0.3.6`, and
 upgrade the plugin to `>=0.3.7` before moving DSH to `0.1.2-alpha.2`.
 
-### Current release — `0.5.1`
+### Current release — `0.6.0`
 
-Patch release on top of `0.5.0`: session scanning resolves the **versioned** log
-name (`session.v3/v4.jsonl.zstd`) instead of the hardcoded
-`session.jsonl.zstd` — on current DSH that mismatch made `/stats`, `/toolstats`,
-BoundaryPrune's repayment history and the CJK session search all return zero
-silently (issue #8). The memory viewer also gains data export/import and
-supersede/contradict visualization (issue #3).
+From a "memory plugin" to a **context portfolio**: make token savings auditable
+first, then use the ledger to correct defaults, veto unprofitable prunes and
+push memory at deterministic moments.
+
+- **Context Ledger** — per session / workspace / day
+  `net = avoided − injected − rewrite penalty`; exposed on `/stats` and
+  `/overview`, rendered on the telemetry page, persisted to
+  `~/.dsh/engram/ledger.json`.
+- **Default correction** — `boundaryPrune` / `resultPack` default ON (pruning is
+  lossless via the archive); `gcReplacesCompaction` / `autoWebCompaction` are
+  now opt-in (no preset rewriting by default).
+- **Ledger veto** — `boundaryPruneAdaptive` stops pruning a workspace whose own
+  accounting is net negative after ≥3 real fires (fail-open).
+- **JIT push** — error recurrence / file focus / goal completion, append-only,
+  ≤3 lines per session, silent without a hit; `[JIT]` section + `jitEnabled`.
+- **Migration** — restart `dsh web` after upgrading; if you still want Context
+  GC takeover, set `gcReplacesCompaction:true` (plus `autoWebCompaction:true`
+  for web presets). The `0.5.1` versioned session-log fix (issue #8) and data
+  backup GUI (issue #3) are unchanged.
 
 The published `0.4.0` declared `>=0.1.2-alpha.2 <0.2.0-0` — which the semver
 gate **rejects on every DSH `0.2.0-0` prerelease** (`<0.2.0-0` excludes
@@ -358,7 +372,7 @@ feature-detected legacy fallback).
 `0.1.2-alpha.2` is the minimum version for this API family: host settings are
 **feature-detected** — on DSH `≤0.1.5` they register the `dsh-engram`
 namespace via `settings.installSection`; on `≥0.1.7` / `0.2.x` the form is the
-plugin's `Config` with the 27 GUI knobs marked `.volatile()` (entry id
+plugin's `Config` with the 31 GUI knobs marked `.volatile()` (entry id
 `engram`). The browser settings card reads and writes through the plugin's own
 HTTP route (`/api/dsh-engram/settings`, see Route B above) on both. The full
 regression suite (npm test 329/329, incl. the new settings-v2 coverage for the
