@@ -166,8 +166,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
-- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.5.0`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
-- **最后验证日期**：2026-10-15 —— 设置模型迁移（entry-id volatile Config，兼容 DSH `0.2.x`）落地，npm test 329/329 通过；真实 `dsh 0.2.0-rc.2` 隔离 profile 运行烟测通过（见下文“当前发布”）
+- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.5.1`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
+- **最后验证日期**：2026-10-19 —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）+ 数据导出/导入与替换/冲突可视化（issue #3），npm test 334/334 通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -179,7 +179,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | --- | --- | --- | --- |
 | `0.2.0` … `0.3.6`（npm 全量 + GitHub v0.3.3–v0.3.6） | 已发布 | **仅旧版** —— `0.1.0-rc.7` / `0.1.0-rc.8` / `0.1.1-rc.1` / `0.1.1-rc.2` | peers `@deepseek-ai/dsh-*@^0.1.0-rc.7` |
 | `0.3.7` / `0.4.0`（npm） | 已发布 | **新版 DSH，settings `installSection`** —— `>=0.1.2-alpha.2 <0.2.0-0` | `engines.dsh` + peers 同范围 |
-| `0.5.0`（本期 / this release） | 预发布 | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** —— 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
+| `0.5.0`（npm） | 已发布 | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** —— 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
+| `0.5.1`（本期 / this release） | 已发布 | 同 `0.5.0` —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
@@ -219,7 +220,13 @@ profile 条目 id（`engram`）为命名空间，不再需要任何“挂载”�
 所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
 DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前发布版本 —— `0.5.0`
+### 当前发布版本 —— `0.5.1`
+
+在 `0.5.0` 之上的补丁版：会话扫描改为解析**版本化**日志名
+（`session.v3/v4.jsonl.zstd`）而不硬编码 `session.jsonl.zstd`——在当前 DSH 上
+这个错位让 `/stats`、`/toolstats`、BoundaryPrune 的偿还历史、CJK 会话搜索全部
+**静默返回 0**（issue #8）。记忆查看器同时补上数据导出/导入与替换/冲突可视化
+（issue #3）。
 
 已发布的 `0.4.0` 声明 `>=0.1.2-alpha.2 <0.2.0-0`——这个范围被 semver 门槛在
 **所有 DSH `0.2.0-0` 预发布**上拒绝（`<0.2.0-0` 排除 `0.2.0-rc.x`），且其宿主设置端
