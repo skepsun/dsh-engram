@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { openEngramDomain } from "../lib/store.js";
 import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
-import { collectUsageStats, dayKey, decodeZstd, recallStatsFromOutput } from "../lib/usage.js";
+import { collectToolCounts, collectUsageStats, dayKey, decodeZstd, recallStatsFromOutput, sessionLogFile } from "../lib/usage.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -82,7 +82,7 @@ test("decodeZstd decodes concatenated multi-frame zstd without an external CLI",
  * concatenated zstd frames (append-per-batch), so we split long inputs into
  * several frames to exercise the multi-frame decode path — no external CLI.
  */
-function seedSession(root, bucket, sid, lines, mtimeMs = Date.now()) {
+function seedSession(root, bucket, sid, lines, mtimeMs = Date.now(), fileName = "session.jsonl.zstd") {
   const dir = path.join(root, bucket, sid);
   fs.mkdirSync(dir, { recursive: true });
   const text = lines.join("\n") + "\n";
@@ -91,7 +91,7 @@ function seedSession(root, bucket, sid, lines, mtimeMs = Date.now()) {
   for (let i = 0; i < text.length; i += frameBytes) {
     frames.push(zstdCompressSync(Buffer.from(text.slice(i, i + frameBytes), "utf8")));
   }
-  const out = path.join(dir, "session.jsonl.zstd");
+  const out = path.join(dir, fileName);
   fs.writeFileSync(out, Buffer.concat(frames));
   fs.utimesSync(out, new Date(mtimeMs), new Date(mtimeMs));
   return out;
@@ -197,6 +197,70 @@ test("api: /stats returns ratios computed from the session log stream", async ()
   assert.equal(body.totals.failures, 1);
   assert.equal(body.workspace, "/ws/a");
   assert.ok(Array.isArray(body.byDay) && body.byDay[0].day === dayKey(), "byDay is a reverse-chron list");
+});
+
+/**
+ * Issue #8: current DSH stamps the session format version into the log file
+ * name (`session.v4.jsonl.zstd`), so a hardcoded `session.jsonl.zstd` made
+ * every session-scanning feature return zero silently.
+ */
+test("sessionLogFile resolves versioned names and prefers the newest log", () => {
+  const dir = makeRoot();
+  // No log at all → historical name, so callers keep their ENOENT handling.
+  assert.equal(path.basename(sessionLogFile(dir)), "session.jsonl.zstd");
+  assert.equal(path.basename(sessionLogFile(path.join(dir, "missing"))), "session.jsonl.zstd");
+
+  // Only a versioned log (the normal case on current DSH).
+  const v4dir = path.join(dir, "s-v4");
+  fs.mkdirSync(v4dir);
+  const v4 = path.join(v4dir, "session.v4.jsonl.zstd");
+  fs.writeFileSync(v4, "");
+  assert.equal(sessionLogFile(v4dir), v4);
+
+  // Migrated session: legacy + v3 + v4 in one directory → newest mtime wins.
+  const mixed = path.join(dir, "s-mixed");
+  fs.mkdirSync(mixed);
+  for (const [name, mtime] of [["session.jsonl.zstd", 1_000], ["session.v3.jsonl.zstd", 2_000], ["session.v4.jsonl.zstd", 3_000]]) {
+    const p = path.join(mixed, name);
+    fs.writeFileSync(p, "");
+    fs.utimesSync(p, new Date(mtime), new Date(mtime));
+  }
+  assert.equal(path.basename(sessionLogFile(mixed)), "session.v4.jsonl.zstd");
+
+  // Look-alike names are never picked up (wrong extension / version spelling).
+  const noisy = path.join(dir, "s-noisy");
+  fs.mkdirSync(noisy);
+  fs.writeFileSync(path.join(noisy, "session.v4.jsonl"), "");
+  fs.writeFileSync(path.join(noisy, "session.vx.jsonl.zstd"), "");
+  fs.writeFileSync(path.join(noisy, "notes.txt"), "");
+  assert.equal(path.basename(sessionLogFile(noisy)), "session.jsonl.zstd");
+});
+
+test("collectUsageStats and collectToolCounts scan versioned session logs (issue #8)", () => {
+  const root = makeRoot();
+  seedSession(root, "--p--", "s1", USAGE_FIXTURE, Date.now(), "session.v4.jsonl.zstd");
+  const stats = collectUsageStats({ root, days: 14 });
+  assert.equal(stats.files, 1, "the v4 log is opened");
+  assert.equal(stats.events, 5);
+  const tools = collectToolCounts({ root, days: 14 });
+  assert.equal(tools.files, 1);
+  assert.equal(tools.events, 5);
+  assert.equal(tools.tools.engram_recall, 1);
+});
+
+test("a stale legacy log never shadows the v4 log the host is appending to", () => {
+  const root = makeRoot();
+  const now = Date.now();
+  // Legacy log: recent mtime but stale CONTENT (one tool call), plus a v3 log.
+  seedSession(root, "--p--", "s1", [JSON.stringify({ type: "session", cwd: "/ws/stale" }), C("engram_store", "c1"), R("c1", false)], now, "session.jsonl.zstd");
+  seedSession(root, "--p--", "s1", [JSON.stringify({ type: "session", cwd: "/ws/old" })], now - 10_000, "session.v3.jsonl.zstd");
+  // The live v4 log is newest → the only one scanned.
+  seedSession(root, "--p--", "s1", USAGE_FIXTURE, now + 10_000, "session.v4.jsonl.zstd");
+  const r = collectUsageStats({ root, days: 14 });
+  assert.equal(r.files, 1, "one session directory → exactly one log scanned");
+  assert.equal(r.events, 5);
+  assert.ok(r.rows.some((x) => x.workspace === "/ws/a"), "rows come from the v4 log");
+  assert.ok(!r.rows.some((x) => x.workspace === "/ws/stale"), "the legacy log was not read");
 });
 
 /** Loopback request stand-in (mirrors api.test.mjs helpers). */

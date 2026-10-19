@@ -23,10 +23,10 @@ function tmpRoot() {
 }
 
 /** Write one zstd-compressed session log under root/<bucket>/<sid>/. */
-function writeSession(root, bucket, sid, lines, mtimeMs = Date.now()) {
+function writeSession(root, bucket, sid, lines, mtimeMs = Date.now(), fileName = "session.jsonl.zstd") {
   const dir = path.join(root, bucket, sid);
   fs.mkdirSync(dir, { recursive: true });
-  const out = path.join(dir, "session.jsonl.zstd");
+  const out = path.join(dir, fileName);
   fs.writeFileSync(out, zstdCompressSync(Buffer.from(lines.join("\n") + "\n", "utf8")));
   fs.utimesSync(out, new Date(mtimeMs), new Date(mtimeMs));
 }
@@ -127,6 +127,21 @@ test("searchSessionsCJK returns [] for non-CJK queries, missing buckets and empt
     '{"type":"tool/result","data":{"name":"x","output":"只有英文 build"}}',
   ]);
   assert.deepEqual(searchSessionsCJK({ cwd, query: "中间表示", root }), []); // no match
+});
+
+test("searchSessionsCJK scans versioned session logs (issue #8)", () => {
+  const root = tmpRoot();
+  const cwd = path.join(root, "versioned");
+  const bucket = bucketFromCwd(cwd);
+  // Current DSH writes session.v4.jsonl.zstd — the scan must find it.
+  writeSession(root, bucket, "s1", [
+    '{"type":"session","cwd":"' + cwd + '"}',
+    '{"type":"tool/result","data":{"name":"x","output":"深入理解编译器的中间表示生成"}}',
+  ], Date.now(), "session.v4.jsonl.zstd");
+  const hits = searchSessionsCJK({ cwd, query: "中间表示", root });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].sessionId, "s1");
+  assert.match(hits[0].snippet, /中间表示/);
 });
 
 test("searchSessionsCJK redacts secrets from raw-log snippets", () => {

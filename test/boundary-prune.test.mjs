@@ -6,8 +6,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-import { isBoundary, completedCount, expectedSessionRequests } from "../lib/boundary-prune.js";
+import { isBoundary, completedCount, expectedSessionRequests, workspaceHistory } from "../lib/boundary-prune.js";
 
 test("completedCount counts completed todos only", () => {
   assert.equal(completedCount(null), 0);
@@ -351,3 +354,24 @@ test("installBoundaryPrune: cadence off (null/0) never fires the step boundary",
   d();
 });
 
+
+test("workspaceHistory counts versioned session logs (issue #8)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-bp-hist-"));
+  const bucket = "--a-b--";
+  const mk = (sid, name, bytes) => {
+    const d = path.join(root, bucket, sid);
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, name), Buffer.alloc(bytes));
+  };
+  mk("s1", "session.v4.jsonl.zstd", 10); // current DSH
+  mk("s2", "session.v3.jsonl.zstd", 10); // 0.1.x
+  mk("s3", "session.jsonl.zstd", 10); // legacy
+  mk("s4", "session.v4.jsonl.zstd", 0); // empty log → not a session
+
+  const total = [...workspaceHistory(root).values()].reduce((n, v) => n + v.sessions, 0);
+  assert.equal(total, 3, "every naming variant with content is counted");
+
+  // No sessions at all → empty map (callers fall back to the fixed floor).
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-bp-hist-empty-"));
+  assert.equal(workspaceHistory(empty).size, 0);
+});
