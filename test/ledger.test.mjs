@@ -189,3 +189,18 @@ test("ledgerDayKey and ledgerFile are stable helpers", () => {
   assert.equal(ledgerDayKey(new Date("2026-01-02T03:04:05").getTime()), "2026-01-02");
   assert.equal(ledgerFile("/x"), path.join("/x", "ledger.json"));
 });
+
+test("JIT injections and non-prune rewrites are priced through the ledger", () => {
+  const ledger = createLedger({ home: tmpHome(), persist: false, cacheDiscount: 0.1 });
+  ledger.noteInjection("s1", "/ws", "jit", 50);
+  ledger.tick("s1", "/ws");
+  ledger.tick("s1", "/ws");
+  ledger.noteRewrite("s1", "/ws", { chars: 1000 });
+  ledger.tick("s1", "/ws");
+  const s = ledger.summary();
+  assert.equal(s.totals.injectedChars, 150, "JIT block charged per surviving request");
+  assert.equal(s.totals.rewriteCount, 1);
+  assert.equal(s.totals.rewriteChars, 1000);
+  assert.equal(s.totals.rewritesCostChars, 900);
+  assert.equal(s.totals.netChars, -150 - 900);
+});

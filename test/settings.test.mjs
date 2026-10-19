@@ -23,6 +23,7 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(defaults.boundaryPrune, true, "BoundaryPrune defaults ON with the ledger veto (v0.6)");
   assert.equal(defaults.boundaryPruneAdaptive, true, "adaptive ledger gate defaults ON");
   assert.equal(defaults.resultPack, true, "default pruning stays lossless via the archive");
+  assert.equal(defaults.jitEnabled, true, "JIT push defaults ON (bounded, silent without hits)");
   assert.equal(defaults.recallScope, "workspace", "recallScope defaults to strict workspace isolation");
 
   // base (composition layer) includes both keys
@@ -56,6 +57,7 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.ok(SETTINGS_KEYS.includes("autoSinkTodosOnEnd"), "autoSinkTodosOnEnd propagates to live");
   assert.ok(SETTINGS_KEYS.includes("autoWebCompaction"), "autoWebCompaction propagates to live");
   assert.ok(SETTINGS_KEYS.includes("boundaryPruneAdaptive"), "boundaryPruneAdaptive propagates to live");
+  assert.ok(SETTINGS_KEYS.includes("jitEnabled"), "jitEnabled propagates to live");
   assert.ok(SETTINGS_KEYS.includes("recallScope"), "recallScope propagates to live");
 });
 

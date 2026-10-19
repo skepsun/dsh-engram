@@ -343,7 +343,7 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 - **状态**：已实现（2026-10-19）——`lib/ledger.js`（纯函数 + 原子落盘 + delta flush）、
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
   `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
-  概览「上下文净 token」卡；`npm test` 349/349。
+  概览「上下文净 token」卡；`npm test` 359/359。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**
@@ -367,6 +367,14 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 
 - **计价规则**：推送会改前缀 → 走 Ledger 的 `rewrites`，ROI 为负就不推。
   这是与「冻结前缀」原则的显式妥协，由账本裁决，而不是拍脑袋。
+- **状态**：已实现（2026-10-19）——`lib/jit.js` 三类事件（错误复发 / 文件焦点 /
+  goal 完成），append-only、每会话 ≤3 行、每行 ≤220 字符、无命中沉默；
+  `index.js` 注册 `engram:jit` section（order 40.75）与 observers；每次推送
+  `ledger.noteRewrite(estimatePrefixChars + line)`；设置键 `jitEnabled`。
+  已覆盖：错误复发只在第 2 次失败且存在 error/procedure 记忆时推；文件焦点只在
+  连续第 2 次同文件编辑且存在 filePath/dir 锚定记忆时推；goal 完成时有 active
+  任务才推。**未做**：resume brief（留给 v0.7）、基于预计剩余请求的显式 ROI 门
+  （当前是 3 行硬预算 + 账本观测）、todo 完成边界（避免高频刷屏）。
 
 **D. 宿主对齐（减法）**
 

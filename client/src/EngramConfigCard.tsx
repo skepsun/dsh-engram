@@ -49,6 +49,8 @@ export interface EngramConfigValue {
   recallScope?: "workspace" | "global";
   /** 会话启动自动召回：按首条消息注入 [RECALL] 块（默认开；关掉=纯拉取）。 */
   autoRecallOnStart?: boolean;
+  /** JIT 推送：错误复发/文件焦点/goal 完成时推一行已有记忆（默认开）。 */
+  jitEnabled?: boolean;
   /** [RECALL] 块最多注入的记忆条数（少而准）。 */
   autoRecallLimit?: number;
   autoCapturePerSession?: number;
@@ -112,6 +114,7 @@ export const COMMON_FIELDS: EngramConfigField[] = [
   { key: "boundaryPruneThresholdChars", label: "剪枝阈值(字符)", hint: "覆盖宿主 8192：设 2048 可更早开剪，并配 L2 归档找回被剪中段；留空=宿主默认。建议同时把保留边缘调小（如 1024/256）以获得最大节省", kind: "num", min: 256, max: 16384, step: 256 },
   { key: "resultPack", label: "结果归档召回", hint: "ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；默认开，保证默认剪枝无损；需与边界剪枝一起开）", kind: "bool" },
   { key: "autoRecallOnStart", label: "会话启动自动召回", hint: "新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取", kind: "bool" },
+  { key: "jitEnabled", label: "JIT 推送", hint: "错误复发 / 文件焦点 / goal 完成时，把已有记忆压成一行推进上下文（append-only、每会话≤3 行、无命中沉默；每次推送按前缀重写计入账本）", kind: "bool" },
   { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
   { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
   { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },

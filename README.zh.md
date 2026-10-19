@@ -381,7 +381,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 349 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
+npm test    # 359 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger / JIT 推送）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -633,6 +633,26 @@ delta 落盘），进程内只做整数累加，热路径零 I/O、零模型调�
 `chars / 4` 估算，不含 provider 实际计费与模型质量差；Context GC 的压缩节省暂未
 接入（宿主未暴露前后大小），因此账本只记「可证明」的部分。
 
+### JIT 推送（v0.6-C）
+
+拉取式召回被实证休眠（112 会话仅 24 次 `engram_recall`、8 次 `engram_detail`），所以
+v0.6 增加按事件**推送**：三个确定性事件，命中才推、每次一行、每会话最多 3 行（`jitMaxLines`，
+每行 `jitMaxLineChars`=220）：
+
+| 事件 | 触发条件 | 推什么 |
+|---|---|---|
+| 错误复发 | 同一 `cmd:` 签名第二次失败，且已有 error/procedure 记忆 | 该记忆的 id + 一行摘要 + `engram_detail` 下钻 |
+| 文件焦点 | 同一文件连续第二次编辑，且有 filePath/dir 锚定记忆 | 优先 preference，其次 fact/decision |
+| 目标完成 | goal complete/block 且有 active ESR 任务 | 前两个未闭环任务 + `esr_status` 提示 |
+
+- **append-only**：推送行一旦出现就不再改写/撤回，前缀每次推送只变一次；
+  每次推送按 `estimatePrefixChars + 行长度` 记一次重写罚金（Context Ledger 的
+  `rewriteCount` / `rewriteChars`），净收益可在遥测页直接看。
+- **无命中沉默**：没有可指向的记忆/任务就不推——宁可不推，也不灌噪声。
+- **零 LLM、纯规则**；`jitEnabled:false` 一键关，`[JIT]` section 为空时不占任何 token。
+- **尚未做**：resume brief（隔天继续）与「预计剩余请求不足时跳过推送」的显式 ROI 门——
+  当前靠 3 行硬预算 + 账本观测。
+
 ## 自动捕获策略
 
 捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
@@ -731,6 +751,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
     gcReplacesCompaction: false # Context GC：接管 DSH 自动 compact（默认关=宿主 LLM 压缩；true=opt-in 指针摘要）
     gcNarrative: true        # 无锚轮次走 scoped LLM 叙事；false=纯机械（零 LLM）
+    jitEnabled: true         # JIT 推送：错误复发/文件焦点/goal 完成时推一行已有记忆
     ledgerEnabled: true      # Context Ledger：注入成本/剪枝节省/前缀重写罚金 → 净 token
     ledgerCacheDiscount: 0.1 # 缓存折价：重写按 (1−0.1) 计罚金；0.1 = 命中只付 10%
     autoWebCompaction: false   # web 预设自动改写（默认关；开启需显式确认，可用 revert 还原）
@@ -742,7 +763,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 ## 开发
 
 ```sh
-npm test            # 349 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
+npm test            # 359 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger + JIT（node:test）
 npm run build:client
 ```
 

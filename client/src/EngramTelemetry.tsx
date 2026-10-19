@@ -205,6 +205,7 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
                   <span style={hb.statLabel}>净 token（节省 − 注入 − 重写罚金）</span>
                   <span style={hb.gaugeSub}>
                     请求 {ledgerBucket.requests} · 会话 {ledgerBucket.sessions} · open {ledger.openSessions}
+                    {stats.jit ? ` · JIT 推送 ${stats.jit.pushes}` : ""}
                   </span>
                 </div>
                 <div style={{ ...hb.grid, marginTop: 8 }}>

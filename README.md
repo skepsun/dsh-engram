@@ -860,6 +860,30 @@ billing, and no quality delta is claimed; Context GC compaction savings are not
 wired yet (the host does not expose before/after sizes), so the ledger only
 counts what it can prove.
 
+### JIT push (v0.6-C)
+
+Pull-only recall measured dormant (24 `engram_recall` / 8 `engram_detail` across
+112 real sessions), so v0.6 pushes on three deterministic events instead. One
+line per event, at most 3 lines per session (`jitMaxLines`, `jitMaxLineChars`=220),
+and silence when there is nothing relevant to point at:
+
+| Event | Trigger | What is pushed |
+|---|---|---|
+| Error recurrence | the same `cmd:` signature fails a second time and a prior error/procedure memory exists | that memory's id + a one-line excerpt + `engram_detail` |
+| File focus | the same file is edited twice in a row and a filePath/dir-anchored memory exists | preference first, then fact/decision |
+| Goal completion | goal complete/block while active ESR tasks remain | the first two open tasks + `esr_status` |
+
+- **Append-only**: a pushed line is never edited or withdrawn, so the prefix
+  changes once per push. Each push charges a rewrite
+  (`estimatePrefixChars + line length`) in the Context Ledger
+  (`rewriteCount` / `rewriteChars`), visible on the telemetry page.
+- **Silent without a hit** — no memory/task to point at, no line.
+- **Zero LLM, pure rules**; `jitEnabled:false` disables it, and the empty
+  `[JIT]` section costs nothing.
+- **Not yet**: the resume brief (next-day continuation) and an explicit
+  remaining-requests ROI gate — today the 3-line budget plus the ledger are the
+  guardrails.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -972,6 +996,7 @@ Defaults are token-conscious; override any key via the profile patch
     gcReplacesCompaction: false # Context GC: take over DSH auto-compact (default off = host summarizer; true = opt-in pointers)
     gcNarrative: true        # scoped LLM narrative for un-provenanced turns; false = fully mechanical (zero LLM)
     autoWebCompaction: false # rewrite stock web presets (default off; explicit opt-in, revert with the CLI)
+    jitEnabled: true         # JIT push: error recurrence / file focus / goal completion → one memory line
     ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
     ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
@@ -981,7 +1006,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 349 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
+npm test            # 359 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

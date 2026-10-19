@@ -240,6 +240,8 @@ export interface EngramStats {
   ratios: UsageRatios;
   /** Context Ledger snapshot; null/absent when `ledgerEnabled:false`. */
   ledger?: LedgerSnapshot | null;
+  /** JIT push counters (process-local diagnostic). */
+  jit?: { pushes: number; byKind: Record<string, number>; sessions: number } | null;
 }
 
 export interface EngramOverview {
