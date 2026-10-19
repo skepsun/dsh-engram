@@ -898,6 +898,20 @@ and silence when there is nothing relevant to point at:
   remaining-requests ROI gate — today the 3-line budget plus the ledger are the
   guardrails.
 
+### Session episode + resume brief (v0.7-A/D)
+
+- **episode** — at `session/disposed`, a zero-LLM digest of the event log: files
+  touched, commands run, failures that later recovered (`cmd×N→fixed`), written
+  commit subjects, and still-open todos. Written only when there is substance (a
+  bare `ls` session produces none); **never indexed**; the newest 20 per
+  workspace are kept and older ones archived.
+- **resume brief** — at the first assembly of a new session, the newest episode
+  from the last 7 days is injected as a `[RESUME]` line (≤240 chars) plus an
+  `engram_detail <id>` pointer, frozen with `[ENGRAM]`/`[RECALL]`. No recent
+  episode → no line; returning to a project does not need a re-briefing.
+- Settings: `episodeEnabled`, `resumeBriefEnabled` (both default on), plus
+  `episodeMaxPerWorkspace` / `resumeBriefMaxAgeDays` / `resumeBriefMaxChars`.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -1011,6 +1025,8 @@ Defaults are token-conscious; override any key via the profile patch
     gcNarrative: true        # scoped LLM narrative for un-provenanced turns; false = fully mechanical (zero LLM)
     autoWebCompaction: false # rewrite stock web presets (default off; explicit opt-in, revert with the CLI)
     jitEnabled: true         # JIT push: error recurrence / file focus / goal completion → one memory line
+    episodeEnabled: true     # session episode: zero-LLM digest at teardown (never indexed)
+    resumeBriefEnabled: true # resume brief: newest episode from the last 7 days at session start
     ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
     ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
@@ -1020,7 +1036,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 359 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
+npm test            # 368 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

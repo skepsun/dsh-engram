@@ -34,6 +34,7 @@ function signedTokens(n: number): string {
 
 const KIND_COLORS: Record<string, string> = {
   preference: "#b45309",
+  episode: "#0e7490",
   decision: "#2563eb",
   error: "#dc2626",
   procedure: "#7c3aed",

@@ -343,7 +343,7 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 - **状态**：已实现（2026-10-19）——`lib/ledger.js`（纯函数 + 原子落盘 + delta flush）、
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
   `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
-  概览「上下文净 token」卡；`npm test` 359/359。
+  概览「上下文净 token」卡；`npm test` 368/368。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**
@@ -443,6 +443,14 @@ conflicts  : contradicts 边 + 待裁决标记
 打开旧会话/同 workspace 新会话时，注入 ≤5 行：上次停在哪、未闭环任务、
 最近的失败与修复、下一步建议。这是本项目对「73% 请求在长会话」最直接的产品回答，
 也是与宿主 checkpoint 的差异化（宿主存状态，我们存**意义**）。
+
+- **状态（2026-10-19）**：**A + D 已实现**——`lib/episode.js` 的 `buildEpisode()`
+  在 `session/disposed` 生成零 LLM 纪要（文件/命令/失败→修复/决策/未闭环，仅实质会话写入，
+  永不进索引，每 workspace 保留 20 条）；`renderResumeBrief()` 在新会话注入最近 7 天
+  最新 episode（`[RESUME]` ≤240 字符 + `engram_detail` 指针）；设置键
+  `episodeEnabled` / `resumeBriefEnabled`；`test/episode.test.mjs` 9 例。
+  **B（实体页）/ C（锚点重验证、分层 TTL）待做**——它们需要 schema 迁移与索引渲染改造，
+  留到下一轮。
 
 **门：**
 

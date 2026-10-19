@@ -51,6 +51,10 @@ export interface EngramConfigValue {
   autoRecallOnStart?: boolean;
   /** JIT 推送：错误复发/文件焦点/goal 完成时推一行已有记忆（默认开）。 */
   jitEnabled?: boolean;
+  /** 会话 episode：结束时生成零 LLM 纪要（默认开）。 */
+  episodeEnabled?: boolean;
+  /** 恢复简报：新会话注入最近 episode（默认开）。 */
+  resumeBriefEnabled?: boolean;
   /** [RECALL] 块最多注入的记忆条数（少而准）。 */
   autoRecallLimit?: number;
   autoCapturePerSession?: number;
@@ -115,6 +119,8 @@ export const COMMON_FIELDS: EngramConfigField[] = [
   { key: "resultPack", label: "结果归档召回", hint: "ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；默认开，保证默认剪枝无损；需与边界剪枝一起开）", kind: "bool" },
   { key: "autoRecallOnStart", label: "会话启动自动召回", hint: "新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取", kind: "bool" },
   { key: "jitEnabled", label: "JIT 推送", hint: "错误复发 / 文件焦点 / goal 完成时，把已有记忆压成一行推进上下文（append-only、每会话≤3 行、无命中沉默；每次推送按前缀重写计入账本）", kind: "bool" },
+  { key: "episodeEnabled", label: "会话纪要", hint: "会话结束时用零 LLM 规则生成一条 episode（文件/命令/失败→修复/决策/未闭环），不进索引，供恢复简报使用；每 workspace 保留最近 20 条", kind: "bool" },
+  { key: "resumeBriefEnabled", label: "恢复简报", hint: "新会话启动时注入最近 7 天的最新 episode（≤240 字符 + engram_detail 指针），隔天继续不用重新交代背景", kind: "bool" },
   { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
   { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
   { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
