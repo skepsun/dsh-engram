@@ -849,8 +849,11 @@ and `/overview` return `ledger`:
 - `openSessions` — sessions still accumulating in memory (a restart loses at
   most `flushEvery` requests).
 
-Durable rollup at `~/.dsh/engram/ledger.json` (atomic write, daily buckets,
-delta flush); the hot path is an integer add, zero I/O and zero model calls.
+The Telemetry tab renders it directly (net-token headline, saved / injected /
+rewrite-penalty cards, a 14-day red/green net chart), and the memory overview
+adds a "net context tokens" stat card. Durable rollup at
+`~/.dsh/engram/ledger.json` (atomic write, daily buckets, delta flush); the hot
+path is an integer add, zero I/O and zero model calls.
 Defaults: `ledgerEnabled: true`, `ledgerCacheDiscount: 0.1`; off = no listeners,
 no writes. **Honest scope**: tokens are `chars / 4` estimates, not provider
 billing, and no quality delta is claimed; Context GC compaction savings are not
@@ -978,7 +981,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 348 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
+npm test            # 349 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

@@ -25,6 +25,13 @@ export interface EngramSectionFace {
   t: (key: string) => string;
 }
 
+/** Compact signed token count for the ledger stat card (+saved / −spent). */
+function signedTokens(n: number): string {
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  const abs = Math.abs(n);
+  return abs >= 1000 ? `${sign}${(abs / 1000).toFixed(1)}k` : `${sign}${abs}`;
+}
+
 const KIND_COLORS: Record<string, string> = {
   preference: "#b45309",
   decision: "#2563eb",
@@ -595,6 +602,9 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         const memNum = wsCounts ? wsCounts.memories : overview.totals.memories;
         const taskNum = wsCounts ? wsCounts.tasks : overview.totals.tasks;
         const linkNum = wsCounts ? wsCounts.links : overview.totals.links;
+        const ledgerBucket = overview.ledger
+          ? (workspace && overview.ledger.byWorkspace[workspace]) || overview.ledger.totals
+          : null;
         return (
         <div style={s.stats}>
           <StatCard num={String(memNum)} label={wsCounts ? "记忆 (active)" : "记忆 (active, 全局)"} />
@@ -612,6 +622,12 @@ export function EngramSection({ api, t }: EngramSectionFace) {
             <StatCard
               num={String(gc.archivedMemories + gc.archivedTasks)}
               label={`GC 已归档 · 链接-${gc.removedLinks}`}
+            />
+          )}
+          {ledgerBucket && (
+            <StatCard
+              num={signedTokens(ledgerBucket.netTokens)}
+              label={`上下文净 token · 请求 ${ledgerBucket.requests}`}
             />
           )}
         </div>

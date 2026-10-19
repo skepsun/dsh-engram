@@ -32,6 +32,13 @@ function pct(v: number | null | undefined): string {
   return `${Math.round(v * 100)}%`;
 }
 
+/** Signed compact token count (+saved / −spent), matching the server units. */
+function tokenCount(n: number): string {
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+  const abs = Math.abs(n);
+  return abs >= 1000 ? `${sign}${(abs / 1000).toFixed(1)}k` : `${sign}${abs}`;
+}
+
 export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
   const { dark, vars } = useEngramTheme();
   const [stats, setStats] = useState<EngramStats | null>(null);
@@ -79,6 +86,16 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
 
   const dose = stats && stats.ratios ? stats.ratios : null;
   const sampleText = stats && stats.ratios && stats.ratios.calls < 10 ? `样本不足（${stats.ratios.calls} 次），比例仅供参考` : null;
+
+  // Context Ledger: per-workspace bucket when one is selected, totals otherwise.
+  const ledger = stats?.ledger ?? null;
+  const ledgerBucket = ledger === null
+    ? null
+    : workspace === ""
+      ? ledger.totals
+      : ledger.byWorkspace?.[workspace] ?? null;
+  const ledgerDays = ledger === null || workspace !== "" ? [] : [...(ledger.byDay ?? [])].slice(0, 14).reverse();
+  const ledgerMax = Math.max(1, ...ledgerDays.map((d) => Math.abs(d.netTokens)));
 
   const hb: Record<string, React.CSSProperties> = {
     root: { display: "flex", flexDirection: "column", gap: 12, ...vars },
@@ -168,6 +185,72 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
             <div style={hb.statCard}><div style={hb.statNum}>{dose?.memCalls ?? 0}</div><div style={hb.statLabel}>记忆类调用</div></div>
             <div style={hb.statCard}><div style={hb.statNum}>{dose?.recallHitsPerQuery ?? "–"}</div><div style={hb.statLabel}>平均命中/查询</div></div>
             <div style={hb.statCard}><div style={hb.statNum}>{stats.totals.failures ?? 0}</div><div style={hb.statLabel}>失败次数</div></div>
+          </div>
+
+          <div style={hb.panel}>
+            <div style={{ ...hb.panelTitle, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              Context Ledger · 上下文净收益
+              <span style={hb.sub}>{workspace === "" ? "全部工作区" : workspace}</span>
+            </div>
+            {!ledger ? (
+              <div style={hb.sub}>账本未启用（`ledgerEnabled:false`）或宿主 API 未就绪。</div>
+            ) : !ledgerBucket ? (
+              <div style={hb.sub}>该工作区还没有账本记录。</div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ ...hb.statNum, fontSize: 24, color: ledgerBucket.netTokens >= 0 ? "#059669" : "#dc2626" }}>
+                    {tokenCount(ledgerBucket.netTokens)}
+                  </span>
+                  <span style={hb.statLabel}>净 token（节省 − 注入 − 重写罚金）</span>
+                  <span style={hb.gaugeSub}>
+                    请求 {ledgerBucket.requests} · 会话 {ledgerBucket.sessions} · open {ledger.openSessions}
+                  </span>
+                </div>
+                <div style={{ ...hb.grid, marginTop: 8 }}>
+                  <div style={hb.statCard}>
+                    <div style={{ ...hb.statNum, color: "#059669" }}>{tokenCount(ledgerBucket.avoidedTokens)}</div>
+                    <div style={hb.statLabel}>节省 · 剪枝/压缩</div>
+                  </div>
+                  <div style={hb.statCard}>
+                    <div style={{ ...hb.statNum, color: "#d97706" }}>{tokenCount(-ledgerBucket.injectedTokens)}</div>
+                    <div style={hb.statLabel}>注入成本 · 索引/召回/ESR</div>
+                  </div>
+                  <div style={hb.statCard}>
+                    <div style={{ ...hb.statNum, color: "#dc2626" }}>
+                      {tokenCount(-Math.round(ledgerBucket.rewritesCostChars / ledger.charsPerToken))}
+                    </div>
+                    <div style={hb.statLabel}>重写罚金 · {ledgerBucket.rewriteCount} 次</div>
+                  </div>
+                </div>
+                <div style={{ ...hb.sub, marginTop: 6 }}>
+                  口径：chars/{ledger.charsPerToken} 估算 · 缓存折价 {Math.round(ledger.cacheDiscount * 100)}%
+                  （重写按 {Math.round((1 - ledger.cacheDiscount) * 100)}% 计）· 未计模型质量差
+                </div>
+                {ledgerDays.length > 0 && (
+                  <svg width={460} height={96} viewBox="0 0 460 96" style={{ display: "block", maxWidth: "100%", marginTop: 8 }}>
+                    <line x1={0} y1={48} x2={460} y2={48} stroke={dark ? "rgba(148,163,184,.35)" : "rgba(107,114,128,.35)"} strokeDasharray="3 3" />
+                    {ledgerDays.map((d, i) => {
+                      const w = Math.max(6, Math.min(22, 420 / ledgerDays.length - 4));
+                      const x = 8 + i * (w + 4);
+                      const h = (Math.abs(d.netTokens) / ledgerMax) * 38;
+                      const positive = d.netTokens >= 0;
+                      return (
+                        <g key={d.day}>
+                          <rect x={x} y={positive ? 48 - h : 48} width={w} height={Math.max(1, h)} rx={2} fill={positive ? "#059669" : "#dc2626"}>
+                            <title>{`${d.day} · net ${d.netTokens} tok · 请求 ${d.requests}`}</title>
+                          </rect>
+                          <text x={x + w / 2} y={92} fontSize={8} fill={dark ? "#8b93a7" : "#6b7280"} textAnchor="middle">
+                            {(d.day ?? "").slice(5).replace("-", "/")}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                )}
+                <div style={{ ...hb.sub, marginTop: 4 }}>绿 = 当日净省 · 红 = 当日净亏（按天滚动，最近 14 天）</div>
+              </>
+            )}
           </div>
 
           <div style={hb.panel}>

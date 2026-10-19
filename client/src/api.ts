@@ -207,11 +207,39 @@ export interface UsageRatios {
   detailFollowRate: number | null;
 }
 
+/** One finalized Context Ledger bucket (see lib/ledger.js). */
+export interface LedgerBucket {
+  sessions: number;
+  requests: number;
+  injectedChars: number;
+  avoidedChars: number;
+  rewriteCount: number;
+  rewriteChars: number;
+  injectedTokens: number;
+  avoidedTokens: number;
+  netChars: number;
+  netTokens: number;
+  rewritesCostChars: number;
+}
+
+export interface LedgerSnapshot {
+  version: number;
+  updatedAt: number;
+  charsPerToken: number;
+  cacheDiscount: number;
+  openSessions: number;
+  totals: LedgerBucket;
+  byWorkspace: Record<string, LedgerBucket>;
+  byDay: Array<LedgerBucket & { day: string }>;
+}
+
 export interface EngramStats {
   workspace: string | null;
   byDay: UsageDay[];
   totals: { counts: Record<string, number>; failures: number; recall: Record<string, number> };
   ratios: UsageRatios;
+  /** Context Ledger snapshot; null/absent when `ledgerEnabled:false`. */
+  ledger?: LedgerSnapshot | null;
 }
 
 export interface EngramOverview {
@@ -223,6 +251,8 @@ export interface EngramOverview {
   gc: GcStats;
   compaction: CompactionStatus;
   config: EngramConfig;
+  /** Context Ledger snapshot; null/absent when `ledgerEnabled:false`. */
+  ledger?: LedgerSnapshot | null;
 }
 
 /** Wire view of the `dsh-engram` settings namespace served by our own

@@ -342,7 +342,8 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
   未计模型质量差；Context GC 的压缩节省暂未接入（宿主未暴露前后大小）。
 - **状态**：已实现（2026-10-19）——`lib/ledger.js`（纯函数 + 原子落盘 + delta flush）、
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
-  `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键；`npm test` 347/347。
+  `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
+  概览「上下文净 token」卡；`npm test` 349/349。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**

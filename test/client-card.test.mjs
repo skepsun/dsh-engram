@@ -52,6 +52,9 @@ export function useEffect(fn) {
 export function useCallback(fn) {
   return globalThis.__engramCardTestRenderer.useCallback(fn);
 }
+export function useMemo(fn) {
+  return fn();
+}
 `;
   const STUB_JSX_RUNTIME = `
 export const Fragment = Symbol.for("react.fragment");
@@ -163,7 +166,7 @@ export function jsxs(type, props) { return { type, props, key: props?.key ?? nul
     return collectStyles(node.props?.children, out);
   }
 
-  async function compileCard() {
+  async function compileTsx(entry = "EngramConfigCard.tsx") {
     const tmp = mkdtempSync(join(tmpdir(), "engram-card-test-"));
     try {
       mkdirSync(join(tmp, "react-stub"));
@@ -177,7 +180,7 @@ export function jsxs(type, props) { return { type, props, key: props?.key ?? nul
         },
       };
       const result = await esbuild.build({
-        entryPoints: [join(ROOT, "client", "src", "EngramConfigCard.tsx")],
+        entryPoints: [join(ROOT, "client", "src", entry)],
         bundle: true,
         format: "esm",
         platform: "neutral",
@@ -196,6 +199,8 @@ export function jsxs(type, props) { return { type, props, key: props?.key ?? nul
       try { rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   }
+
+  const compileCard = () => compileTsx("EngramConfigCard.tsx");
 
   test("client-card: scope unavailable renders NOTHING — no 0-height flex item for the Plugins list (issue #7)", async () => {
     const { EngramConfigCard } = await compileCard();
@@ -250,5 +255,58 @@ export function jsxs(type, props) { return { type, props, key: props?.key ?? nul
     const breadcrumb = warnings.find((w) => w.includes("settings scope unavailable"));
     assert.ok(breadcrumb, "an unavailable scope must warn exactly once per failed load");
     assert.match(breadcrumb, /settings fetch failed: test stub/, "the breadcrumb carries the scope's reason");
+  });
+
+  test("client-telemetry: Context Ledger panel renders the net savings bucket", async () => {
+    const mod = await compileTsx("EngramTelemetry.tsx");
+    const snapshot = {
+      workspace: null,
+      byDay: [],
+      totals: { counts: {}, failures: 0, recall: {} },
+      ratios: { calls: 12, esrCalls: 3, memCalls: 9, esrRatio: 0.25, recallHitRate: 0.5, recallHitsPerQuery: 1, detailFollowRate: 0.2 },
+      ledger: {
+        version: 1,
+        updatedAt: 1,
+        charsPerToken: 4,
+        cacheDiscount: 0.1,
+        openSessions: 0,
+        totals: {
+          sessions: 2,
+          requests: 40,
+          injectedChars: 800,
+          avoidedChars: 12000,
+          rewriteCount: 1,
+          rewriteChars: 20000,
+          injectedTokens: 200,
+          avoidedTokens: 3000,
+          netChars: 1200,
+          netTokens: 300,
+          rewritesCostChars: 18000,
+        },
+        byWorkspace: {},
+        byDay: [],
+      },
+    };
+    const api = { stats: async () => snapshot };
+    const realSetInterval = globalThis.setInterval;
+    const realClearInterval = globalThis.clearInterval;
+    globalThis.setInterval = () => 0;
+    globalThis.clearInterval = () => {};
+    try {
+      const r = createRenderer(mod.EngramTelemetry, { api, workspace: "" });
+      globalThis.__engramCardTestRenderer = r;
+      r.render();
+      while (r.pendingEffects.length > 0) r.pendingEffects.shift()();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const text = collectText(r.node).join(" ");
+      assert.ok(text.includes("Context Ledger"), "ledger panel title renders");
+      assert.ok(text.includes("+300"), "net tokens render signed");
+      assert.ok(text.includes("+3.0k"), "saved tokens render");
+      assert.ok(text.includes("−4.5k"), "rewrite penalty renders");
+      assert.ok(text.includes("未计模型质量差"), "honest-scope note renders");
+    } finally {
+      globalThis.setInterval = realSetInterval;
+      globalThis.clearInterval = realClearInterval;
+    }
   });
 }

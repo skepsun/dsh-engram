@@ -340,6 +340,7 @@ node scripts/setup-links.mjs     # 把 @deepseek-ai 工作区包软链进 node_m
   纯 SVG 实现（无图表库，保持 bundle 纯净）。
   以及一个 **遥测仪表盘** 页签：把 /stats 的真实调用累计（工作区 × 天滚动）画成纯 SVG 仪表盘——三枚大圆环
   直读 **ESR 主动性**（与 escalate 阈值 0.34 比对，偏低标橙并提示）、**召回命中率**、**detail 转化**，
+  外加一块 **Context Ledger** 面板（净 token、节省/注入/重写罚金三卡、近 14 天净收益红绿柱），
   五张小指标卡（累计调用 / esr / 记忆 / 平均命中每查询 / 失败），近 14 天 mem-vs-esr 堆叠柱状图 +
   工具调用 Top 8 横向条形图（mem 蓝 / esr 紫，与全文配色一致），20s 自动刷新，样本不足（<10 次）自动标注。
   以及 **详情侧栏**（主从布局）：任务 / 记忆 / 节点 / 关系行都可一键在右侧打开详情卡——任务含
@@ -380,7 +381,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 348 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
+npm test    # 349 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -625,8 +626,9 @@ overview）现在返回 `activation: { boundaryPrune, recall }`：
 - `byWorkspace` / `byDay` — 按工作区、按天的同一口径，`byDay` 倒序；
 - `openSessions` — 仍在累计、尚未落盘的会话数（进程重启最多丢 `flushEvery` 个请求的账）。
 
-落盘在 `~/.dsh/engram/ledger.json`（原子写、按天滚动、delta 落盘），进程内只做
-整数累加，热路径零 I/O、零模型调用。默认 `ledgerEnabled: true`、
+GUI「遥测」页签直接画这块账本（净 token 大数字 + 节省/注入/重写罚金三卡 + 近 14 天红绿柱），
+记忆概览页也多一张「上下文净 token」卡。落盘在 `~/.dsh/engram/ledger.json`（原子写、按天滚动、
+delta 落盘），进程内只做整数累加，热路径零 I/O、零模型调用。默认 `ledgerEnabled: true`、
 `ledgerCacheDiscount: 0.1`；关掉 = 不挂监听、不写文件。**口径诚实**：token 按
 `chars / 4` 估算，不含 provider 实际计费与模型质量差；Context GC 的压缩节省暂未
 接入（宿主未暴露前后大小），因此账本只记「可证明」的部分。
@@ -740,7 +742,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 ## 开发
 
 ```sh
-npm test            # 348 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
+npm test            # 349 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
 npm run build:client
 ```
 
