@@ -932,6 +932,26 @@ truth, timeline, open loops, conflicts and relations for one thing
 - Settings `entityCardsEnabled` (default on); `entityCardsMax` /
   `entityCardChars` tunable.
 
+### Revalidatable anchors + layered TTL (v0.7-C)
+
+"Treating the past as truth" is the strongest credibility critique against
+memory plugins. v0.7 gives file-backed memories an **anchor**:
+
+- on write, record `{path, mtimeMs, size, hash?}` (sha256 for files ≤256KB,
+  stat only for larger ones) in the memory row; relative paths resolve against
+  the workspace;
+- at session start a bounded revalidation (≤40 rows) tags changed/missing
+  sources `stale`; the `[ENGRAM]` index and entity `truth` stop showing them,
+  but nothing is deleted — `engram_detail` still returns them and the entity
+  timeline marks `· stale`;
+- **layered TTL**: `preference` / `procedure` permanent; `episode` 14 days;
+  `error` 60 days; everything else `expireDays` (180). Hard deletes still do not
+  exist — GC only archives.
+- Settings: `anchorRevalidate` (default on), `episodeTtlDays`, `errorTtlDays`.
+- **Not done**: the offline consolidation job (episode abstraction/merge) —
+  deterministic rules can only roll up, not abstract semantically; deferred
+  until v0.8 alongside playbooks, rather than shipping a lossy pseudo-merge.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -1048,6 +1068,8 @@ Defaults are token-conscious; override any key via the profile patch
     episodeEnabled: true     # session episode: zero-LLM digest at teardown (never indexed)
     resumeBriefEnabled: true # resume brief: newest episode from the last 7 days at session start
     entityCardsEnabled: true # entity card: one truth/tasks/drill line per active entity in the index
+    anchorRevalidate: true   # re-stat filePath anchors at session start (changed/missing → stale)
+    episodeTtlDays: 14       # episode TTL (preference/procedure permanent; error 60d; others expireDays)
     ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
     ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
@@ -1057,7 +1079,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 375 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
+npm test            # 381 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

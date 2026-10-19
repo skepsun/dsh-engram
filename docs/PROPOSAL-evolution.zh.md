@@ -343,7 +343,7 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 - **状态**：已实现（2026-10-19）——`lib/ledger.js`（纯函数 + 原子落盘 + delta flush）、
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
   `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
-  概览「上下文净 token」卡；`npm test` 375/375。
+  概览「上下文净 token」卡；`npm test` 381/381。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**
@@ -444,6 +444,15 @@ conflicts  : contradicts 边 + 待裁决标记
 - **可重验证**：fact 晋升时记录锚点（`file:line` + 内容哈希 / git blob / mtime），
   召回/索引前抽查；锚点失效 → 自动降权并标 `stale`，而不是继续当真相。
 - `expireDays` 从「整条过期」改为「分层 TTL」：episode 短、fact 长、preference 永久。
+
+- **状态（2026-10-19）**：**C 的锚点 + 分层 TTL 已实现**——`lib/anchor.js`
+  （`makeFileAnchor` / `anchorStatus` / `memoryIsStale` / `collectStaleAnchors`），
+  记忆行新增 `anchor` 字段（path/mtimeMs/size/hash?/at；≤256KB 存 sha256）；
+  会话启动时有界重验证（≤40 条），改动/缺失 → 打 `stale` 标签，索引与实体 truth
+  不再展示、timeline 标 `· stale`、`engram_detail` 仍可重取；分层 TTL：
+  preference/procedure 永久、episode 14d、error 60d、其余 expireDays。
+  `test/anchor.test.mjs` 6 例。**离线巩固任务（episode 抽象/合并）未做**：
+  纯规则只能 rollup、不是语义抽象，在没有证据前不引入（与 v0.8 playbook 一起考虑）。
 
 **D. Resume Brief（隔天继续）**
 
