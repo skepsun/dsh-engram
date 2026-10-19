@@ -912,6 +912,26 @@ and silence when there is nothing relevant to point at:
 - Settings: `episodeEnabled`, `resumeBriefEnabled` (both default on), plus
   `episodeMaxPerWorkspace` / `resumeBriefMaxAgeDays` / `resumeBriefMaxChars`.
 
+### Entity pages + entity cards (v0.7-B)
+
+`esr_node` grows from a dot on the graph into a readable **page**: current
+truth, timeline, open loops, conflicts and relations for one thing
+(package / repo / service / bug…).
+
+- **Entity card (in the index, default on)** — `[ENGRAM]` renders ONE line for
+  each active entity (anchored memories or open tasks), at most 2:
+  `[ENT] dsh-engram · package · 3 mem · 1 open · truth: … #id · page: engram_detail(entity="dsh-engram")`
+  Those entities' flat memory lines are not repeated; other entities stay in a
+  single `nodes:` line.
+- **Full page (on drill)** — `engram_detail(entity="<name|id>")` returns
+  `truth / timeline / open loops / conflicts / relations`, with memory ids and
+  evidence gaps. A name with anchored memories but no registered node still
+  gets a virtual page.
+- Pure, deterministic: preference leads `truth`, superseded rows never enter
+  it, conflicts are de-duplicated by unordered pair (`#a vs #b`).
+- Settings `entityCardsEnabled` (default on); `entityCardsMax` /
+  `entityCardChars` tunable.
+
 ## Auto-capture policy
 
 Capture is deterministic and offline — it only sees tool *results*, never the
@@ -1027,6 +1047,7 @@ Defaults are token-conscious; override any key via the profile patch
     jitEnabled: true         # JIT push: error recurrence / file focus / goal completion → one memory line
     episodeEnabled: true     # session episode: zero-LLM digest at teardown (never indexed)
     resumeBriefEnabled: true # resume brief: newest episode from the last 7 days at session start
+    entityCardsEnabled: true # entity card: one truth/tasks/drill line per active entity in the index
     ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
     ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
@@ -1036,7 +1057,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 368 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
+npm test            # 375 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

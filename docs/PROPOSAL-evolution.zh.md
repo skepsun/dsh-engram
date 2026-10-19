@@ -343,7 +343,7 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 - **状态**：已实现（2026-10-19）——`lib/ledger.js`（纯函数 + 原子落盘 + delta flush）、
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
   `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
-  概览「上下文净 token」卡；`npm test` 368/368。
+  概览「上下文净 token」卡；`npm test` 375/375。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**
@@ -424,6 +424,13 @@ conflicts  : contradicts 边 + 待裁决标记
 - 注入时只给**实体卡**（≤3 行：truth 首行 + open loops 数 + 更新时间），
   详情走 `engram_detail`/页——继续渐进披露。
 - 索引从「平铺行」升级为「实体卡 + 少量独立事实」，同样 700c 预算内信息密度更高。
+- **状态（2026-10-19）**：**B 已实现**——`lib/entity-page.js`
+  （`buildEntityPage` / `resolveEntity` / `renderEntityCard` / `renderEntityPage`）；
+  `selectEntityCards` 在 `[ENGRAM]` 前置最多 2 张实体卡（truth 首条 + mem/open 计数 +
+  `engram_detail(entity=…)` 指针），并把这些实体的平铺记忆行从索引中去重；
+  `engram_detail` 新增可选 `entity` 参数返回完整页（truth/timeline/open loops/
+  conflicts/relations）；`entityCardsEnabled` 默认开。`test/entity-page.test.mjs` 7 例。
+  **C（锚点重验证 / 分层 TTL / 巩固任务）仍未做**。
 
 **C. 巩固任务（可离线）**
 

@@ -392,7 +392,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 368 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger / JIT 推送）
+npm test    # 375 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger / JIT 推送）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -677,6 +677,22 @@ v0.6 增加按事件**推送**：三个确定性事件，命中才推、每次�
 - 设置键：`episodeEnabled`、`resumeBriefEnabled`（均默认开），
   `episodeMaxPerWorkspace` / `resumeBriefMaxAgeDays` / `resumeBriefMaxChars` 可调。
 
+### 实体页 + 实体卡（v0.7-B）
+
+`esr_node` 从「图上的点」升级成**可读的页**：对一个实体（package / repo / 服务 / bug…）
+聚合当前真相、时间线、未闭环任务、冲突与关系。
+
+- **实体卡（索引内，默认开）**：`[ENGRAM]` 为活跃实体（有锚定记忆或未闭环任务）
+  渲染一行，最多 2 张：
+  `[ENT] dsh-engram · package · 3 mem · 1 open · truth: … #id · page: engram_detail(entity="dsh-engram")`
+  这些实体的平铺记忆行不再重复（真相由卡片承载）；其余实体仍列在 `nodes:` 一行。
+- **完整页（按需下钻）**：`engram_detail(entity="<name|id>")` 返回
+  `truth / timeline / open loops / conflicts / relations` 五段，带 memory id 与证据缺口；
+  没有注册节点但有记忆锚定的名字也会生成虚拟页。
+- 纯函数、确定性排序：preference 排在 truth 最前，superseded 旧真相不进 truth，
+  冲突按无序对去重（`#a vs #b`）。
+- 设置键 `entityCardsEnabled`（默认开）；`entityCardsMax` / `entityCardChars` 可调。
+
 ## 自动捕获策略
 
 捕获是确定性、离线的——只看到工具*结果*，从不看对话本身。什么会被记录成一条记忆：
@@ -778,6 +794,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     jitEnabled: true         # JIT 推送：错误复发/文件焦点/goal 完成时推一行已有记忆
     episodeEnabled: true     # 会话纪要：结束时零 LLM 生成 episode（不进索引，供恢复简报）
     resumeBriefEnabled: true # 恢复简报：新会话注入最近 7 天最新 episode
+    entityCardsEnabled: true # 实体卡：[ENGRAM] 为活跃实体渲染一行真相 + 任务 + 下钻指针
     ledgerEnabled: true      # Context Ledger：注入成本/剪枝节省/前缀重写罚金 → 净 token
     ledgerCacheDiscount: 0.1 # 缓存折价：重写按 (1−0.1) 计罚金；0.1 = 命中只付 10%
     autoWebCompaction: false   # web 预设自动改写（默认关；开启需显式确认，可用 revert 还原）
@@ -789,7 +806,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 ## 开发
 
 ```sh
-npm test            # 368 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger + JIT（node:test）
+npm test            # 375 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger + JIT（node:test）
 npm run build:client
 ```
 
