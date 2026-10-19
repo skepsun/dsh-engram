@@ -307,6 +307,12 @@ provenance 分级 + quarantine；导入/导出与 `.engram/` 文件是最高危�
 | `resultPack` | `false` | 跟随 boundaryPrune，优先复用宿主 spill | 避免双份归档 |
 | `autoSupersede` | `false` | 保持关（证据不足） | 误伤代价高 |
 
+**已实现（2026-10-19，v0.6）**：`gcReplacesCompaction` / `autoWebCompaction` 默认改为
+`false`（opt-in，保留宿主摘要）；`boundaryPrune` 默认 `true` 并新增
+`boundaryPruneAdaptive`（账本否决：该 workspace 净收益为负且 ≥3 次剪枝 → 自动停剪）；
+`resultPack` 默认 `true`，保证默认剪枝无损。默认值随代码生效，README 与 Context GC 指南
+已同步；`autoSupersede` 仍保持关。
+
 ---
 
 ## 4. 路线图（每阶段都带「门」）
@@ -344,6 +350,10 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
 - 用偿还门（预计剩余请求 × 单结果重放成本 > 重写成本）作为**唯一**开关条件；
   无收益证据自动关。保留全局 kill switch。
 - 遥测显示「过去 7 天本 workspace 净收益」；为负则自动退回关。
+- **状态**：已实现（2026-10-19）——`boundaryPrune` 默认开、`boundaryPruneAdaptive`
+  默认开；`index.js` 的 `boundaryGate`（30s 缓存、按 workspace）在剪枝前读取账本，
+  负净收益且 ≥3 次剪枝时否决并打一行日志；gate 异常 fail-open，绝不影响剪枝。
+  `test/boundary-prune.test.mjs` 新增用例覆盖 veto/allow/opt-out/throw。
 
 **C. JIT 推送（把「拉取」换成「按事件推」）**
 

@@ -623,10 +623,12 @@ Triggers follow DSH's own compaction timing (step pressure / context-overflow /
 `/compact`); the lock, replay validation, tool-call/result pairing and token
 pricing are all reused from the basic engine. Any error falls back to the
 default compressor — compaction is never broken; with `gcReplacesCompaction:
-false` (or a host without `dsh-compaction-basic`) a bare `BasicCompactionEngine`
-is mounted instead, so the `compaction` service never disappears while
-dsh-engram is installed. Mounting registers the `compaction` service on the
-plugin's fiber, so unloading/reloading engram restores the default engine.
+false` (the default since v0.6, or a host without `dsh-compaction-basic`) a bare
+`BasicCompactionEngine` is mounted instead, so the `compaction` service never
+disappears while dsh-engram is installed. Mounting registers the `compaction`
+service on the plugin's fiber, so unloading/reloading engram restores the
+default engine. **Taking over compaction is opt-in**: turn on
+`gcReplacesCompaction` (and `autoWebCompaction` for web presets).
 
 > **Shrink gate**: the harness refuses any checkpoint that is not strictly
 > smaller than the evicted span (`summary is not smaller than the shadowed
@@ -641,19 +643,19 @@ plugin's fiber, so unloading/reloading engram restores the default engine.
 
 #### Where it is enabled (the entry point)
 
-Assembly happens on **two planes** — and web is now fully automatic, zero config:
+Assembly happens on **two planes**, but both switches are opt-in (no takeover by
+default):
 
-- **Host plane (headless / TUI / base profiles) — on by default, zero config**:
+- **Host plane (headless / TUI / base profiles)**:
   the main plugin (`lib/index.js`) mounts the engine inside `ctx.effect` via
   `mountCompactionEngine(ctx, resolved, { readWorkspace }) → new Engine()`,
   registering the `compaction` service on its own fiber; the plugin patch
   disables the base `compaction-basic` row, making engram the sole host-plane
-  provider. `gcReplacesCompaction: true` (default) → `ContextGcEngine`;
-  `false` → a bare `BasicCompactionEngine`. Tune via profile patch
-  (`config: { gcReplacesCompaction: false }`) or the settings card's
-  `gcNarrative` knob (narrative off = fully mechanical).
-- **Preset plane (web profile) — fully automatic, zero config, covers every
-  preset**: web keeps compaction inside each agent preset's isolated realm
+  provider. `gcReplacesCompaction: false` (default) → a bare
+  `BasicCompactionEngine` (DSH's own summarizer); `true` → `ContextGcEngine`
+  (pointer summaries). Enable via profile patch
+  (`config: { gcReplacesCompaction: true }`) or the settings card.
+- **Preset plane (web profile) — covers every stock preset once enabled**: web keeps compaction inside each agent preset's isolated realm
   (the shipped presets mount their own `compaction-basic`), unreachable from a
   host-plane row — and unreachable from a profile patch too (`mountPreset`
   builds its `Include.Config` with no patches; verified against the harness
@@ -663,8 +665,9 @@ Assembly happens on **two planes** — and web is now fully automatic, zero conf
   root: `standard`, `code`, `cordis`, and your own presets): it swaps the
   `compaction-basic` row inside the `compaction` group for
   `dsh-engram/compaction`. That auto-wiring is:
-  - **on by default** (`autoWebCompaction: true`, toggle in the settings card's
-    memory-GC section), idempotent — an already-wired preset is left alone;
+  - **off by default (opt-in)** (`autoWebCompaction: false`, toggle in the
+    settings card's memory-GC section); once enabled it is idempotent — an
+    already-wired preset is left alone;
     **what "off" means**: the plugin stops auto-wiring on later boots (the
     headless/TUI/base host plane is unaffected) — it does NOT un-wire presets
     that were already wired; use `npm run web-compaction:revert` for that;
@@ -719,9 +722,10 @@ Assembly happens on **two planes** — and web is now fully automatic, zero conf
 
 #### First impressions after an npm install (perceive / guide / configure)
 
-- **Automatic**: install into a profile and boot once — the host plane is taken
-  over by `mountCompactionEngine`, and the web plane by `autoWebCompaction`
-  (default on) rewriting every stock preset at boot. **Zero manual setup.**
+- **Semi-automatic (opt-in)**: DSH's own summarizer stays the default. Turn on
+  `gcReplacesCompaction` (host plane) and `autoWebCompaction` (web presets) in
+  the settings card, then boot once — `mountCompactionEngine` takes over and
+  the stock presets are rewritten. **No file editing after that.**
 - **Perceivable**: at boot the plugin writes an authoritative snapshot to
   `$DSH_HOME/engram/context-gc.status.json` (`host` plane mode + the per-preset
   `web` results + effective config). At any time run `npx dsh-engram status` or
@@ -730,8 +734,9 @@ Assembly happens on **two planes** — and web is now fully automatic, zero conf
   log lines confirm it too: `engram context-gc: compaction = Context GC …` and
   `engram web-provision: wired Context GC into preset …`.
 - **Configurable**: one settings card (memory-GC section) governs everything:
-  `autoWebCompaction` (web auto-wiring on/off), `gcReplacesCompaction`
-  (Context GC vs default summarizer), `gcNarrative` (narrative safety net).
+  `autoWebCompaction` (web auto-wiring, default off), `gcReplacesCompaction`
+  (Context GC vs host summarizer, default off), `gcNarrative` (narrative
+  safety net).
   Changes take effect after restarting `dsh web`, and the web rows are
   refreshed to match automatically.
 
@@ -748,7 +753,7 @@ means that preset was customized (or has no compaction group) and was left untou
 `dsh-compaction-basic unavailable` means the backend is missing and everything
 falls back to the default compressor.
 
-### BoundaryPrune (subtask-boundary pruning, default OFF)
+### BoundaryPrune (subtask-boundary pruning, default ON + ledger veto)
 
 Context GC owns *what a compaction summary says*; BoundaryPrune owns *when a
 deterministic prune fires*: at todo-completion progress and goal terminal
@@ -783,10 +788,13 @@ later request. The two switches are independent.
   T2048+small-edges lands 2.4× the first-prune savings of the host default on
   the real corpus (10.14M vs 4.23M chars). Lowering the threshold is safe with
   `resultPack` on, which archives the removed middles.
-- Default **off**: `boundaryPrune: false`. When on, the log shows
+- Default **on**: `boundaryPrune: true` (`false` is the opt-out). Adaptive gate
+  `boundaryPruneAdaptive: true` lets the Context Ledger stop further fires once
+  this workspace's own accounting is net negative (≥3 fires) — evidence can only
+  turn pruning off. The log shows
   `engram boundary-prune (todo @N reqs): pruned …`.
 
-### ResultPack L2 (archive + `result_recall`, default OFF)
+### ResultPack L2 (archive + `result_recall`, default ON)
 
 BoundaryPrune makes pruning lossless: the removed middle of every pruned
 tool result is redacted (same rules as the memory write path) and archived to
@@ -933,12 +941,13 @@ Defaults are token-conscious; override any key via the profile patch
     autoCapture: true        # zero-LLM tool-result capture
     autoCapturePreferences: true  # zero-LLM user-correction/preference capture (prefer/avoid/switch-to cues)
     preferenceCapturePerSession: 8  # per-session preference memory cap
-    boundaryPrune: false       # ResultPack L1: prune stale over-threshold tool results at todo/goal boundaries (default OFF)
+    boundaryPrune: true        # ResultPack L1: prune stale over-threshold tool results at todo/goal boundaries (default ON)
+    boundaryPruneAdaptive: true   # ledger veto: stop pruning this workspace once its net is negative (>=3 fires)
     boundaryPruneThresholdChars: 0   # threshold override (0 = host 8192; e.g. 2048 prunes earlier)
     boundaryPruneHeadChars: 0  # retained head under an override (0 = host 4096)
     boundaryPruneTailChars: 0  # retained tail under an override (0 = host 1024)
     boundaryPruneIdleCadence: 0   # request-count boundary for todo/goal-less sessions (0 = event-only)
-    resultPack: false          # ResultPack L2: archive pruned middles + result_recall paged recall (default OFF; needs L1 on)
+    resultPack: true           # ResultPack L2: archive pruned middles + result_recall paged recall (default ON; needs L1 on)
     resultPackRetentionDays: 7 # archive retention days (mtime sweep on the GC cadence)
     sessionSearch: true      # engram_recall may also FTS past sessions
     recallScope: workspace   # recall scope: "workspace" (strict isolation, default) | "global" (opt-in cross-workspace recall with [W:<ws>] origin markers)
@@ -957,8 +966,9 @@ Defaults are token-conscious; override any key via the profile patch
     gcEnabled: true          # scheduled memory GC
     gcIntervalHours: 24      # sweep cadence
     gcStableRetentionDays: 120  # stable tasks leave [ESR] after this
-    gcReplacesCompaction: true # Context GC: take over DSH auto-compact (false = keep the default LLM summarizer)
+    gcReplacesCompaction: false # Context GC: take over DSH auto-compact (default off = host summarizer; true = opt-in pointers)
     gcNarrative: true        # scoped LLM narrative for un-provenanced turns; false = fully mechanical (zero LLM)
+    autoWebCompaction: false # rewrite stock web presets (default off; explicit opt-in, revert with the CLI)
     ledgerEnabled: true      # Context Ledger: injected cost / prune savings / rewrite penalty → net tokens
     ledgerCacheDiscount: 0.1 # cached-prefix price share; rewrites pay (1−discount)
     engramIndexOrder: 40    # systemPrompt section order (before tools band)
@@ -968,7 +978,7 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 347 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
+npm test            # 348 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
 ```

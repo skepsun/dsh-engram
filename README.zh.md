@@ -85,7 +85,7 @@
 - **记忆 GC（pi-esr 约束）** — 定时、机械、只归档的回收：TTL 过期记忆归档、超容量工作区淘汰低价值条目、
   stable 任务超保留窗离开 `[ESR]` 表面、悬空链接边清理。工作集（active 任务引用 / 任务记忆 / 已入索引命中）
   永不触碰；**不硬删任何东西**——归档条目保留 id、始终可重取。
-- **Context GC（自动 GC = 替代 DSH 自动 compact）** — 不是记忆面板 GC：接管 DSH 自带的上下文压缩
+- **Context GC（自动 GC = 替代 DSH 自动 compact，opt-in）** — 不是记忆面板 GC：开启后接管 DSH 自带的上下文压缩
   （`compaction` 服务），把「有损 LLM 全量摘要」换成**机械驱逐 + 重取指针**——扫描被驱逐轮次里的
   engram/ESR 锚（`#记忆id`、`tsk_*`、`ent_*`、`file_path`），只留一行「细节在 `engram_detail` /
   `engram_recall` / `[ESR]` 里」；只有无锚轮次才走 scoped LLM 叙事兜底（`gcNarrative`，默认开、可关成纯机械）。
@@ -380,7 +380,7 @@ npm run build:client
 ## 测试与评测
 
 ```sh
-npm test    # 347 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
+npm test    # 348 项单元测试（含 usage 滚动 / /stats 路由 / Context GC / ESR 触发 / BoundaryPrune / Context Ledger）
 npm run eval  # 离线召回 + 结构基准（确定性语料，跑真实 store/recall 路径）
 ```
 
@@ -438,7 +438,7 @@ GC 永不触碰工作集：active 任务 `memory_refs` 引用的记忆、task �
 （`hits >= promoteHits`）。用 `esr_gc` + `dry_run: true` 先预览。**不硬删**——报告的末尾为所有
 归档项附上重取指针，归档可恢复、不是丢失。
 
-### Context GC（替换 DSH 自动 compact）
+### Context GC（替换 DSH 自动 compact，opt-in）
 
 DSH 默认的上下文压缩是**有损 LLM 全量摘要**（`compaction-basic`）：被驱逐的历史被压缩成散文，
 不可查询、摘要本身还烧 token。dsh-engram 的自动 GC 替代它：`ContextGcEngine extends
@@ -453,7 +453,9 @@ BasicCompactionEngine` 只重写唯一的 `summarize()` 钩子，把摘要正文
 
 触发时机完全跟随 DSH 现有 compact（step pressure / context-overflow / `/compact`）；锁、回放校验、
 tool-call/result 配对、token 定价全部复用基本引擎。任何错误 → 回退默认压缩，**永不破坏 compact**。
-装配即注册 `compaction` 服务，卸载/reload engram 自动还回默认引擎。
+装配即注册 `compaction` 服务，卸载/reload engram 自动还回默认引擎。**自 v0.6 起默认不接管**：
+默认挂裸 `BasicCompactionEngine`（宿主 LLM 摘要），要换成指针摘要需显式打开
+`gcReplacesCompaction`（web 预设还需 `autoWebCompaction`）。
 
 > **收缩闸门（shrink gate）**：harness 拒绝任何不比被驱逐片段更小的 checkpoint（`summary is not
 > smaller than the shadowed content`），否则压缩回滚、上下文永不缩小、最终触发模型侧溢出。Context GC
@@ -464,24 +466,23 @@ tool-call/result 配对、token 定价全部复用基本引擎。任何错误 �
 
 #### 启用入口（这一节就是答案：该功能开在哪）
 
-Context GC 的装配在**两个平面**——web 现在**全部自动**，零配置：
+Context GC 的装配在**两个平面**，但两个开关都是 opt-in（默认不接管）：
 
 - **host 平面（headless / TUI / base 型 profile）——开箱即用，无需任何配置**：
   主插件 `lib/index.js` 在 `ctx.effect` 里直接
   `mountCompactionEngine(ctx, resolved, { readWorkspace }) → new Engine()` 注册 `compaction` 服务；
   配合插件 patch 禁用基座 `compaction-basic` 行，engram 即为该平面唯一 provider。
-  - `gcReplacesCompaction: true`（**默认**）→ `ContextGcEngine`（机械驱逐 + 重取指针）；
-  - `gcReplacesCompaction: false` → 挂裸 `BasicCompactionEngine`（退化为 DSH 默认 LLM 摘要），
-    **`compaction` 服务永不缺席**。
-  - 关闭/开启：profile patch 里给 engram 行加 `config: { gcReplacesCompaction: false }`，或设置卡
-    「记忆 GC」区的 `gcNarrative` 关掉叙事。
-- **preset 平面（web profile）——全自动，零配置，覆盖全部预设**：web 面把 compaction 放在 agent
+  - `gcReplacesCompaction: false`（**默认**）→ 挂裸 `BasicCompactionEngine`（DSH 默认 LLM 摘要），
+    **`compaction` 服务永不缺席**；
+  - `gcReplacesCompaction: true` → `ContextGcEngine`（机械驱逐 + 重取指针，opt-in）；
+  - 开启：profile patch 里给 engram 行加 `config: { gcReplacesCompaction: true }`，或在设置卡打开。
+- **preset 平面（web profile）——显式开启后覆盖全部 stock 预设**：web 面把 compaction 放在 agent
   preset 的 isolate realm（shipped 预设自挂 `compaction-basic`），host 条目进不去、profile patch 也
   够不到预设文件（`mountPreset` 的 Include 不带 patches——已对源码核实）。所以插件在启动时
   （`agentPresets` 服务就绪后）**自动改写每个仍处于出厂 stock 布局的预设**——默认预设 + 整张 roster
   （shipped 根 + `~/.dsh/.agent-presets` 用户根，`standard`/`code`/`cordis` 和你自己的预设都覆盖）：
   把 `compaction` 组里的 `compaction-basic` 行换成 `dsh-engram/compaction`。这一自动装配是：
-  - **默认开**（`autoWebCompaction: true`，设置卡「记忆 GC」可关），幂等——已替换则跳过；
+  - **默认关（opt-in）**（`autoWebCompaction: false`；设置卡「记忆 GC」可开），开启后幂等——已替换则跳过；
     **关掉的含义**：只是在之后的启动时不再自动接管（headless/TUI/base 的 host 平面不受影响）——
     它**不会**还原之前已接管的预设，要还原用 `npm run web-compaction:revert`；
   - **逐预设判定，只碰 stock 布局**——用户自定义过 compaction 组的预设，以及根本没有 compaction 组的
@@ -527,15 +528,16 @@ Context GC 的装配在**两个平面**——web 现在**全部自动**，零配
 
 #### 从 npm 安装后的第一印象（可感知 / 易引导 / 易配置）
 
-- **自动**：装进 profile 后启动一次即可——host 平面由 `mountCompactionEngine` 直接接管；web 平面
-  由 `autoWebCompaction`（默认开）在启动时自动改写全部 stock 预设。**无需任何手动配置。**
+- **半自动（opt-in）**：默认保留 DSH 自己的摘要；在设置卡打开 `gcReplacesCompaction`（host 平面）与
+  `autoWebCompaction`（web 预设）后，启动一次即由 `mountCompactionEngine` 接管、并把全部 stock
+  预设改写成 `dsh-engram/compaction`。开启后无需再手动改文件。
 - **可感知**：插件启动时把权威状态写到 `$DSH_HOME/engram/context-gc.status.json`
   （`host` 平面模式 + `web` 平面每个预设的接管结果 + 生效配置）。随时
   `npx dsh-engram status` 或 `npx dsh-engram doctor` 查看；web 记忆看板（ESR 任务看板）头部也有
   一枚状态徽标（"Context GC·主机 ·N 预设"，来自 overview API）。启动日志也有两行关键确认：
   `engram context-gc: compaction = Context GC …` 与 `engram web-provision: wired Context GC into preset …`。
-- **易配置**：一个设置卡（「记忆 GC」区）管全部：`autoWebCompaction`（web 自动接管开关）、
-  `gcReplacesCompaction`（用 Context GC 还是回退默认摘要）、`gcNarrative`（叙事兜底开关）——
+- **易配置**：一个设置卡（「记忆 GC」区）管全部：`autoWebCompaction`（web 自动接管，默认关）、
+  `gcReplacesCompaction`（用 Context GC 还是宿主摘要，默认关）、`gcNarrative`（叙事兜底开关）——
   改动后 `dsh web` 重启生效，web 预设行会被自动刷新成新配置。
 
 **验证是否生效**：`dsh web`（或对应 profile）重启后——
@@ -548,7 +550,7 @@ Context GC 的装配在**两个平面**——web 现在**全部自动**，零配
 - （若见 `… keeping the existing compaction service` 说明同域已有 provider、未替换成功；`web-provision … skipped (custom)`
   说明某预设是自定义/无 compaction 布局、未被触碰；`dsh-compaction-basic unavailable` 说明环境缺依赖，自动回退默认压缩。）
 
-### BoundaryPrune（子任务边界剪枝，默认关）
+### BoundaryPrune（子任务边界剪枝，默认开 + 账本否决）
 
 Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝的触发时机」——
 在 todo 完成推进 / goal 终态这些子任务边界，主动调用 DSH 自带的
@@ -573,10 +575,13 @@ Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝�
   并配更小保留边缘（`boundaryPruneHeadChars`/`boundaryPruneTailChars`）可更早
   开剪——T2048+小边缘在真实语料上首剪节省是宿主默认的 2.4 倍（10.14M vs 4.23M
   字符）。降阈值在 `resultPack` 开启时安全（被剪中段有归档兜底）。
-- 默认**关**：`boundaryPrune: false`。开启后启动日志出现
-  `engram boundary-prune (todo @N reqs): pruned …`。
+- 默认**开**：`boundaryPrune: true`；`false` 是 opt-out。自适应闸门
+  （`boundaryPruneAdaptive: true`，默认开）让 Context Ledger 在该 workspace 真实剪枝后
+  净收益为负（≥3 次）时自动停剪——证据只能关、不会自行开。启动日志出现
+  `engram boundary-prune (todo @N reqs): pruned …`；被账本否决时出现
+  `engram boundary-prune: ledger gate holds for …`。
 
-### ResultPack L2（结果归档 + `result_recall`，默认关）
+### ResultPack L2（结果归档 + `result_recall`，默认开）
 
 让 BoundaryPrune 剪枝**无损**：每个被剪工具结果的被移除中段，按与记忆写入
 相同的规则脱敏后归档到 `~/.dsh/engram/resultpack/<callId>.json`，并在剪枝
@@ -591,8 +596,9 @@ Context GC 管「压缩的摘要内容」，BoundaryPrune 管「确定性剪枝�
   [ENGRAM] 索引）；保留期 `resultPackRetentionDays`（默认 7 天）按 mtime 清理，
   搭 GC 同一节奏。
 - **自我禁用**：只开 L2 不开 L1 将无内容可归档，故不注册工具并打一条警告。
-- 默认**关**：`resultPack: false`（须与 `boundaryPrune: true` 同开）。开启后
-  启动日志出现 `engram result-pack enabled: result_recall(callId, offset) registered`。
+- 默认**开**：`resultPack: true`（与默认开启的 L1 配对，保证默认剪枝无损）；
+  关掉后 L1 仍可工作，但被剪中段不可召回。开启时启动日志出现
+  `engram result-pack enabled: result_recall(callId, offset) registered`。
 
 ### 激活遥测（SoL-Pi M15/C13）
 
@@ -697,12 +703,13 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     autoCapture: true        # 零 LLM 工具结果捕获
     autoCapturePreferences: true  # 零 LLM 用户纠正/偏好捕获（prefer/avoid/switch-to 句式）
     preferenceCapturePerSession: 8  # 每会话偏好记忆条数上限
-    boundaryPrune: false       # ResultPack L1：todo/goal 边界剪掉超阈值旧工具结果（默认关）
+    boundaryPrune: true        # ResultPack L1：todo/goal 边界剪掉超阈值旧工具结果（默认开）
+    boundaryPruneAdaptive: true  # 账本否决：该 workspace 净收益为负（≥3 次剪枝）时自动停剪
     boundaryPruneThresholdChars: 0   # 阈值覆盖（0=宿主 8192；如 2048 可更早开剪）
     boundaryPruneHeadChars: 0  # 覆盖时的保留头部（0=宿主 4096）
     boundaryPruneTailChars: 0  # 覆盖时的保留尾部（0=宿主 1024）
     boundaryPruneIdleCadence: 0   # 空闲步数边界（0=仅事件边界；覆盖无 todo/goal 会话）
-    resultPack: false          # ResultPack L2：剪掉的中段脱敏归档 + result_recall 按页召回（默认关，须与 L1 同开）
+    resultPack: true           # ResultPack L2：剪掉的中段脱敏归档 + result_recall 按页召回（默认开，须与 L1 同开）
     resultPackRetentionDays: 7 # 归档保留天数（mtime 清理，走 GC 节奏）
     sessionSearch: true      # engram_recall 也可对历史会话 FTS
     recallScope: workspace   # 召回范围：workspace（严格工作区隔离，默认）| global（可选跨工作区召回，带 [W:<ws>] 来源标记）
@@ -720,11 +727,11 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     gcEnabled: true          # 定时记忆 GC
     gcIntervalHours: 24      # 回收节奏
     gcStableRetentionDays: 120  # 超过此天数的 stable 任务离开 [ESR]
-    gcReplacesCompaction: true # Context GC：接管 DSH 自动 compact（false=回退默认 LLM 压缩）
+    gcReplacesCompaction: false # Context GC：接管 DSH 自动 compact（默认关=宿主 LLM 压缩；true=opt-in 指针摘要）
     gcNarrative: true        # 无锚轮次走 scoped LLM 叙事；false=纯机械（零 LLM）
     ledgerEnabled: true      # Context Ledger：注入成本/剪枝节省/前缀重写罚金 → 净 token
     ledgerCacheDiscount: 0.1 # 缓存折价：重写按 (1−0.1) 计罚金；0.1 = 命中只付 10%
-    boundaryPrune: false     # BoundaryPrune：todo/goal 边界主动剪超阈值旧工具结果（默认关）
+    autoWebCompaction: false   # web 预设自动改写（默认关；开启需显式确认，可用 revert 还原）
     boundaryPruneMinRemaining: 50  # 偿还门：预计剩余请求数低于此值不剪
     engramIndexOrder: 40    # systemPrompt section 顺序（位于 tools 段之前）
     esrOrder: 41
@@ -733,7 +740,7 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
 ## 开发
 
 ```sh
-npm test            # 347 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
+npm test            # 348 个测试：核心 + Web API + GC + Context GC + ESR 触发 + Context Ledger（node:test）
 npm run build:client
 ```
 

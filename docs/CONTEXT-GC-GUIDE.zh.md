@@ -2,6 +2,9 @@
 
 > 适用范围：dsh web（preset 平面）+ headless/TUI/base（host 平面）。
 > 一句话：**用「机械驱逐 + 重取指针」替代 DSH 自带的有损 LLM 全量摘要压缩。**
+>
+> **v0.6 起是 opt-in**：`gcReplacesCompaction` 与 `autoWebCompaction` 默认都是 `false`，
+> 插件默认保留 DSH 自己的摘要。要启用 Context GC，先打开这两个开关（见第 3 步）。
 
 ---
 
@@ -26,8 +29,8 @@ dsh-engram 的 Context GC 把这一步换成：
 
 | 平面 | 覆盖 | 接管方式 |
 |---|---|---|
-| host 平面 | headless / TUI / base 型 profile | 插件启动时直接注册 `compaction` 服务为零配置 ContextGcEngine |
-| web 平面 | dsh web 的 agent preset（shipped + 用户预设） | 启动时自动把 stock 预设 `compaction` 组的 `compaction-basic` 行换成 `dsh-engram/compaction` 行 |
+| host 平面 | headless / TUI / base 型 profile | 打开 `gcReplacesCompaction` 后，插件启动时注册 ContextGcEngine；否则挂裸 `BasicCompactionEngine`（宿主摘要） |
+| web 平面 | dsh web 的 agent preset（shipped + 用户预设） | 打开 `autoWebCompaction` 后，启动时把 stock 预设的 `compaction-basic` 行换成 `dsh-engram/compaction` 行 |
 
 ---
 
@@ -41,29 +44,32 @@ dsh-engram 的 Context GC 把这一步换成：
 
 ---
 
-## 3. 从 0 安装并启用（3 步 + 1 条铁律）
+## 3. 从 0 安装并启用（4 步 + 1 条铁律）
 
 ```bash
 # ① 安装（源码开发方式；生产用 npm install dsh-engram）
 cd /path/to/dsh-loom && npm link            # 或 profile package.json 加 "dsh-engram": "link:..."
 
-# ② 启动一次 dsh web —— 这一步做「自动装配」
-#    - host 平面：立即注册 Context GC 为 compaction 服务
+# ② 打开两个 opt-in 开关（设置卡「记忆 GC」区，或 profile patch）
+#    gcReplacesCompaction: true   # host 平面换 ContextGcEngine
+#    autoWebCompaction: true      # web 预设自动改写（带 .engram.bak）
+
+# ③ 启动一次 dsh web —— 这一步做「自动装配」
+#    - host 平面：按 gcReplacesCompaction 注册 Context GC 为 compaction 服务
 #    - web 平面：改写每个 stock 预设文件（compaction-basic 行 → dsh-engram/compaction 行，
 #      每个文件旁留 agent.cordis.yml.engram.bak）
 dsh web
 
-# ③ 再重启一次 dsh web —— 让已接管的预设真正生效
+# ④ 再重启一次 dsh web —— 让已接管的预设真正生效
 dsh web
 ```
 
 **铁律：代码/预设改动后必须重启 dsh。** 运行中的进程把旧 `lib/*.js` 和旧预设行都缓存/装载在内存里，
-磁盘上的修复与文件改写不会热生效；只有重启（host 开机自动装配默认 `autoWebCompaction:true`）才会
-加载新代码并接管 web 预设。
+磁盘上的修复与文件改写不会热生效；只有在两个开关打开的前提下重启，才会加载新代码并接管 web 预设。
 
 > 也可以先手动预写再一次性重启：
 > ```bash
-> npx dsh-engram enable    # 等价于启动时的自动装配（通常 no-op）
+> npx dsh-engram enable    # 等价于启动时的自动装配（需 autoWebCompaction；通常 no-op）
 > npx dsh-engram status    # 确认 preset 已 wired
 > # 然后重启 dsh web 一次
 > ```

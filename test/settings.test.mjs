@@ -18,7 +18,11 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(defaults.autoSupersede, false, "autoSupersede defaults OFF");
   assert.equal(defaults.verifyArtifact, true);
   assert.equal(defaults.autoSinkTodosOnEnd, true, "session-end todo auto-sink defaults ON");
-  assert.equal(defaults.autoWebCompaction, true, "web auto-wiring of Context GC defaults ON");
+  assert.equal(defaults.autoWebCompaction, false, "web auto-wiring of Context GC is opt-in (v0.6 default correction)");
+  assert.equal(defaults.gcReplacesCompaction, false, "replacing host compaction is opt-in (v0.6)");
+  assert.equal(defaults.boundaryPrune, true, "BoundaryPrune defaults ON with the ledger veto (v0.6)");
+  assert.equal(defaults.boundaryPruneAdaptive, true, "adaptive ledger gate defaults ON");
+  assert.equal(defaults.resultPack, true, "default pruning stays lossless via the archive");
   assert.equal(defaults.recallScope, "workspace", "recallScope defaults to strict workspace isolation");
 
   // base (composition layer) includes both keys
@@ -27,7 +31,8 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.ok("autoSupersede" in base && base.autoSupersede === false);
   assert.ok("verifyArtifact" in base && base.verifyArtifact === true);
   assert.ok("autoSinkTodosOnEnd" in base && base.autoSinkTodosOnEnd === true);
-  assert.ok("autoWebCompaction" in base && base.autoWebCompaction === true);
+  assert.ok("autoWebCompaction" in base && base.autoWebCompaction === false);
+  assert.ok("boundaryPruneAdaptive" in base && base.boundaryPruneAdaptive === true);
 
   // the schemastery schema exposes both fields with the right defaults
   const schema = makeSettingsSchema(defaults);
@@ -38,7 +43,9 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(schema.dict.autoSinkTodosOnEnd.type, "boolean");
   assert.equal(schema.dict.autoSinkTodosOnEnd.meta.default, true);
   assert.equal(schema.dict.autoWebCompaction.type, "boolean");
-  assert.equal(schema.dict.autoWebCompaction.meta.default, true);
+  assert.equal(schema.dict.autoWebCompaction.meta.default, false);
+  assert.equal(schema.dict.boundaryPruneAdaptive.type, "boolean");
+  assert.equal(schema.dict.boundaryPruneAdaptive.meta.default, true);
   assert.equal(schema.dict.recallScope.type, "union");
   assert.equal(schema.dict.recallScope.meta.default, "workspace");
 
@@ -48,6 +55,7 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.ok(SETTINGS_KEYS.includes("verifyArtifact"), "verifyArtifact propagates to live");
   assert.ok(SETTINGS_KEYS.includes("autoSinkTodosOnEnd"), "autoSinkTodosOnEnd propagates to live");
   assert.ok(SETTINGS_KEYS.includes("autoWebCompaction"), "autoWebCompaction propagates to live");
+  assert.ok(SETTINGS_KEYS.includes("boundaryPruneAdaptive"), "boundaryPruneAdaptive propagates to live");
   assert.ok(SETTINGS_KEYS.includes("recallScope"), "recallScope propagates to live");
 });
 

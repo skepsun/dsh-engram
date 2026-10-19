@@ -149,6 +149,71 @@ test("installBoundaryPrune: ResultPack onPruned hook fires after a real prune (L
   assert.equal(listeners.has("session/event"), false, "dispose removes the listener");
 });
 
+test("installBoundaryPrune: the ledger gate vetoes fires; adaptive:false bypasses it", async () => {
+  const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
+
+  const make = (config, allowFire) => {
+    const listeners = new Map();
+    let calls = 0;
+    const fakePruner = {
+      config: { headChars: 4096, tailChars: 1024 },
+      pruneSession: () => {
+        calls += 1;
+        return { pruned: [{ callId: "gated" }], charsRemoved: 100 };
+      },
+    };
+    const infos = [];
+    const dispose = installBoundaryPrune(
+      {
+        on(name, fn) {
+          listeners.set(name, fn);
+          return () => listeners.delete(name);
+        },
+        get: (name) => (name === "toolResultPruner" ? fakePruner : void 0),
+      },
+      config,
+      { warn: () => {}, info: (x) => infos.push(x) },
+      { onPruned: () => {} },
+      { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]), allowFire },
+    );
+    return { listeners, calls: () => calls, infos, dispose };
+  };
+
+  const session = { id: "sess-gate", header: { cwd: "/ws" } };
+  const fire = async (harness) => {
+    const onEvent = harness.listeners.get("session/event");
+    await onEvent(session, { type: "assistant/message" });
+    await onEvent(session, { type: "todo/write", data: { todos: [{ status: "completed" }] } });
+  };
+
+  // gate says "net negative" → no prune, one informational line
+  const vetoed = make({ boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneAdaptive: true }, () => false);
+  await fire(vetoed);
+  assert.equal(vetoed.calls(), 0, "gate vetoed the fire");
+  assert.ok(vetoed.infos.some((line) => line.includes("ledger gate holds")), "veto is observable");
+  vetoed.dispose();
+
+  // positive evidence → fire
+  const allowed = make({ boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneAdaptive: true }, () => true);
+  await fire(allowed);
+  assert.equal(allowed.calls(), 1, "gate allowed the fire");
+  allowed.dispose();
+
+  // adaptive off = repayment gate only, even when the ledger would veto
+  const optOut = make({ boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneAdaptive: false }, () => false);
+  await fire(optOut);
+  assert.equal(optOut.calls(), 1, "adaptive:false ignores the ledger gate");
+  optOut.dispose();
+
+  // a throwing gate must never disable pruning
+  const throwing = make({ boundaryPrune: true, boundaryPruneMinRemaining: 5 }, () => {
+    throw new Error("ledger exploded");
+  });
+  await fire(throwing);
+  assert.equal(throwing.calls(), 1, "gate failure fails open");
+  throwing.dispose();
+});
+
 test("installBoundaryPrune: a throwing onPruned hook is contained inside the listener", async () => {
   const { installBoundaryPrune } = await import("../lib/boundary-prune.js");
   const listeners = new Map();

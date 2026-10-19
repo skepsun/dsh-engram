@@ -30,8 +30,10 @@ export interface EngramConfigValue {
   autoCapture?: boolean;
   /** 用户纠正/偏好学习（零 LLM）：识别 prefer/avoid/switch-to 句式沉淀 preference 记忆。 */
   autoCapturePreferences?: boolean;
-  /** ResultPack L1：在 todo/goal 边界用 DSH toolResultPruner 剪掉超阈值旧工具结果（默认关，零 LLM）。 */
+  /** ResultPack L1：在 todo/goal 边界用 DSH toolResultPruner 剪掉超阈值旧工具结果（默认开，零 LLM）。 */
   boundaryPrune?: boolean;
+  /** 剪枝自适应：账本显示该 workspace 净收益为负（≥3 次剪枝）时自动停剪。 */
+  boundaryPruneAdaptive?: boolean;
   /** T2048 落地：边界剪枝阈值覆盖（字符；空=宿主 8192，如 2048 可更早开剪，须 L2 归档找回）。 */
   boundaryPruneThresholdChars?: number | null;
   /** 阈值覆盖生效时保留的结果头部字符数（默认 4096）。 */
@@ -105,9 +107,10 @@ export interface EngramConfigGroup {
 export const COMMON_FIELDS: EngramConfigField[] = [
   { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
   { key: "autoCapturePreferences", label: "偏好捕获", hint: "用户纠正/偏好学习：检测消息里的「不要用X/改用Y/prefer/never use」句式，自动沉淀为 preference 记忆并置顶 [ENGRAM]（correx/PAHF 式，零 LLM）", kind: "bool" },
-  { key: "boundaryPrune", label: "边界剪枝", hint: "ResultPack L1：todo 完成/goal 终态边界主动剪掉超阈值旧工具结果（DSH 确定性 surface-replace、偿还门、零 LLM；默认关）", kind: "bool" },
+  { key: "boundaryPrune", label: "边界剪枝", hint: "ResultPack L1：todo 完成/goal 终态边界主动剪掉超阈值旧工具结果（DSH 确定性 surface-replace、偿还门、零 LLM；默认开，关=opt-out）", kind: "bool" },
+  { key: "boundaryPruneAdaptive", label: "剪枝自适应", hint: "账本否决：该 workspace 真实剪枝后净收益为负（≥3 次）时自动停止继续剪；证据只能关、不会自行开", kind: "bool" },
   { key: "boundaryPruneThresholdChars", label: "剪枝阈值(字符)", hint: "覆盖宿主 8192：设 2048 可更早开剪，并配 L2 归档找回被剪中段；留空=宿主默认。建议同时把保留边缘调小（如 1024/256）以获得最大节省", kind: "num", min: 256, max: 16384, step: 256 },
-  { key: "resultPack", label: "结果归档召回", hint: "ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；需与边界剪枝一起开）", kind: "bool" },
+  { key: "resultPack", label: "结果归档召回", hint: "ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；默认开，保证默认剪枝无损；需与边界剪枝一起开）", kind: "bool" },
   { key: "autoRecallOnStart", label: "会话启动自动召回", hint: "新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取", kind: "bool" },
   { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
   { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
