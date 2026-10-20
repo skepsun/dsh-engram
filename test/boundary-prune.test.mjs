@@ -10,7 +10,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { isBoundary, completedCount, expectedSessionRequests, workspaceHistory } from "../lib/boundary-prune.js";
+import {
+  isBoundary,
+  completedCount,
+  expectedSessionRequests,
+  workspaceHistory,
+  boundaryPruneAvailability,
+} from "../lib/boundary-prune.js";
 
 test("completedCount counts completed todos only", () => {
   assert.equal(completedCount(null), 0);
@@ -439,4 +445,35 @@ test("workspaceHistory counts versioned session logs (issue #8)", () => {
   // No sessions at all → empty map (callers fall back to the fixed floor).
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-bp-hist-empty-"));
   assert.equal(workspaceHistory(empty).size, 0);
+});
+
+test("availability: armed when the host plane exposes toolResultPruner", () => {
+  const ctx = { get: (name) => (name === "toolResultPruner" ? { pruneSession() {}, config: { thresholdChars: 8192 } } : undefined) };
+  assert.deepEqual(boundaryPruneAvailability(ctx, {}), { armed: true, reason: "threshold 8192" });
+  assert.equal(
+    boundaryPruneAvailability(ctx, { boundaryPruneThresholdChars: 2048 }).reason,
+    "threshold 8192 (override 2048)",
+  );
+});
+
+test("availability: names the missing host-plane pruner (DSH >= 0.2.0 web profile)", () => {
+  const out = boundaryPruneAvailability({ get: () => undefined }, {});
+  assert.equal(out.armed, false);
+  assert.match(out.reason, /toolResultPruner/);
+  assert.match(out.reason, /tool-result-pruner/);
+});
+
+test("availability: registered-but-inactive pruner reads as pending, not missing", () => {
+  // Strict get is empty while the pruner's fiber is still activating; the
+  // non-strict lookup still sees the registered service. Reporting these as
+  // the same thing is what hid a real L1 outage behind "patch missing".
+  const ctx = { get: (name, strict) => (strict === false ? { pruneSession() {} } : undefined) };
+  const out = boundaryPruneAvailability(ctx, {});
+  assert.equal(out.armed, false);
+  assert.match(out.reason, /registered but its fiber is not active yet/);
+});
+
+test("availability: config opt-out is reported, not silently armed", () => {
+  const ctx = { get: () => ({ pruneSession() {} }) };
+  assert.equal(boundaryPruneAvailability(ctx, { boundaryPrune: false }).armed, false);
 });

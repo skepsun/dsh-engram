@@ -211,11 +211,11 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
                 <div style={{ ...hb.grid, marginTop: 8 }}>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#059669" }}>{tokenCount(ledgerBucket.avoidedTokens)}</div>
-                    <div style={hb.statLabel}>节省 · 剪枝/压缩</div>
+                    <div style={hb.statLabel}>节省 · 剪枝/压缩（已入账）</div>
                   </div>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#d97706" }}>{tokenCount(-ledgerBucket.injectedTokens)}</div>
-                    <div style={hb.statLabel}>注入成本 · 索引/召回/ESR</div>
+                    <div style={hb.statLabel}>注入成本 · 索引/召回/ESR（每请求重计）</div>
                   </div>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#dc2626" }}>
@@ -224,6 +224,13 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
                     <div style={hb.statLabel}>重写罚金 · {ledgerBucket.rewriteCount} 次</div>
                   </div>
                 </div>
+                {ledgerBucket.avoidedTokens === 0 && (ledgerBucket.injectedTokens > 0 || ledgerBucket.rewriteCount > 0) && (
+                  <div style={{ ...hb.sub, marginTop: 6 }}>
+                    节省仍为 0：本工作区还没有剪枝/压缩节省入账——L1 边界剪枝需要 host 平面的
+                    toolResultPruner（DSH ≥ 0.2.0 由 bundle patch 重新启用该行），压缩节省由 Context GC
+                    引擎在 checkpoint 时上报；净值为负 = 注入成本 + 重写罚金的合计。
+                  </div>
+                )}
                 <div style={{ ...hb.sub, marginTop: 6 }}>
                   口径：chars/{ledger.charsPerToken} 估算 · 缓存折价 {Math.round(ledger.cacheDiscount * 100)}%
                   （重写按 {Math.round((1 - ledger.cacheDiscount) * 100)}% 计）· 未计模型质量差

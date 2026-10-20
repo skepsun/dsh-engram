@@ -257,11 +257,13 @@ esr_task 勾选徽标，拖拽/缩放/点选查关系明细），并跟随工作
   **入口已接实**（此前 host 平面只 import 未调用，属死装配——本次修复）：`lib/index.js` 的
   `ctx.effect` 直接 `mountCompactionEngine(...)` 注册服务，headless/TUI/base 默认即开（启动日志
   `engram context-gc: compaction = Context GC …`）；web 面**全自动、覆盖全部预设**——启动时
-  `autoWebCompaction`（默认开）把每个仍处于 stock 布局的 agent 预设（默认 + 整张 roster：
-  shipped `standard`/`code`/`cordis` + `~/.dsh/.agent-presets` 用户预设）的 `compaction` 组里
-  `compaction-basic` 行换成 `dsh-engram/compaction`（幂等、create-only 备份、写后校验、自定义/无
-  compaction 布局绝不碰、失败只 warn 回退默认摘要），等价手动 CLI（随 npm 包发布）：
-  `npx dsh-engram status|doctor|enable|revert`（卸载 engram 前先 revert，避免预设悬空引用）。
+  `autoWebCompaction`（v0.6 起 opt-in，默认关）把每个仍处于 stock 布局的 agent 预设（默认 + 整张
+  roster，两代布局都支持：旧版 `<root>/<id>/agent.cordis.yml` 与 DSH ≥ 0.2.0 声明式
+  `@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`）的 `compaction` 组里
+  `compaction-basic` 行换成 `dsh-engram/compaction`（按 YAML 结构定位、缩进无关；幂等、create-only
+  备份、写后校验、自定义/无 compaction 布局绝不碰、失败只 warn 回退默认摘要），等价手动 CLI
+  （随 npm 包发布）：`npx dsh-engram status|doctor|enable|revert`（卸载 engram 前先 revert，
+  避免预设悬空引用；`--presets-dir` 可覆盖声明式目录探测）。
   启动日志每接管一个预设一行 `engram web-provision: wired Context GC into preset …` 即该预设已接管；
   插件启动时把权威状态写到 `$DSH_HOME/engram/context-gc.status.json`，供
   `npx dsh-engram status` / `doctor` 与 web 看板头部状态徽标（overview API 的 `compaction` 字段）读取。

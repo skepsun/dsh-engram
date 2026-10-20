@@ -22,6 +22,7 @@ import {
   serializeMessages,
   summarizeUnprovenanced,
   estimateShadowedTokens,
+  messagesTextChars,
   estimateFramedTokens,
   fitSummaryToSpan,
   loadContextGcEngine,
@@ -415,6 +416,50 @@ test("compaction entry: preset-plane plugin shape (name/inject/apply)", () => {
   assert.equal(typeof compactionEntryApply, "function");
 });
 
+test("ledger credit: messagesTextChars counts text, tool args and nested results", () => {
+  assert.equal(messagesTextChars([]), 0);
+  assert.equal(messagesTextChars([userText("héllo")]), 5, "code points, not UTF-16 units");
+  const withResult = [userText("ask"), assistantWithToolCall("engram_store", { text: "m" }, "cZ"), toolResult("cZ", "世界")];
+  // "ask" + JSON arguments + "世界" + "engram_store" is not text → args only
+  const expected = 3 + JSON.stringify({ text: "m" }).length + 2;
+  assert.equal(messagesTextChars(withResult), expected);
+});
+
+test("engine: onCompacted reports span − summary chars for the Context Ledger", async () => {
+  const credits = [];
+  const Engine = await loadContextGcEngine(fakeCtx(), { auto: false }, {
+    narrativeEnabled: false,
+    readWorkspace: async () => null,
+    onCompacted: (report) => credits.push(report),
+  });
+  assert.ok(Engine, "Context GC engine requires setup-links (dsh-compaction-basic)");
+  const engine = new Engine();
+  const input = {
+    messages: [userText("ask"), assistantWithToolCall("engram_recall", { query: "q" }, "cA"), toolResult("cA", "y".repeat(6000))],
+  };
+  const result = await engine.summarize(input, fakeAgent("/w"));
+  assert.equal(credits.length, 1, "one credit per accepted checkpoint");
+  const credit = credits[0];
+  assert.equal(credit.workspace, "/w");
+  assert.equal(credit.session.id, "sess-1");
+  assert.ok(credit.charsSaved > 5000, `charsSaved=${credit.charsSaved}`);
+  assert.equal(credit.spanChars, credit.summaryChars + credit.charsSaved, "span = summary + saved");
+  const summaryChars = [...result.summary.map((b) => b.text).join("\n")].length;
+  assert.equal(credit.summaryChars, summaryChars, "summary side is the final checkpoint body");
+});
+
+test("engine: a throwing onCompacted never breaks compaction", async () => {
+  const Engine = await loadContextGcEngine(fakeCtx(), { auto: false }, {
+    narrativeEnabled: false,
+    readWorkspace: async () => null,
+    onCompacted: () => { throw new Error("ledger down"); },
+  });
+  assert.ok(Engine, "Context GC engine requires setup-links (dsh-compaction-basic)");
+  const engine = new Engine();
+  const result = await engine.summarize({ messages: [userText("hi")] }, fakeAgent());
+  assert.match(result.summary.map((b) => b.text).join("\n"), /Context GC/);
+});
+
 function capturingCtx(overrides = {}) {
   // object spread materializes getters, so hold the captured engine in a
   // closure and expose a reader method instead.
@@ -443,6 +488,37 @@ test("compaction entry: apply in context-gc mode mounts the ContextGcEngine over
   const engine = ctx.engine();
   assert.ok(engine, "apply must construct + provide a compaction engine");
   assert.equal(typeof engine._contextGc, "function", "context-gc mode carries the mechanical eviction override");
+});
+
+test("compaction entry: credits the host ledger through the engramLedger service", async () => {
+  const credits = [];
+  const ctx = capturingCtx({
+    engramLedger: { noteCompaction: (sessionId, workspace, opts) => credits.push([sessionId, workspace, opts]) },
+  });
+  await compactionEntryApply(ctx, { gcReplacesCompaction: true, gcNarrative: false });
+  const engine = ctx.engine();
+  await engine.summarize(
+    {
+      messages: [
+        userText("ask"),
+        assistantWithToolCall("engram_recall", { query: "q" }, "c1"),
+        toolResult("c1", "z".repeat(4000)),
+      ],
+    },
+    fakeAgent("/w"),
+  );
+  assert.equal(credits.length, 1, "the preset-plane row must reach the host ledger");
+  assert.equal(credits[0][0], "sess-1");
+  assert.equal(credits[0][1], "/w");
+  assert.ok(credits[0][2].charsSaved > 3000, `charsSaved=${credits[0][2].charsSaved}`);
+});
+
+test("compaction entry: no ledger service → compaction still works (no throw)", async () => {
+  const ctx = capturingCtx();
+  await compactionEntryApply(ctx, { gcReplacesCompaction: true, gcNarrative: false });
+  const engine = ctx.engine();
+  const out = await engine.summarize({ messages: [userText("hi")] }, fakeAgent());
+  assert.match(out.summary.map((b) => b.text).join("\n"), /Context GC/);
 });
 
 // ── mountCompactionEngine — the SHARED entry (host plane + preset plane) ────

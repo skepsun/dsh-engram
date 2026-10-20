@@ -32,6 +32,13 @@ dsh-engram 的 Context GC 把这一步换成：
 | host 平面 | headless / TUI / base 型 profile | 打开 `gcReplacesCompaction` 后，插件启动时注册 ContextGcEngine；否则挂裸 `BasicCompactionEngine`（宿主摘要） |
 | web 平面 | dsh web 的 agent preset（shipped + 用户预设） | 打开 `autoWebCompaction` 后，启动时把 stock 预设的 `compaction-basic` 行换成 `dsh-engram/compaction` 行 |
 
+web 平面在两种 DSH 预设布局上都生效（插件按 `compaction` 组的结构定位行，不依赖缩进）：
+
+- **DSH ≤ 0.1.x：旧版组合文件** `<root>/<id>/agent.cordis.yml`（行在 4 空格缩进）；
+- **DSH ≥ 0.2.0：声明式出厂预设** `@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`
+  （行在 14/16/18 空格缩进，文件里是 `- insert:` 声明的 `@deepseek-ai/dsh-agent-preset`）。
+  用户自定义的声明式预设（存在 profile patch 里、没有出厂文件）不会被改写。
+
 ---
 
 ## 2. 前提
@@ -57,7 +64,9 @@ cd /path/to/dsh-loom && npm link            # 或 profile package.json 加 "dsh-
 # ③ 启动一次 dsh web —— 这一步做「自动装配」
 #    - host 平面：按 gcReplacesCompaction 注册 Context GC 为 compaction 服务
 #    - web 平面：改写每个 stock 预设文件（compaction-basic 行 → dsh-engram/compaction 行，
-#      每个文件旁留 agent.cordis.yml.engram.bak）
+#      每个文件旁留 .engram.bak 备份）：
+#        DSH ≤ 0.1.x → <root>/<id>/agent.cordis.yml.engram.bak
+#        DSH ≥ 0.2.0 → <presets>/<id>.patch.yml.engram.bak
 dsh web
 
 # ④ 再重启一次 dsh web —— 让已接管的预设真正生效
@@ -144,8 +153,8 @@ Fetch the exact records that are still in the store:
 
 | 键 | 默认 | 作用 |
 |---|---|---|
-| `autoWebCompaction` | `true` | 是否在启动时自动改写 stock 预设并接管 web 平面 |
-| `gcReplacesCompaction` | `true` | `true`=用 Context GC；`false`=回退 DSH 默认 LLM 摘要（`compaction` 服务永不缺席） |
+| `autoWebCompaction` | `false` | 是否在启动时自动改写 stock 预设并接管 web 平面（opt-in，见开头） |
+| `gcReplacesCompaction` | `false` | `true`=用 Context GC；`false`=回退 DSH 默认 LLM 摘要（`compaction` 服务永不缺席）。opt-in |
 | `gcNarrative` | `true` | 无锚轮次是否走 scoped LLM 叙事；`false`=**纯机械、整条路径零 LLM** |
 | `gcNarrativeMaxTokens` | `1024` | 叙事生成的最大 token 数 |
 | `gcNarrativeMaxChars` | `4000` | 无锚轮次原文兜底的截断长度（字符） |
@@ -158,13 +167,15 @@ Fetch the exact records that are still in the store:
 
 | 命令 | 作用 |
 |---|---|
-| `npx dsh-engram status` | 查看 host + 每个预设的接管状态与生效配置 |
+| `npx dsh-engram status` | 查看 host + 每个预设的接管状态与生效配置（自动适配新旧预设布局） |
 | `npx dsh-engram doctor` | status + 按缺口排序的下一步 |
 | `npx dsh-engram enable` | 手动重跑启动时的自动装配（通常 no-op） |
 | `npx dsh-engram revert` | 把全部预设还原成 stock `compaction-basic` 行 |
+| `npx dsh-engram status --presets-dir <dir>` | 声明式预设目录探测失败时手动指定（如 `DSH_WEB_PRESETS_DIR`） |
 
 - 仓库内 `npm run web-compaction:*` 是同一 CLI 的别名。
-- 每个被改写文件旁有 `agent.cordis.yml.engram.bak`（create-only，保留首次原件）。
+- 每个被改写文件旁有 `.engram.bak`（create-only，保留首次原件）：
+  `agent.cordis.yml.engram.bak`（旧版布局）或 `<id>.patch.yml.engram.bak`（声明式布局）。
 - **卸载 dsh-engram 之前先 `npx dsh-engram revert`**——否则预设里的 `dsh-engram/compaction` 行会
   悬空，web 会话挂 loading。
 
@@ -179,13 +190,33 @@ Fetch the exact records that are still in the store:
 | 长会话自动压缩仍不提交（`start` 涨、`summary` 不涨） | 同上 / 或某些后端版本旧 | 重启；确认日志有 `compaction = Context GC` |
 | 日志 `… keeping the existing compaction service` | 同域已有 compaction provider（基座行未禁 / 双 provider） | 检查 patch 与预设行，避免重复注册 |
 | 日志 `web-provision … skipped (custom)` | 该预设是自定义/无 compaction 布局 | **设计如此**，不会碰 |
+| 日志 `preset "x" has no shipped file …` | DSH ≥ 0.2.0 的声明式用户预设（存在 profile patch，无出厂文件） | 在设置卡/编辑器里改；或手动把 compaction 组换成 `dsh-engram/compaction` |
+| 改了 shipped 预设文件却不生效 | profile patch 里有 `preset-*` 覆写行（Web 编辑器保存的 `config.plugins` 优先） | 在编辑器里改，或删掉覆写行 |
 | 日志 `dsh-compaction-basic unavailable` | 环境缺后端依赖 | 安装依赖；自动回退默认压缩，host 不崩 |
 | 极小被驱逐片段（span 小于 checkpoint 开销）不压缩 | harness 收缩闸门对**任何**后端一视同仁 | 属正常，没必要为几十 token 起 checkpoint |
 | 改配置后没变化 | web 行要重启才刷新 | 重启 dsh web |
+| 遥测「节省 · 剪枝/压缩」一直是 0、净 token 恒负 | 两条入账腿都没触发：L1 拿不到 host 平面的 `toolResultPruner`（0.2.0 的 host 行被禁），压缩节省此前进不了账本 | 确认状态快照 `boundaryPrune.armed: true`（`npx dsh-engram status` 会打印）；压缩在 0.7.1+ 按 `区间字符数 − checkpoint 字符数` 入账 |
+| L1 状态报 `no toolResultPruner service …` 但 `--dump-config` 里行是启用的 | 行存在却被**运行时**关掉（如 `- id: tool-result-pruner, disabled: true` 的 profile override） | 删掉该 override；bundle patch 只负责重新启用出厂行 |
+| L1 状态报 `registered but its fiber is not active yet` | 启动时序：剪枝器 fiber 比插件晚激活（v0.7.2 前会因此永久休眠） | 升到 0.7.2+（改经 `ctx.inject` 武装），然后重启 |
 
 ---
 
-## 9. FAQ
+## 9. 账本口径（为什么净 token 可能为负）
+
+`net = avoided − injected − rewriteChars × (1 − ledgerCacheDiscount)`，三项都按
+`chars / 4` 估算（见 README「Context Ledger」）：
+
+- **injected**：`[ENGRAM]`/`[RECALL]`/`[JIT]`/`[ESR]` 块每请求重计的注入成本；
+- **avoided**：**已入账**的节省，只有两条腿——L1 边界剪枝（`toolResultPruner` 剪掉的
+  chars × 后续请求数）与压缩（每次 checkpoint 的「被替换区间字符数 − checkpoint 字符数」× 后续请求数）；
+- **rewrite penalty**：L1 剪枝会击穿 KV 前缀缓存，按 `1 − 缓存折价` 一次性计价；
+  压缩**不额外计**罚金（压缩是宿主自己的动作，默认后端同样会改写前缀，计了会重复）。
+
+所以：**没剪过、没压缩过的会话，节省必然是 0，净值必然是负的**——负数不代表账本坏了，
+只代表这一段时间只花了钱没省到。状态快照的 `boundaryPrune.armed` 告诉你 L1 是否真的
+武装；压缩入账要等第一次 checkpoint。
+
+## 10. FAQ
 
 - **有损吗？** 锚定细节**无损**（全部可通过工具重取）；只有无锚轮次走叙事/截断；所有原文仍留在
   会话日志里，即使 checkpoint 被裁剪也能找回。

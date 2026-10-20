@@ -166,8 +166,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
-- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.7.0`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
-- **最后验证日期**：2026-10-19 —— episode / 实体页 / 锚点重验证，npm test 381/381 通过
+- **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.7.2`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
+- **最后验证日期**：2026-10-20 —— DSH `0.2.0` 实机组合（`dsh-context` + `dshmarket` + `dsh-engram`）验证 L1 边界剪枝武装；npm test 406/406 通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -182,7 +182,9 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.5.0`（npm） | 已发布 | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** —— 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
 | `0.5.1` | 已发布 | 同 `0.5.0` —— 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
 | `0.6.0` | 已发布 | 同 `0.5.0` —— Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
-| `0.7.0`（本期 / this release） | 已发布 | 同 `0.5.0` —— 会话 episode、恢复简报、实体页/实体卡、可重验证锚点 + 分层 TTL | 同 `0.5.0` |
+| `0.7.0` | 已发布 | 同 `0.5.0` —— 会话 episode、恢复简报、实体页/实体卡、可重验证锚点 + 分层 TTL | 同 `0.5.0` |
+| `0.7.1`（npm） | 已发布 | 同 `0.5.0` —— web 平面 Context GC 适配 DSH `0.2.0` 声明式预设（14 空格缩进）、bundle patch 重新启用 host 平面 `tool-result-pruner`、压缩节省接入 Context Ledger | 同 `0.5.0` |
+| `0.7.2`（本期 / this release） | 待发布 | 同 `0.5.0` —— L1 边界剪枝改经 `ctx.inject` 武装，修掉「pruner 行比插件晚激活一帧就永久休眠」的启动时序竞态 | 同 `0.5.0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
@@ -222,7 +224,43 @@ profile 条目 id（`engram`）为命名空间，不再需要任何“挂载”�
 所以：跑 ≤ `0.3.6` 的已发布版本时请把 DSH 保持在 `0.1.1-rc.2` 或更旧；升级
 DSH 到 `0.1.2-alpha.2` 之前，先升级插件到 `>=0.3.7`。
 
-### 当前发布版本 —— `0.7.0`
+### 当前发布版本 —— `0.7.2`
+
+修复 **L1 边界剪枝的启动时序竞态**（真机定位：组合里多挂两个 bundle 就复现）。
+
+`BoundaryPrune` 在插件安装时用严格 `ctx.get("toolResultPruner")` 取宿主剪枝器；而 `0.2.0`
+的 web profile 里，剪枝器的 fiber 比插件**晚激活约 100 ms**（实测：`dsh-context` +
+`dshmarket` + `dsh-engram` 组合下 `t0 strict=undefined / loose=object`，100 ms 后 strict 才
+拿到服务）。严格查找此时为空 → `installBoundaryPrune` 放弃 → **L1 整个进程生命周期都不武装**，
+账本唯一的「剪枝节省」入账腿静默断掉；设备快照还会把这种"还没到"报成"行不存在"，把人引向错误的排查方向。
+
+- **改经 `ctx.inject(["toolResultPruner"], …)` 武装** — cordis 在服务真正激活那一刻回调
+  （重载后也会重新武装），不再赌安装顺序；武装成功后立刻重写状态快照。
+- **区分「缺失」与「晚到」** — `boundaryPruneAvailability` 增加非严格查找：行被禁用/没装
+  报 `no toolResultPruner service … (the bundle patch must re-enable …)`，只是 fiber 未激活
+  报 `registered but its fiber is not active yet`。两种原因以前在快照里长得一模一样。
+- **验证** — 用真实 profile 的 bundle 组合（含 `dsh-context`）在隔离 `DSH_HOME` 复现
+  `armed:false`，修复后同一组合 `armed:true · threshold 8192`；`npm test` 406/406。
+
+### 上一发布版本 —— `0.7.1`
+
+修复 **DSH `0.2.0` 声明式预设下的 web 平面 Context GC 接管**：旧版自动装配以
+`agent.cordis.yml` 的 4 空格布局为锚，而 `0.2.0` 把预设换成
+`dsh-web-app/presets/<id>.patch.yml` 里的 `@deepseek-ai/dsh-agent-preset` 声明（行在
+14/16/18 空格缩进），导致 `autoWebCompaction` 静默跳过所有预设。
+
+- **结构化定位 compaction 行**：找 `group: true` 的 `compaction` 组，组内按 `- id:` +
+  `name:` 双重校验定位 stock/engram 行，替换块继承该行自己的缩进；旧版与声明式布局都
+  swap → restore 逐字节还原。顺带修掉旧 stock 替换串不含行尾换行、可能半改写文件的隐患。
+- **声明式预设发现**：roster 不再带 `path` 时把 id 映射到出厂 `<presetsDir>/<id>.patch.yml`
+  （`DSH_WEB_PRESETS_DIR` 可覆盖）；无出厂文件的用户自定义声明式预设跳过并打日志。
+- **status/doctor 适配**：自动发现两种布局并显示布局类型；doctor 新增
+  `autoWebCompaction=false`、node_modules 预设（`npm update dsh` 会恢复出厂布局）、
+  profile patch `preset-*` 覆写（优先于 shipped 文件）三类提示。
+- **迁移**：打开 `autoWebCompaction` 后重启一次 `dsh web`，下一次启动即幂等接管所有
+  stock 声明式预设；`npm test` 396/396。
+
+### 上一发布版本 —— `0.7.0`
 
 把「记忆」从**事件记录**推进到**可维护的当前真相**：会话结束自动沉淀 episode、
 新会话给恢复简报、`esr_node` 升级为实体页、文件锚点让过期真相可被检测。
@@ -256,7 +294,7 @@ Config** 模型（并带特性检测的旧代际回退）。
 走 `settings.installSection` 注册 `dsh-engram` 命名空间；`≥0.1.7` / `0.2.x` 走插件
 `Config`（34 个 GUI 旋钮标记为 `.volatile()`，条目 id `engram`）。浏览器设置卡在两代际
 都经插件自有 HTTP 路由（`/api/dsh-engram/settings`，见上文 Route B）读写。完整回归
-（npm test 329/329，含新增的 volatile-Config 模型 settings-v2 覆盖）在 DSH
+（npm test 396/396，含新增的 volatile-Config 模型 settings-v2 覆盖）在 DSH
 `0.2.0-rc.2` 依赖集（cordis 4.0.4 + schemastery 3.18.4 + cosmokit，与全局 DSH CLI 同版本）
 上通过；`.volatile()`/loader 热提交路径与 describe 侧投影已针对真实 `dsh-settings
 0.2.0-rc.2` 工具函数验证；并在隔离的 `dsh 0.2.0-rc.2` profile 上完成了**真机启动烟测并
@@ -490,22 +528,27 @@ Context GC 的装配在**两个平面**，但两个开关都是 opt-in（默认�
 - **preset 平面（web profile）——显式开启后覆盖全部 stock 预设**：web 面把 compaction 放在 agent
   preset 的 isolate realm（shipped 预设自挂 `compaction-basic`），host 条目进不去、profile patch 也
   够不到预设文件（`mountPreset` 的 Include 不带 patches——已对源码核实）。所以插件在启动时
-  （`agentPresets` 服务就绪后）**自动改写每个仍处于出厂 stock 布局的预设**——默认预设 + 整张 roster
-  （shipped 根 + `~/.dsh/.agent-presets` 用户根，`standard`/`code`/`cordis` 和你自己的预设都覆盖）：
-  把 `compaction` 组里的 `compaction-basic` 行换成 `dsh-engram/compaction`。这一自动装配是：
+  （`agentPresets` 服务就绪后）**自动改写每个仍处于出厂 stock 布局的预设**——默认预设 + 整张 roster，
+  两代预设布局都覆盖：旧版 `<root>/<id>/agent.cordis.yml` 组合文件（DSH ≤ 0.1.x，行在 4 空格）与
+  声明式 `@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`（DSH ≥ 0.2.0，行在
+  `@deepseek-ai/dsh-agent-preset` 声明里、14 空格缩进；没有出厂文件的用户自定义声明式预设不碰）：
+  把 `compaction` 组里的 `compaction-basic` 行换成 `dsh-engram/compaction`。行按 YAML 结构定位
+  （带 `group: true` 的列表项）、按 `- id:` 与 `name:` 双重校验，**与缩进列数无关**。这一自动装配是：
   - **默认关（opt-in）**（`autoWebCompaction: false`；设置卡「记忆 GC」可开），开启后幂等——已替换则跳过；
     **关掉的含义**：只是在之后的启动时不再自动接管（headless/TUI/base 的 host 平面不受影响）——
     它**不会**还原之前已接管的预设，要还原用 `npm run web-compaction:revert`；
   - **逐预设判定，只碰 stock 布局**——用户自定义过 compaction 组的预设，以及根本没有 compaction 组的
     预设（如 shipped `minimal`），一律不写、只记日志；
-  - **带备份 + 严格校验**：每个文件写前在旁边留 `agent.cordis.yml.engram.bak`（create-only，保留首次
-    原件），写后重读校验，任何一步可疑即回滚该文件；改写失败只 warn，该会话仍用 DSH 默认摘要，
+  - **带备份 + 严格校验**：每个文件写前在旁边留 `.engram.bak`（create-only，保留首次
+    原件；旧版布局为 `agent.cordis.yml.engram.bak`，声明式布局为 `<id>.patch.yml.engram.bak`），
+    写后重读校验，任何一步可疑即回滚该文件；改写失败只 warn，该会话仍用 DSH 默认摘要，
     **永不影响宿主**。
   - **配置真实传导**：写进预设行的引擎配置来自设置卡/配置里的 `gcReplacesCompaction` 与
     `gcNarrative`——改了这两个开关，下次启动会自动把已接管的行刷新成新配置（幂等重写），
     所以**设置卡对 web 平面同样生效**，不再硬编码 true/true。
-  - 手动的完全等价物（预览 / 审计 / 卸载前回归，随 npm 包发布的 CLI，默认扫 shipped + 用户两个根、
-    可 `--file` 指定单个）：
+  - 手动的完全等价物（预览 / 审计 / 卸载前回归，随 npm 包发布的 CLI，自动发现两代预设布局——
+    旧版根、出厂声明式预设与上次启动记录的路径；`--presets-dir <dir>` 覆盖声明式目录探测、
+    `--file` 指定单个）：
     ```bash
     npx dsh-engram status     # stock → 未动；wired → 已接管；custom → 不碰
     npx dsh-engram doctor     # status + 按缺口排序的下一步建议
@@ -639,9 +682,20 @@ overview）现在返回 `activation: { boundaryPrune, recall }`：
 GUI「遥测」页签直接画这块账本（净 token 大数字 + 节省/注入/重写罚金三卡 + 近 14 天红绿柱），
 记忆概览页也多一张「上下文净 token」卡。落盘在 `~/.dsh/engram/ledger.json`（原子写、按天滚动、
 delta 落盘），进程内只做整数累加，热路径零 I/O、零模型调用。默认 `ledgerEnabled: true`、
-`ledgerCacheDiscount: 0.1`；关掉 = 不挂监听、不写文件。**口径诚实**：token 按
-`chars / 4` 估算，不含 provider 实际计费与模型质量差；Context GC 的压缩节省暂未
-接入（宿主未暴露前后大小），因此账本只记「可证明」的部分。
+`ledgerCacheDiscount: 0.1`；关掉 = 不挂监听、不写文件。
+
+**节省的两条入账腿**（v0.7.1 补齐，此前只记成本所以净值恒负）：
+
+1. **L1 边界剪枝**——`toolResultPruner` 剪掉的 chars，按后续请求数计入（需要有 host
+   平面的 `toolResultPruner`；DSH ≥ 0.2.0 的 web profile 把该行移进 agent preset 的
+   isolate realm，本 bundle 的 `cordis.patch.yml` 会重新启用 host 行，状态快照里
+   `boundaryPrune.armed` 可核对）；
+2. **压缩（Context GC）**——每次 checkpoint 用「被替换区间可见字符数 − checkpoint 字符数」
+   入账，host 平面与 web 预设域（经 `engramLedger` 服务桥接）走同一个账本。
+
+**口径诚实**：token 按 `chars / 4` 估算，不含 provider 实际计费与模型质量差；
+某工作区还没发生过剪枝/压缩时「节省」就是 0，净值等于注入成本 + 重写罚金（负值正常），
+遥测页会直接提示这一点。
 
 ### JIT 推送（v0.6-C）
 

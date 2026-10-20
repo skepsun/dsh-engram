@@ -264,8 +264,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market compatibility block — keep labels bilingual and in sync with
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
-- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.7.0`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
-- **最后验证日期 / Last verified**: 2026-10-19 — episode / entity pages / anchor revalidation，npm test 381/381 通过
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.7.2`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
+- **最后验证日期 / Last verified**: 2026-10-20 — DSH `0.2.0` live composition (`dsh-context` + `dshmarket` + `dsh-engram`) arms L1 boundary prune; npm test 406/406
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -282,7 +282,9 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.5.0` (npm) | published | **DSH `0.1.2-alpha.2` … `<0.3.0-0`** — 设置卡迁移到 entry-id volatile Config（`0.1.7+`/`0.2.x`），`≤0.1.5` 自动回退 `installSection` | `engines.dsh` + peers `>=0.1.2-alpha.2 <0.3.0-0` |
 | `0.5.1` | published | 同 `0.5.0` — 会话扫描修复（`session.v<N>.jsonl.zstd`，issue #8）、数据导出/导入 GUI、替换/冲突可视化（issue #3） | 同 `0.5.0` |
 | `0.6.0` | published | 同 `0.5.0` — Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
-| `0.7.0` (本期 / this release) | published | 同 `0.5.0` — session episode、resume brief、entity pages/cards、revalidatable anchors + layered TTL | 同 `0.5.0` |
+| `0.7.0` | published | 同 `0.5.0` — session episode、resume brief、entity pages/cards、revalidatable anchors + layered TTL | 同 `0.5.0` |
+| `0.7.1` (npm) | published | 同 `0.5.0` — web-plane Context GC on DSH `0.2.0` declarative presets (14-space rows), bundle patch re-enables the host `tool-result-pruner`, compaction savings feed the Context Ledger | 同 `0.5.0` |
+| `0.7.2` (本期 / this release) | prepared | 同 `0.5.0` — L1 boundary prune arms through `ctx.inject`, fixing the boot-ordering race where a pruner activating one tick after the plugin stayed dormant for the whole process | 同 `0.5.0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 
@@ -332,7 +334,63 @@ drives mutations).
 So: keep DSH on `0.1.1-rc.2` or older while running a release ≤ `0.3.6`, and
 upgrade the plugin to `>=0.3.7` before moving DSH to `0.1.2-alpha.2`.
 
-### Current release — `0.7.0`
+### Current release — `0.7.2`
+
+**L1 boundary prune was silently dormant on some profiles** — a boot-ordering
+race, not a missing patch.
+
+`BoundaryPrune` resolved DSH's `toolResultPruner` with a strict
+`ctx.get("toolResultPruner")` at install time. On DSH `0.2.0` web profiles the
+pruner's fiber activates **~100 ms after** the plugin (measured on the live
+composition `dsh-context` + `dshmarket` + `dsh-engram`: `t0 strict=undefined /
+loose=object`, strict resolves 100 ms later), so the strict lookup was empty,
+`installBoundaryPrune` gave up, and L1 never armed for the life of the process —
+taking the ledger's only prune-credit leg with it. The status snapshot also
+reported that race as "row missing", pointing at the wrong fix.
+
+- **Arm through `ctx.inject(["toolResultPruner"], …)`** — cordis runs the
+  callback the moment the service becomes active (and again after a reload), so
+  arming no longer depends on composition order; the durable status snapshot is
+  rewritten as soon as L1 is armed.
+- **"Absent" and "late" now read differently** — `boundaryPruneAvailability`
+  falls back to a non-strict lookup: a disabled/missing row still says
+  `no toolResultPruner service … (the bundle patch must re-enable …)`, a
+  registered-but-inactive one says `registered but its fiber is not active yet`.
+- **Verified** — the live bundle composition (with `dsh-context`) reproduces
+  `armed:false` in an isolated `DSH_HOME`; after the fix the same composition
+  reports `armed:true · threshold 8192`. `npm test` 406/406.
+
+### Previous release — `0.7.1`
+
+Web-plane Context GC on DSH `0.2.0`'s **declarative presets** — the preset
+format changed shape (one `@deepseek-ai/dsh-agent-preset` declaration inside
+`dsh-web-app/presets/*.patch.yml`), and the auto-wiring was anchored to the old
+`agent.cordis.yml` layout, so `autoWebCompaction` silently skipped every preset
+(and could half-rewrite a stock row: the pattern did not include its trailing
+newline).
+
+- **Structural row location** — the `compaction` group is found by YAML
+  structure (a list item carrying `group: true`), not by column position; the
+  stock/engram rows are validated by BOTH their `- id:` and `name:` values, and
+  the replacement inherits the row's own indent. Legacy `agent.cordis.yml`
+  (4 spaces) and declarative patch files (14/16/18 spaces) both round-trip
+  byte-identically.
+- **Declarative discovery** — the preset roster no longer carries `path` on
+  DSH `0.2.0`; the plugin maps each roster id to the shipped
+  `<presetsDir>/<id>.patch.yml` (resolved through the `dsh` install, with
+  `DSH_WEB_PRESETS_DIR` override) and skips user-defined declarative presets
+  (profile-patch overrides) with an explicit log line instead of failing.
+- **Status/doctor** — `npx dsh-engram status`/`doctor` discover both preset
+  generations, show the detected layout, and flag `autoWebCompaction=false`
+  (the opt-in toggle that makes the web plane a no-op), node_modules preset
+  wiring (survives `npm update dsh` only while auto-wiring stays on), and
+  profile-patch `preset-*` overrides that outrank the shipped files.
+- **Migration** — restart `dsh web` with `autoWebCompaction:true`: the next boot
+  re-wires every stock declarative preset (idempotent refresh; existing
+  hand-wired rows are rewritten to the requested engine config). `npm test`
+  396/396.
+
+### Previous release — `0.7.0`
 
 From event records to **maintainable current truth**: sessions sediment an
 episode at teardown, new sessions get a resume brief, `esr_node` becomes a
@@ -378,7 +436,7 @@ namespace via `settings.installSection`; on `≥0.1.7` / `0.2.x` the form is the
 plugin's `Config` with the 34 GUI knobs marked `.volatile()` (entry id
 `engram`). The browser settings card reads and writes through the plugin's own
 HTTP route (`/api/dsh-engram/settings`, see Route B above) on both. The full
-regression suite (npm test 329/329, incl. the new settings-v2 coverage for the
+regression suite (npm test 396/396, incl. the new settings-v2 coverage for the
 volatile-Config model) passes against the DSH `0.2.0-rc.2` dependency set
 (cordis 4.0.4 + schemastery 3.18.4 + cosmokit, matching the global DSH CLI).
 The `.volatile()`/loader hot-commit path and the describe-side projection were
@@ -678,10 +736,15 @@ default):
   builds its `Include.Config` with no patches; verified against the harness
   source). So on boot, once the `agentPresets` service is ready, the plugin
   **auto-edits every preset that still has the stock layout** — the default
-  preset plus the whole roster (shipped root + `~/.dsh/.agent-presets` user
-  root: `standard`, `code`, `cordis`, and your own presets): it swaps the
-  `compaction-basic` row inside the `compaction` group for
-  `dsh-engram/compaction`. That auto-wiring is:
+  preset plus the whole roster, across BOTH preset generations: legacy
+  `<root>/<id>/agent.cordis.yml` compositions (DSH ≤ 0.1.x, row at 4 spaces)
+  and the declarative `@deepseek-ai/dsh-web-app/presets/<id>.patch.yml` files
+  (DSH ≥ 0.2.0, row at 14 spaces inside the `@deepseek-ai/dsh-agent-preset`
+  declaration; a user-defined declarative preset with no shipped file is left
+  alone). The row is located by YAML structure (a list item carrying
+  `group: true`) and validated by both its `- id:` and `name:` values, so the
+  swap is column-position independent: it swaps the `compaction-basic` row
+  inside the `compaction` group for `dsh-engram/compaction`. That auto-wiring is:
   - **off by default (opt-in)** (`autoWebCompaction: false`, toggle in the
     settings card's memory-GC section); once enabled it is idempotent — an
     already-wired preset is left alone;
@@ -691,8 +754,9 @@ default):
   - **per-preset**: only stock-layout presets are touched — a preset with a
     custom compaction group, or none at all (e.g. the shipped `minimal`
     preset), is never written, only logged;
-  - **backed up + validated**: a create-only `agent.cordis.yml.engram.bak`
-    holds each original next to its file, every result is re-read and verified
+  - **backed up + validated**: a create-only `.engram.bak`
+    (`agent.cordis.yml.engram.bak` or `<id>.patch.yml.engram.bak`) holds each
+    original next to its file, every result is re-read and verified
     after writing, and any doubt rolls that file back; a failure only warns and
     that session keeps DSH's default summarizer — the host plane is never
     affected.
@@ -702,7 +766,9 @@ default):
     changing the settings knobs re-provisions the web rows on the next boot
     instead of being silently ignored.
   - A fully equivalent manual CLI, shipped in the npm package
-    (scans both the shipped and the user root; `--file <path>` targets one):
+    (scans both preset generations — legacy roots, the shipped declarative
+    presets, and the paths recorded at boot; `--presets-dir <dir>` overrides
+    declarative discovery, `--file <path>` targets one):
     ```bash
     npx dsh-engram status     # stock = untouched · wired = active · custom = hands-off
     npx dsh-engram doctor     # status + ranked next steps for every gap found
@@ -872,10 +938,25 @@ adds a "net context tokens" stat card. Durable rollup at
 `~/.dsh/engram/ledger.json` (atomic write, daily buckets, delta flush); the hot
 path is an integer add, zero I/O and zero model calls.
 Defaults: `ledgerEnabled: true`, `ledgerCacheDiscount: 0.1`; off = no listeners,
-no writes. **Honest scope**: tokens are `chars / 4` estimates, not provider
-billing, and no quality delta is claimed; Context GC compaction savings are not
-wired yet (the host does not expose before/after sizes), so the ledger only
-counts what it can prove.
+no writes.
+
+**Two credit legs** (v0.7.1 — before this the ledger only charged costs, so the
+net was structurally negative):
+
+1. **L1 boundary prune** — chars removed by `toolResultPruner`, credited per
+   later request. Requires a host-plane `toolResultPruner`; DSH ≥ 0.2.0 web
+   profiles move that row into each agent preset's isolate realm, so the bundle
+   patch re-enables the host row — check `boundaryPrune.armed` in the status
+   snapshot.
+2. **Compaction (Context GC)** — every checkpoint credits `span chars −
+   checkpoint chars` from the engine that produced it; host plane and the web
+   preset realm (bridged through the `engramLedger` service) write the same
+   ledger.
+
+**Honest scope**: tokens are `chars / 4` estimates, not provider billing, and no
+quality delta is claimed. Until a workspace actually prunes or compacts its
+"saved" leg is 0, so the net equals injected + rewrite penalty (negative is
+expected) — the Telemetry tab says so inline.
 
 ### JIT push (v0.6-C)
 

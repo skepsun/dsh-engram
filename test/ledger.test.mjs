@@ -92,6 +92,18 @@ test("prune before any tick still credits later requests only", () => {
   assert.equal(s.totals.netChars, 1000);
 });
 
+test("a compaction credit feeds avoided chars from the next request on", () => {
+  const ledger = createLedger({ home: tmpHome(), persist: false, cacheDiscount: 0 });
+  ledger.tick("s1", "/ws"); // request 1 paid the pre-compaction prefix
+  ledger.noteCompaction("s1", "/ws", { charsSaved: 3000 });
+  ledger.tick("s1", "/ws"); // request 2 replays the shorter prefix
+  ledger.tick("s1", "/ws");
+  const s = ledger.summary();
+  assert.equal(s.totals.avoidedChars, 6000, "credited per replayed request, like a prune");
+  assert.equal(s.totals.netChars, 6000);
+  assert.equal(s.byWorkspace["/ws"].avoidedChars, 6000);
+});
+
 test("persisted rollup survives an instance restart (delta flush)", () => {
   const home = tmpHome();
   const first = createLedger({ home, flushEvery: 2, cacheDiscount: 0.1 });

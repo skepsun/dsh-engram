@@ -1,6 +1,6 @@
 # dsh-engram bundle patch: inserts the host plugin row into the web profile
 # roster. Activate with:
-#   dsh plugin --profile web add file:/d1/chuxiong/code/dsh-engram
+#   dsh plugin --profile web add file:/Users/sunchuxiong/dsh-loom
 #
 # The row is a bare host-half plugin by package name. It does not need to
 # enable storage-domain / storage-json / session-query-sqlite — the standard
@@ -15,13 +15,26 @@
 # NOTE: with `gcReplacesCompaction:false`, dsh-engram still mounts a plain
 # BasicCompactionEngine, so compaction never goes away while it is installed.
 # The host-plane provider is mounted by `lib/index.js` (`mountCompactionEngine`);
-# the WEB plane is auto-wired at boot (`autoWebCompaction`, default on): the
-# plugin swaps the `compaction-basic` row for `dsh-engram/compaction` in every
-# stock-layout preset — default + full roster (shipped + user roots; idempotent,
-# backed up, never touches a custom or no-compaction preset; manual CLI
+# the WEB plane is auto-wired at boot when `autoWebCompaction` is on (opt-in
+# since v0.6, default off): the plugin swaps the `compaction-basic` row for
+# `dsh-engram/compaction` in every stock-layout preset — default + full roster
+# (shipped `agent.cordis.yml` roots and DSH ≥ 0.2.0 declarative
+# `dsh-web-app/presets/*.patch.yml`; idempotent, backed up, never touches a
+# custom or no-compaction preset; manual CLI
 # `npm run web-compaction:status|enable|revert`).
 - id: compaction-basic
   disabled: true
+
+# BoundaryPrune (ResultPack L1) needs DSH's `toolResultPruner` service on the
+# HOST plane. DSH ≥ 0.2.0 web profiles move compaction + the pruner into each
+# agent preset's isolate realm and disable the host-plane `tool-result-pruner`
+# row, so the host plugin's L1 found no service and silently went dormant (the
+# Context Ledger then never credited pruning savings). Re-arm the host row here
+# — the preset realm keeps its own copy for compaction-time pruning, so both
+# paths coexist. Without this, `boundaryPrune` only works on headless/TUI/base
+# profiles. Verify via the status snapshot's `boundaryPrune.armed`.
+- id: tool-result-pruner
+  disabled: false
 
 - insert:
     - id: engram
