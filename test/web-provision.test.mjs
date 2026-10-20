@@ -1,6 +1,11 @@
 /**
  * Web-plane Context GC auto-wiring: pure swap/restore logic + the provision /
  * revert orchestration (in-memory adapters) + one real-fs round trip.
+ *
+ * Both preset generations are covered: the legacy 4-space compositions
+ * (`agent.cordis.yml`, DSH ≤ 0.1.x) and the declarative shipped patch files
+ * (`@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`, DSH ≥ 0.2.0), whose
+ * compaction rows sit at 14 spaces inside the `- insert:` operation.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,12 +17,15 @@ import {
   STOCK_COMPACTION_ROW,
   ENGRAM_COMPACTION_ROW,
   engramCompactionRowText,
+  stockCompactionRowText,
+  discoverPresetsDir,
   compactionWireStatus,
   swapCompactionRow,
   restoreCompactionRow,
   provisionWebCompaction,
   revertWebCompaction,
 } from "../lib/web-provision.js";
+import { DECLARATIVE_MINIMAL, DECLARATIVE_STOCK } from "./fixtures/declarative-preset.mjs";
 
 // A realistic slice of the shipped `standard` preset (only the parts the
 // provisioner reads). Indentation must match the real file exactly.
@@ -360,4 +368,112 @@ test("real fs: provision writes the file + .engram.bak, revert restores it", asy
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("declarative: stock row is located by structure, not by indentation", () => {
+  assert.equal(compactionWireStatus(DECLARATIVE_STOCK), "stock");
+  assert.equal(compactionWireStatus(DECLARATIVE_MINIMAL), "custom");
+  assert.equal(stockCompactionRowText(14), "              - id: compaction-basic\n                name: '@deepseek-ai/dsh-compaction-basic'");
+  assert.ok(DECLARATIVE_STOCK.includes(stockCompactionRowText(14)));
+});
+
+test("declarative: swap rewrites the row at its own depth, siblings and wrapper survive", () => {
+  const next = swapCompactionRow(DECLARATIVE_STOCK);
+  assert.ok(next !== null, "declarative stock must swap");
+  assert.equal(compactionWireStatus(next), "wired");
+  // the row keeps the file's indentation (14 / 16 / 18), not the legacy 4
+  assert.ok(next.includes(engramCompactionRowText({}, 14)));
+  assert.ok(!next.includes("dsh-compaction-basic"));
+  // the patch wrapper, both groups and the sibling rows survive
+  assert.ok(next.includes("- insert:"));
+  assert.ok(next.includes("- id: preset-standard"));
+  assert.ok(next.includes("- id: delegation"));
+  assert.ok(next.includes("command-compact"));
+  assert.ok(next.includes("tool-result-pruner"));
+  assert.ok(next.includes("isolate:"));
+  // refresh follows the knobs at the same depth
+  const refreshed = swapCompactionRow(next, { gcReplacesCompaction: false });
+  assert.ok(refreshed !== null && refreshed.includes("                  gcReplacesCompaction: false"));
+  assert.equal(swapCompactionRow(refreshed, { gcReplacesCompaction: false }), refreshed, "same config → no-op");
+  // restore is byte-identical to the shipped file
+  assert.equal(restoreCompactionRow(next), DECLARATIVE_STOCK);
+  assert.equal(restoreCompactionRow(refreshed), DECLARATIVE_STOCK);
+});
+
+test("declarative: minimal (no compaction group) is never touched", () => {
+  assert.equal(swapCompactionRow(DECLARATIVE_MINIMAL), null);
+  assert.equal(restoreCompactionRow(DECLARATIVE_MINIMAL), null);
+});
+
+test("declarative: two compaction groups → refuse to guess", () => {
+  const doubled = DECLARATIVE_STOCK + DECLARATIVE_STOCK;
+  assert.equal(compactionWireStatus(doubled), "custom");
+  assert.equal(swapCompactionRow(doubled), null);
+});
+
+test("discoverPresetsDir: explicit dir wins, empty string disables discovery", () => {
+  assert.equal(discoverPresetsDir({ presetsDir: "/tmp/engram-presets" }), "/tmp/engram-presets");
+  assert.equal(discoverPresetsDir({ presetsDir: "" }), undefined);
+});
+
+test("declarative: provision maps roster ids to patch files (no preset.path)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "engram-declarative-"));
+  const standard = join(dir, "standard.patch.yml");
+  const ptc = join(dir, "ptc.patch.yml");
+  await writeFile(standard, DECLARATIVE_STOCK);
+  await writeFile(ptc, DECLARATIVE_STOCK);
+  try {
+    const service = {
+      async resolve() { return { id: "standard" }; },
+      async list() { return [{ id: "standard" }, { id: "ptc" }, { id: "minimal" }, { id: "user-made" }]; },
+    };
+    const log = [];
+    const report = await provisionWebCompaction(service, { presetsDir: dir, log: (l) => log.push(l) });
+    assert.equal(report.action, "swapped");
+    const byId = Object.fromEntries(report.presets.map((p) => [p.presetId, p.action]));
+    assert.deepEqual(byId, { standard: "swapped", ptc: "swapped" });
+    assert.ok(log.some((l) => l.includes('"minimal"')), "roster preset without a file is logged");
+    assert.ok(log.some((l) => l.includes('"user-made"')), "user-defined declarative preset is logged");
+    const wired = await readFile(standard, "utf8");
+    assert.equal(compactionWireStatus(wired), "wired");
+    assert.equal(await readFile(`${standard}.engram.bak`, "utf8"), DECLARATIVE_STOCK);
+    // revert restores both files byte-identically
+    const back = await revertWebCompaction(service, { presetsDir: dir, log: () => {} });
+    assert.equal(back.action, "reverted");
+    assert.equal(await readFile(standard, "utf8"), DECLARATIVE_STOCK);
+    assert.equal(await readFile(ptc, "utf8"), DECLARATIVE_STOCK);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("declarative: roster unavailable → scan the shipped preset directory", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "engram-declarative-scan-"));
+  await writeFile(join(dir, "standard.patch.yml"), DECLARATIVE_STOCK);
+  try {
+    const service = {
+      async resolve() { throw new Error("boom — no agentPresets"); },
+      async list() { throw new Error("boom — no roster"); },
+    };
+    const log = [];
+    const report = await provisionWebCompaction(service, { presetsDir: dir, log: (l) => log.push(l) });
+    assert.equal(report.action, "swapped");
+    assert.equal(report.presets.length, 1);
+    assert.equal(report.presets[0].presetId, "standard");
+    assert.equal(compactionWireStatus(await readFile(join(dir, "standard.patch.yml"), "utf8")), "wired");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("declarative: roster item without a path and no presets dir → skipped, no crash", async () => {
+  const service = {
+    async resolve() { return { id: "standard" }; },
+    async list() { return [{ id: "standard" }]; },
+  };
+  const log = [];
+  const report = await provisionWebCompaction(service, { presetsDir: "/nonexistent/engram-presets", log: (l) => log.push(l) });
+  assert.equal(report.action, "no-default");
+  assert.equal(report.presets.length, 0);
+  assert.ok(log.some((l) => l.includes("no shipped file")), "explains why the declarative preset was skipped");
 });

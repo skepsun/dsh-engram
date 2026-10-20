@@ -10,16 +10,21 @@
  *
  * `status`/`doctor` read the durable snapshot the plugin writes at boot
  * (`$DSH_HOME/engram/context-gc.status.json`) and cross-check the live preset
- * files. `enable`/`revert` act on preset compositions found under the shipped
- * and user preset roots (or a single file via `--file <path>`).
+ * files — both preset generations: legacy compositions
+ * (`<root>/<id>/agent.cordis.yml`, DSH ≤ 0.1.x) and the declarative shipped
+ * presets (`@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`, DSH ≥ 0.2.0).
+ * `enable`/`revert` act on the discovered presets (or a single file via
+ * `--file <path>`; `--presets-dir <path>` overrides discovery).
  */
 import { readFile, readdir, access } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   compactionWireStatus,
+  discoverPresetsDir,
   provisionWebCompaction,
   revertWebCompaction,
 } from "../lib/web-provision.js";
@@ -50,32 +55,61 @@ async function compositionIn(dir) {
   return undefined;
 }
 
-/** Preset roots this CLI can act on: last-boot facts + the two well-known ones. */
-async function discoverRoots(status) {
-  const roots = [];
-  const seen = new Set();
-  const push = (root) => {
-    const abs = resolve(root);
-    if (seen.has(abs)) return;
-    seen.add(abs);
-    roots.push(abs);
-  };
-  // Recorded directly from the last boot (authoritative for real installs).
-  for (const entry of status?.web?.presets ?? []) {
-    if (typeof entry?.path === "string") push(dirname(entry.path));
-  }
-  // Well-known roots: shipped harness + the user root.
-  push(resolve(REPO_ROOT, "..", "deepseek-harness/apps/cli/config/agent-presets"));
+/** Well-known LEGACY preset roots (DSH ≤ 0.1.x: one directory per preset). */
+function legacyPresetRoots() {
   const dshHome = process.env.DSH_HOME ?? join(homedir(), ".dsh");
-  push(join(dshHome, ".agent-presets"));
-  return roots;
+  return [
+    resolve(REPO_ROOT, "..", "deepseek-harness/apps/cli/config/agent-presets"),
+    join(dshHome, ".agent-presets"),
+  ];
 }
 
-/** Discover preset compositions, shadowing duplicate ids like the roster does. */
-async function discoverPresets(status) {
-  const seen = new Set();
+/** The `dsh` bin on PATH — anchors declarative preset discovery. */
+function dshBinAnchor() {
+  try {
+    const found = execFileSync("which", ["dsh"], { encoding: "utf8" }).trim();
+    return found.length > 0 ? found : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Preset id from a composition file path (both generations). */
+function presetIdFromPath(path) {
+  const base = basename(path);
+  if (base.endsWith(".patch.yml")) return base.slice(0, -".patch.yml".length);
+  return basename(dirname(path));
+}
+
+/**
+ * Discover preset compositions across BOTH generations, first match per id
+ * wins (the roster shadows duplicates the same way):
+ * 1. paths recorded by the last boot (authoritative for real installs);
+ * 2. legacy roots (`<root>/<id>/agent.cordis.yml` or `agent.json`);
+ * 3. declarative shipped presets (`<presetsDir>/<id>.patch.yml`).
+ */
+async function discoverPresets(status, presetsDirFlag) {
   const presets = [];
-  for (const root of await discoverRoots(status)) {
+  const seenId = new Set();
+  const seenPath = new Set();
+  const push = (id, path) => {
+    if (typeof path !== "string" || path.length === 0) return;
+    if (seenId.has(id) || seenPath.has(path)) return;
+    seenId.add(id);
+    seenPath.add(path);
+    presets.push({ id, path });
+  };
+
+  // 1. Recorded by the last boot.
+  for (const entry of status?.web?.presets ?? []) {
+    if (typeof entry?.path !== "string") continue;
+    if (!(await exists(entry.path))) continue;
+    const id = typeof entry.presetId === "string" ? entry.presetId : presetIdFromPath(entry.path);
+    push(id, entry.path);
+  }
+
+  // 2. Legacy roots.
+  for (const root of legacyPresetRoots()) {
     let entries = [];
     try {
       entries = await readdir(root, { withFileTypes: true });
@@ -84,11 +118,27 @@ async function discoverPresets(status) {
     }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      if (seen.has(entry.name)) continue;
       const file = await compositionIn(join(root, entry.name));
       if (file === undefined) continue;
-      seen.add(entry.name);
-      presets.push({ id: entry.name, path: file });
+      push(entry.name, file);
+    }
+  }
+
+  // 3. Declarative shipped presets.
+  const presetsDir = discoverPresetsDir({
+    presetsDir: presetsDirFlag,
+    anchors: [dshBinAnchor()].filter((anchor) => typeof anchor === "string"),
+  });
+  if (presetsDir !== undefined) {
+    let entries = [];
+    try {
+      entries = await readdir(presetsDir, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".patch.yml")) continue;
+      push(entry.name.slice(0, -".patch.yml".length), join(presetsDir, entry.name));
     }
   }
   return presets;
@@ -112,9 +162,35 @@ function webLine(entry) {
   }
 }
 
-async function printStatus() {
+/** One-line label for the web PLANE (distinct from a single preset report). */
+function webPlaneLine(web) {
+  const action = web?.action ?? "?";
+  const count = (web?.presets ?? []).length;
+  switch (action) {
+    case "pending": return "启动中（agentPresets 尚未就绪）";
+    case "disabled": return "未启用（autoWebCompaction=false；或用 npx dsh-engram enable 手动接管）";
+    case "no-default": return "未发现可用预设";
+    case "failed": return `失败 · ${web?.error ?? "?"}`;
+    default: return `上次装配 ${action}，${count} 个预设`;
+  }
+}
+
+/**
+ * The snapshot's web plane, normalized against the recorded opt-in: a `pending`
+ * plane while `autoWebCompaction=false` is impossible under the current plugin
+ * (that state is `disabled`); old snapshots written before v0.7.1 can carry it.
+ */
+function effectiveWebPlane(status) {
+  const web = status.web;
+  if (status.configSource?.autoWebCompaction === false && (web === undefined || web.action === undefined || web.action === "pending")) {
+    return { action: "disabled", presets: web?.presets ?? [] };
+  }
+  return web;
+}
+
+async function printStatus(presetsDirFlag) {
   const status = await readContextGcStatus();
-  const presets = await discoverPresets(status);
+  const presets = await discoverPresets(status, presetsDirFlag);
 
   log("── dsh-engram Context GC 状态 ──────────────────────────────");
   if (status === undefined) {
@@ -122,14 +198,31 @@ async function printStatus() {
   } else {
     log(`  状态快照：${new Date(status.writtenAt ?? 0).toLocaleString()}（插件上次启动时写入）`);
     log(`  host 平面：${hostLine(status.host)}`);
-    log(`  web 平面：${status.web?.action === "pending" ? "启动中（agentPresets 尚未就绪）" : `上次装配 ${status.web?.action ?? "?"}，${(status.web?.presets ?? []).length} 个预设`}`);
+    log(`  web 平面：${webPlaneLine(effectiveWebPlane(status))}`);
     log(`  配置：autoWebCompaction=${status.configSource?.autoWebCompaction ?? "?"} · gcReplacesCompaction=${status.configSource?.gcReplacesCompaction ?? "?"} · gcNarrative=${status.configSource?.gcNarrative ?? "?"}`);
+    if (status.boundaryPrune !== undefined) {
+      const bp = status.boundaryPrune;
+      log(`  L1 边界剪枝：${bp.armed ? "已武装" : "未启用"}${bp.reason ? `（${bp.reason}）` : ""}`);
+      if (!bp.armed) {
+        log("  ⚠ L1 未武装时「节省 · 剪枝/压缩」不会入账（账本净 token 只会是负值）；0.2.0 web profile 需要 bundle patch 重新启用 host 平面的 tool-result-pruner 行。");
+      }
+    }
+    if (status.configSource?.autoWebCompaction === false) {
+      log("  ⚠ autoWebCompaction=false：web 平面不会自动接管（设置卡「记忆 GC」里打开后重启 dsh web）");
+    }
   }
 
   log("");
   if (presets.length === 0) {
-    log("  未发现任何 web 代理预设（shipped 根与用户根都找不到）。");
+    log("  未发现任何 web 代理预设（声明式 presets 目录、旧版 shipped 根与用户根都找不到）。");
+    log("  提示：声明式预设需要能找到 dsh 安装（PATH 上的 dsh 或在 dsh 进程内运行），也可用 --presets-dir 指定。");
   } else {
+    const declarative = presets.filter((preset) => preset.path.endsWith(".patch.yml")).length;
+    if (declarative > 0) {
+      log(`  预设布局：声明式（dsh-web-app/presets/*.patch.yml，DSH ≥ 0.2.0）`);
+    } else {
+      log("  预设布局：旧版组合文件（agent.cordis.yml，DSH ≤ 0.1.x）");
+    }
     log(`  ── web 预设现场（${presets.length} 个）──`);
     for (const preset of presets) {
       let text;
@@ -151,22 +244,27 @@ async function printStatus() {
   return status;
 }
 
-async function printDoctor() {
-  const status = await printStatus();
+async function printDoctor(presetsDirFlag) {
+  const status = await printStatus(presetsDirFlag);
   log("");
   log("── 建议（doctor）──────────────────────────────────────────");
-  const prev = status?.web?.presets ?? [];
-  const presets = await discoverPresets(status);
+  const presets = await discoverPresets(status, presetsDirFlag);
   const issues = [];
+  const notes = [];
 
   if (status === undefined) {
     issues.push("尚无状态快照：把 dsh-engram 装进 profile 并启动一次（dsh web / dsh headless），插件会在启动时写入状态与自动装配。");
-  } else if (status.host !== "context-gc") {
-    issues.push(
-      `host 平面 ${status.host}：${status.host === "unavailable"
-        ? "引擎不可用——确认 @deepseek-ai/dsh-compaction-basic 依赖已安装（见启动日志 dsh-compaction-basic unavailable）。"
-        : "当前是 DSH 默认 LLM 摘要——要在 host 平面启用 Context GC，把 gcReplacesCompaction 设为 true。"}`,
-    );
+  } else {
+    if (status.host !== "context-gc") {
+      issues.push(
+        `host 平面 ${status.host}：${status.host === "unavailable"
+          ? "引擎不可用——确认 @deepseek-ai/dsh-compaction-basic 依赖已安装（见启动日志 dsh-compaction-basic unavailable）。"
+          : "当前是 DSH 默认 LLM 摘要——要在 host 平面启用 Context GC，把 gcReplacesCompaction 设为 true。"}`,
+      );
+    }
+    if (status.configSource?.autoWebCompaction === false) {
+      issues.push("autoWebCompaction=false：web 平面不会自动接管（即便预设仍是 stock 布局）。在设置卡「记忆 GC」里打开，或改 profile patch 后重启 dsh web。");
+    }
   }
 
   const stockLeft = presets.filter((p) => {
@@ -177,7 +275,7 @@ async function printDoctor() {
     }
   });
   if (stockLeft.length > 0) {
-    issues.push(`web 平面还有 ${stockLeft.length} 个出厂布局预设未接管（${stockLeft.map((p) => p.id).join("、")}）：重启 dsh web 让自动装配跑一次，或 npx dsh-engram enable。`);
+    issues.push(`web 平面还有 ${stockLeft.length} 个出厂布局预设未接管（${stockLeft.map((p) => p.id).join("、")}）：重启 dsh web 让自动装配跑一次（需 autoWebCompaction=true），或 npx dsh-engram enable。`);
   }
   const customLeft = presets.filter((p) => {
     try {
@@ -189,14 +287,48 @@ async function printDoctor() {
   if (customLeft.length > 0) {
     issues.push(`${customLeft.length} 个预设是自定义/无 compaction 布局（${customLeft.map((p) => p.id).join("、")}），插件不会碰；需要的话手动把 compaction 组换成 dsh-engram/compaction。`);
   }
-  if (presets.some((p) => compactionWireStatus(readFileSyncSafe(p.path)) === "wired")) {
+  const wired = presets.filter((p) => compactionWireStatus(readFileSyncSafe(p.path)) === "wired");
+  if (wired.length > 0) {
     issues.push("有预设已被接管：卸载 dsh-engram 前先 npx dsh-engram revert，避免预设留下悬空引用。");
+    if (wired.some((p) => /[\\/]node_modules[\\/]/.test(p.path))) {
+      notes.push("已接管的声明式预设在 node_modules 里（npm 更新 dsh 会恢复出厂布局）：保持 autoWebCompaction=true 时下次启动 dsh web 会自动重新接管，否则升级后手动 npx dsh-engram enable。");
+    }
   }
+  const overrides = await presetOverrides();
+  if (overrides.length > 0) {
+    notes.push(`profile patch 里有 preset 覆写行（${overrides.join("、")}）：Web 编辑器保存的 config.plugins 优先于 shipped 文件，改 shipped 文件可能不生效——请在编辑器里改，或删掉这些覆写行。`);
+  }
+
   if (issues.length === 0) {
     log("  一切正常：host 平面 + 全部 stock 预设都已接管 Context GC。");
-    return;
+  } else {
+    issues.forEach((line, index) => log(`  ${index + 1}. ${line}`));
   }
-  issues.forEach((line, index) => log(`  ${index + 1}. ${line}`));
+  notes.forEach((line) => log(`  · ${line}`));
+}
+
+/** `preset-*` rows saved in profile patches (Web-editor overrides). */
+async function presetOverrides() {
+  const dshHome = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+  const profilesDir = join(dshHome, "profiles");
+  let dirs = [];
+  try {
+    dirs = await readdir(profilesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const hits = new Set();
+  for (const dir of dirs) {
+    if (!dir.isDirectory()) continue;
+    let text;
+    try {
+      text = await readFile(join(profilesDir, dir.name, "cordis.patch.yml"), "utf8");
+    } catch {
+      continue;
+    }
+    for (const match of text.matchAll(/^\s*- id: (preset-[\w.-]+)\s*$/gm)) hits.add(match[1]);
+  }
+  return [...hits].sort();
 }
 
 /** Read helper that never throws (used by the sync-style filtering above). */
@@ -216,27 +348,36 @@ function toService(preset) {
   };
 }
 
-async function runEnableRevert(command, fileFlag) {
+async function runEnableRevert(command, fileFlag, presetsDirFlag) {
   const status = await readContextGcStatus();
   let presets;
   if (fileFlag !== undefined) {
     const abs = resolve(fileFlag);
     if (!(await exists(abs))) throw new Error(`file not found: ${abs}`);
-    presets = [{ id: basename(dirname(abs)), path: abs }];
+    presets = [{ id: presetIdFromPath(abs), path: abs }];
   } else {
-    presets = await discoverPresets(status);
+    presets = await discoverPresets(status, presetsDirFlag);
   }
   if (presets.length === 0) {
-    log("未发现可操作预设。用 --file <path> 明确指定一个预设组合文件。");
+    log("未发现可操作预设。用 --file <path> 明确指定一个预设组合文件，或用 --presets-dir <path> 指定声明式预设目录。");
     return;
   }
+
+  // Mirror the engine config the plugin last recorded, so a manual `enable`
+  // does not temporarily flip the toggles away from the settings card.
+  const rowConfig = status?.configSource !== undefined
+    ? {
+      gcReplacesCompaction: status.configSource.gcReplacesCompaction,
+      gcNarrative: status.configSource.gcNarrative,
+    }
+    : undefined;
 
   log(`dsh-engram: ${command} — ${presets.length} 个预设`);
   let changed = 0;
   for (const preset of presets) {
     const service = toService(preset);
     const report = command === "enable"
-      ? await provisionWebCompaction(service, { log })
+      ? await provisionWebCompaction(service, { log, rowConfig })
       : await revertWebCompaction(service, { log });
     const entry = report.presets[0];
     log(`  ${preset.id}: ${entry?.action ?? report.action}${entry?.reason ? ` (${entry.reason})` : ""}`);
@@ -251,12 +392,14 @@ async function main() {
   const command = rawCommand ?? "status";
   const fileFlagIndex = rest.indexOf("--file");
   const fileFlag = fileFlagIndex >= 0 ? rest[fileFlagIndex + 1] : undefined;
+  const presetsDirIndex = rest.indexOf("--presets-dir");
+  const presetsDirFlag = presetsDirIndex >= 0 ? rest[presetsDirIndex + 1] : undefined;
   if (command === "status") {
-    await printStatus();
+    await printStatus(presetsDirFlag);
   } else if (command === "doctor") {
-    await printDoctor();
+    await printDoctor(presetsDirFlag);
   } else if (command === "enable" || command === "revert") {
-    await runEnableRevert(command, fileFlag);
+    await runEnableRevert(command, fileFlag, presetsDirFlag);
   } else {
     throw new Error(`未知命令 "${command}"（用 status | doctor | enable | revert）`);
   }
