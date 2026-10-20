@@ -84,6 +84,8 @@ export interface EngramConfigValue {
 
 export interface EngramConfigCardFace {
   scope: EngramScope<EngramConfigValue>;
+  /** Start expanded — the 设置 tab renders the card as the page itself. */
+  defaultOpen?: boolean;
 }
 
 type FieldKind = "bool" | "num" | "text" | "select";
@@ -368,12 +370,12 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function EngramConfigCard({ scope }: EngramConfigCardFace) {
+export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
   const [snap, setSnap] = useState<EngramScopeSnapshot<EngramConfigValue> | null>(null);
   const [draft, setDraft] = useState<EngramConfigValue>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {

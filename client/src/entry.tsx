@@ -87,7 +87,10 @@ export function apply(ctx: EngramClientContext): void {
 
   const api = new EngramApi();
   const t = ctx.locale.bind(NS) as (key: string) => string;
-  const sectionInjected = (): EngramSectionFace => ({ api, t });
+  // Settings transport, shared by the 设置 tab (Engram 记忆 page) and the legacy
+  // Plugins → 配置 card registration below.
+  const scope = new EngramScopeImpl<EngramConfigValue>(api, "dsh-engram");
+  const sectionInjected = (): EngramSectionFace => ({ api, t, scope });
 
   // Unified task strip above the composer: takes over the SAME
   // 'conversation.input.dock' cell as the built-in todo strip (id 'todo',
@@ -143,7 +146,6 @@ export function apply(ctx: EngramClientContext): void {
   // GUI is reached, while still persisting into the same settings document.
   // The plugin-owned transport keeps the card generation-agnostic (no
   // connection/remote RPC whose shape changed at DSH 0.1.2-alpha.2).
-  const scope = new EngramScopeImpl<EngramConfigValue>(api, "dsh-engram");
   const cardInjected = (): EngramConfigCardFace => ({ scope });
   try {
     // The card is dispatched by the configurable-plugins tab only when the

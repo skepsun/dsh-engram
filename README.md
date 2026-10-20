@@ -605,7 +605,17 @@ After restart, inside the **native** DSH settings surface:
   session events. Per-tool counts + a 14-day daily rollup are shown too.
   Numbers are real, from real sessions — lift ESR proactivity by watching
   this panel and tuning the injected prompt.
-- **Settings → Plugins → Plugin configuration → dsh-engram** — a collapsible
+- **Settings → Engram Memory → 设置 tab** — the config card, expanded by default
+  (DSH 0.2.1 dropped the `settings.plugin.item` slot, so the old
+  Settings → Plugins → Plugin configuration seat no longer renders). Same card,
+  same transport: title + one-line description + chevron, its ~12 options under
+  four groups — Capture & Search / Index / Lifecycle & GC / Security. Changes
+  apply to new sessions (frozen blocks stay stable); Discard / Save with an
+  "unsaved" badge on the header. It drives the namespace through the
+  plugin's own `/api/dsh-engram/settings` route (not the isLoopback-gated
+  scope), so it stays editable even through an operator-authorized tunnel.
+- **Settings → Plugins → Plugin configuration → dsh-engram** (DSH ≤ 0.2.0 only,
+  legacy `settings.plugin.item` seat) — a collapsible
   config card in the same style as the built-in "Shell / Agent loop / Web
   search" cards: title + one-line description + chevron, collapsed by default,
   click to expand/collapse. Open, its ~12 options render under four groups —

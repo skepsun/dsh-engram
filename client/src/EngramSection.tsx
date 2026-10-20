@@ -6,6 +6,9 @@
  *   - memory search/filter table with archive/delete actions
  *   - the ESR task board (state + evidence gaps) and the relation list
  *   - the interactive force-directed relation graph (EngramGraph)
+ *   - the plugin settings card (设置 tab) — the same card DSH's older
+ *     Plugins → 配置 tab hosted through `settings.plugin.item`; DSH 0.2.1
+ *     dropped that slot, so the knobs live here now
  *
  * Plain React + inline styles — no UI-primitives import (bundle-purity gate).
  */
@@ -15,6 +18,8 @@ import { EngramGraph } from "./EngramGraph";
 import { EngramPreview } from "./EngramPreview";
 import { EvidenceRing } from "./EvidenceRing";
 import { EngramTelemetry } from "./EngramTelemetry";
+import { EngramConfigCard, type EngramConfigValue } from "./EngramConfigCard";
+import type { EngramScope } from "./scope";
 import { EngramDetail, type DetailTarget } from "./EngramDetail";
 import type { EngramApi, EngramConfig, EngramOverview, ImportReport, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
 import { useEngramTheme } from "./theme";
@@ -23,6 +28,8 @@ import { POLL_MS, taskGaps } from "./esrModel";
 export interface EngramSectionFace {
   api: EngramApi;
   t: (key: string) => string;
+  /** Settings transport for the 设置 tab (the plugin's own namespace seam). */
+  scope?: EngramScope<EngramConfigValue>;
 }
 
 /** Compact signed token count for the ledger stat card (+saved / −spent). */
@@ -242,7 +249,7 @@ function groupByWorkspace<T extends { workspace: string }>(items: T[]): Array<[s
   );
 }
 
-export function EngramSection({ api, t }: EngramSectionFace) {
+export function EngramSection({ api, t, scope }: EngramSectionFace) {
   const [overview, setOverview] = useState<EngramOverview | null>(null);
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -258,7 +265,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
   const [busy, setBusy] = useState(false);
   const [memPage, setMemPage] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"mem" | "esr" | "preview" | "telemetry">("mem");
+  const [view, setView] = useState<"mem" | "esr" | "preview" | "telemetry" | "config">("mem");
   const [esrGraph, setEsrGraph] = useState(false);
   const [gcDryRun, setGcDryRun] = useState(true);
   const [gcReport, setGcReport] = useState<GcReport | null>(null);
@@ -580,8 +587,10 @@ export function EngramSection({ api, t }: EngramSectionFace) {
         <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
         <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>注入预览</button>
         <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
+        <button style={view === "config" ? s.tabActive : s.tab} onClick={() => setView("config")}>设置</button>
       </div>
 
+      {view !== "config" && (
       <div style={{ ...s.row, marginTop: 2 }}>
         <span style={{ fontWeight: 700, fontSize: 13 }}>工作区：</span>
         <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
@@ -591,6 +600,7 @@ export function EngramSection({ api, t }: EngramSectionFace) {
           ))}
         </select>
       </div>
+      )}
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -1002,6 +1012,18 @@ export function EngramSection({ api, t }: EngramSectionFace) {
       {view === "telemetry" && (
         <div style={s.subPanel}>
           <EngramTelemetry api={api} workspace={workspace} />
+        </div>
+      )}
+
+      {view === "config" && (
+        <div style={s.subPanel}>
+          {scope ? (
+            <EngramConfigCard scope={scope} defaultOpen />
+          ) : (
+            <div style={s.error}>
+              设置面板不可用：host 没有为 dsh-engram 提供设置命名空间（旧版 DSH 走「插件」→ 配置 tab）。
+            </div>
+          )}
         </div>
       )}
 
