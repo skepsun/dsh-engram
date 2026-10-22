@@ -140,7 +140,10 @@ function readCreditPaths(engramHome) {
   }
   const prune = status?.boundaryPrune?.armed === true;
   const hostCompaction = status?.host === "context-gc" || status?.host === "default";
-  const webCompaction = status?.web?.action !== void 0 && status?.web?.action !== "disabled";
+  // "wired" only counts when it names the presets it rewrote: a report with no
+  // presets changed nothing, and a preset row that fails to load looks exactly
+  // like one that works until a compaction is attempted (see the attempt log).
+  const webCompaction = status?.web?.action === "wired" && (status?.web?.presets?.length ?? 0) > 0;
   const armed = prune || hostCompaction || webCompaction;
   const parts = [
     `L1 ${prune ? "armed" : "off"}`,

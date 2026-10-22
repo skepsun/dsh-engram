@@ -12,6 +12,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   scanMessages,
@@ -30,6 +33,7 @@ import {
   mountCompactionEngine,
 } from "../lib/context-gc.js";
 import { openEngramDomain } from "../lib/store.js";
+import { readGcAttempts } from "../lib/status.js";
 import {
   name as compactionEntryName,
   inject as compactionEntryInject,
@@ -381,6 +385,45 @@ test("engine: any GC error falls back to the injected defaultSummarize (never br
   );
   assert.deepEqual(calls, [["default", "sess-1"]]);
   assert.equal(result.summary[0].text, "default compaction fallback");
+});
+
+test("engine: every summarize() attempt is recorded — success with its credit, failure with its error", async () => {
+  // The ledger's credit side only moves when the GC path actually runs. A
+  // silent fallback to the default summarizer used to look identical to a
+  // working engine (empty credits, ordinary-looking summary), so the attempt
+  // log is the evidence: it names the failure instead of hiding it.
+  const previous = process.env.DSH_HOME;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "engram-gc-attempt-"));
+  process.env.DSH_HOME = tmp;
+  try {
+    const okEngine = new (await loadContextGcEngine(fakeCtx(), { auto: false }, {
+      narrativeEnabled: false,
+      readWorkspace: async () => null,
+    }))();
+    const okResult = await okEngine.summarize({ messages: [userText("hi")] }, fakeAgent("/w"));
+    assert.ok(okResult.summary[0].text.length > 0);
+
+    const badEngine = new (await loadContextGcEngine(fakeCtx(), { auto: false }, {
+      narrativeEnabled: false,
+      readWorkspace: async () => { throw new Error("store exploded"); },
+      defaultSummarize: async () => ({ summary: [{ type: "text", text: "fallback" }] }),
+    }))();
+    const badResult = await badEngine.summarize({ messages: [userText("hi")] }, fakeAgent("/w"));
+    assert.equal(badResult.summary[0].text, "fallback");
+
+    const attempts = await readGcAttempts();
+    assert.equal(attempts.length, 2, "one line per attempt");
+    assert.equal(attempts[0].ok, true);
+    assert.equal(attempts[0].plane, "compaction");
+    assert.equal(attempts[0].workspace, "/w");
+    assert.equal(typeof attempts[0].charsSaved, "number");
+    assert.equal(attempts[1].ok, false);
+    assert.match(attempts[1].error, /store exploded/, "the error is durable, not just a terminal warning");
+  } finally {
+    if (previous === void 0) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previous;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test("engine: without injected fallback, error propagates to super.summarize (default behavior)", async () => {
