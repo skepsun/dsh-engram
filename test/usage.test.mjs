@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { openEngramDomain } from "../lib/store.js";
 import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
-import { collectToolCounts, collectUsageStats, dayKey, decodeZstd, recallStatsFromOutput, sessionLogFile } from "../lib/usage.js";
+import { collectToolCounts, collectUsageStats, dayKey, decodeZstd, readToolResult, recallStatsFromOutput, sessionLogFile } from "../lib/usage.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -289,3 +289,48 @@ function res() {
     },
   };
 }
+// ── v4 session format (DSH 0.2.x): the tool result IS the message ───────────
+const R4 = (callId, isError, text) =>
+  JSON.stringify({
+    type: "tool/result",
+    data: {
+      turn: 1,
+      step: 1,
+      message: {
+        role: "tool",
+        source: { kind: "tool", callId },
+        toolCallId: callId,
+        isError,
+        content: text === undefined ? [] : [{ type: "text", text }],
+      },
+    },
+  });
+const USAGE_FIXTURE_V4 = [
+  JSON.stringify({ type: "session", cwd: "/ws/v4", id: "s4" }),
+  C("engram_recall", "c2"),
+  R4("c2", false, '# recall: "build" (2)\n- 3b9840b5 [error] fix build\n- 747cfa3b [fact] cache'),
+  C("engram_detail", "c3"),
+  R4("c3", true),
+];
+
+test("readToolResult: unwraps both the v3 block and the v4 message", () => {
+  const v3 = JSON.parse(R("c1", true, "boom"));
+  const v4 = JSON.parse(R4("c1", true, "boom"));
+  assert.deepEqual(readToolResult(v3), { callId: "c1", text: "boom", isError: true });
+  assert.deepEqual(readToolResult(v4), { callId: "c1", text: "boom", isError: true });
+  assert.equal(readToolResult({ type: "tool/result", data: {} }), null, "no message = not a result");
+  assert.equal(readToolResult({ type: "tool/call", data: { name: "x" } }), null);
+});
+
+test("collectUsageStats reads v4 session logs (0.2.x) — failures and recall hits survive", () => {
+  const root = makeRoot();
+  seedSession(root, "--p--", "s4", USAGE_FIXTURE_V4);
+  const r = collectUsageStats({ root, days: 14 });
+  const row = r.rows.find((x) => x.workspace === "/ws/v4");
+  assert.ok(row, "row for the v4 workspace");
+  assert.equal(row.failures, 1, "v4 result carries isError on the message");
+  assert.equal(row.recall.queries, 1);
+  assert.equal(row.recall.withHits, 1, "hit lines are counted from v4 text blocks");
+  assert.equal(row.recall.hitsTotal, 2);
+  assert.equal(row.recall.detailFollows, 1, "detail follow-up correlates by message.toolCallId");
+});

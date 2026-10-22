@@ -13,6 +13,7 @@ import {
   createLedger,
   readLedger,
   finalizeLedgerBucket,
+  finalizeSessionRow,
   estimatePrefixChars,
   ledgerDayKey,
   ledgerFile,
@@ -215,4 +216,67 @@ test("JIT injections and non-prune rewrites are priced through the ledger", () =
   assert.equal(s.totals.rewriteChars, 1000);
   assert.equal(s.totals.rewritesCostChars, 900);
   assert.equal(s.totals.netChars, -150 - 900);
+});
+
+// ── per-session rows (v0.7.5: make the §6 gates computable) ─────────────────
+test("session rows: one row per session, net computed per session, survives dispose", () => {
+  const home = tmpHome();
+  const ledger = createLedger({ home, flushEvery: 0, cacheDiscount: 0.1 });
+  ledger.noteInjection("s1", "/ws", "index", 400);
+  for (let i = 0; i < 3; i += 1) ledger.tick("s1", "/ws");
+  ledger.notePrune("s1", "/ws", { charsRemoved: 4000, rewriteChars: 0 });
+  // three requests replay the 4000 saved chars
+  for (let i = 0; i < 3; i += 1) ledger.tick("s1", "/ws");
+
+  ledger.noteInjection("s2", "/ws", "index", 200);
+  ledger.tick("s2", "/ws"); // a tiny session: cost only
+  ledger.dispose("s2");
+  ledger.flush();
+
+  const rows = readLedger({ home }).sessions;
+  assert.equal(rows.length, 2, "one durable row per session");
+  const s1 = rows.find((r) => r.sessionId === "s1");
+  const s2 = rows.find((r) => r.sessionId === "s2");
+  assert.equal(s1.requests, 6);
+  assert.equal(s1.injectedChars, 2400, "index charged once per request");
+  assert.equal(s1.avoidedChars, 12000, "4000 saved × 3 later requests");
+  assert.equal(s1.netChars, 12000 - 2400);
+  assert.equal(s1.prunedChars, 4000);
+  assert.equal(s2.netChars, -200, "cost-only session reads negative, not omitted");
+  assert.ok(s1.updatedAt >= s2.updatedAt, "newest activity first");
+});
+
+test("session rows: the open session's unflushed tail is visible in summary()", () => {
+  const ledger = createLedger({ home: tmpHome(), flushEvery: 0, cacheDiscount: 0.1 });
+  ledger.noteInjection("s1", "/ws", "index", 100);
+  ledger.tick("s1", "/ws");
+  ledger.tick("s1", "/ws"); // no flush yet (flushEvery 0 = only prune/dispose flush)
+  const row = ledger.summary().sessions.find((r) => r.sessionId === "s1");
+  assert.ok(row, "live session appears without waiting for a flush");
+  assert.equal(row.requests, 2);
+  assert.equal(row.injectedChars, 200);
+});
+
+test("session rows: capped by maxSessionRows, oldest activity dropped", () => {
+  const home = tmpHome();
+  let clock = Date.now();
+  const ledger = createLedger({ home, flushEvery: 1, persist: true, maxSessionRows: 2, now: () => clock });
+  for (const id of ["a", "b", "c"]) {
+    clock += 1000;
+    ledger.noteInjection(id, "/ws", "index", 10);
+    ledger.tick(id, "/ws"); // flushEvery 1 → durable row per tick
+  }
+  const rows = readLedger({ home }).sessions;
+  assert.equal(rows.length, 2, "cap keeps the disk file bounded");
+  assert.deepEqual(rows.map((r) => r.sessionId).sort(), ["b", "c"], "oldest dropped");
+});
+
+test("finalizeSessionRow keeps the bucket arithmetic but drops the session counter", () => {
+  const row = finalizeSessionRow(
+    { sessionId: "s", workspace: "/w", firstDay: "2026-10-01", lastDay: "2026-10-02", requests: 2, injectedChars: 100, avoidedChars: 1000, rewriteCount: 0, rewriteChars: 0 },
+    0.1,
+  );
+  assert.equal(row.netChars, 900);
+  assert.equal(row.sessions, void 0, "a row is one session — no nested count");
+  assert.equal(row.firstDay, "2026-10-01");
 });

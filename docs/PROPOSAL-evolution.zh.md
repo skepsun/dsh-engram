@@ -344,6 +344,12 @@ net        : avoided − injected − rewrites×(1−cacheDiscount)
   `test/ledger.test.mjs` 12 例、`/stats` 与 `/overview` 的 `ledger` 字段、
   `ledgerEnabled` / `ledgerCacheDiscount` 两个设置键、GUI 遥测页账本面板 +
   概览「上下文净 token」卡；`npm test` 381/381。
+  **v0.7.5 补齐**：`ledger.json` 增加 `sessions`（每会话一行：requests / injected /
+  avoided / rewrites / pruned / compacted / updatedAt，`maxSessionRows` 默认 500 裁剪），
+  `summary()` 合并未 flush 的活跃会话；§6 的门因此第一次有了分母。
+  同版本新增 **`eval/gate-audit.mjs`**（`npm run gate:audit`）把 §6 的门算成
+  `PASS` / `FAIL` / `未测` 表格（[docs/GATES.zh.md](GATES.zh.md)），
+  并修掉 v4 会话日志里 `tool/result` 形状变化导致的 failures / recall 命中恒为 0。
 - 反事实基线：同一会话关闭机制时的 avoided 由 oracle 离线算，账本只报「实际发生」。
 
 **B. 自适应默认（`boundaryPrune: "auto"`）**
@@ -586,6 +592,11 @@ adapters    DSH seams (storageDomain, tokenMeter, pruner, compaction, skill)
    但要有「自动重新评估」）。
 6. 账本必须扣缓存重写；只报 avoided 的账本是营销，不是工程。
 7. LOCOMO 只作参考：规模小、易过拟合，不把它当发布门槛。
+
+**可计算性（v0.7.5 起）：** 上表的门不再靠回忆——`npm run gate:audit` 从
+`ledger.json`（每会话净收益）、会话日志（激活率 / `[RECALL]` 注入 / DrillRate）、
+store（StaleRate）与运行中宿主的 `/preview`（索引字符数）算出 `PASS` / `FAIL` /
+`未测` 三态表，结果落 [docs/GATES.zh.md](GATES.zh.md)。没有数据就写「未测」，不猜。
 
 **对照口径（对外可复现）：**
 
