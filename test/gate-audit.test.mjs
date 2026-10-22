@@ -51,6 +51,13 @@ test("gates read 未测 when nothing has run — never a fake PASS", () => {
 test("G1 counts net-positive sessions from ledger rows; G2 counts activated mounted sessions", () => {
   const home = tmpDir("engram-home-");
   const root = tmpDir("engram-sessions-");
+  // An armed savings path: without one, nothing can ever be credited and G1
+  // refuses to judge (see the test below).
+  fs.writeFileSync(
+    path.join(home, "context-gc.status.json"),
+    JSON.stringify({ version: 1, host: "context-gc", web: { action: "wired" }, boundaryPrune: { armed: false } }),
+    "utf8",
+  );
 
   // Six ledger rows: five profitable, one cost-only. Five is the minimum the
   // gate will judge (a single session is not a distribution).
@@ -101,6 +108,35 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
   assert.equal(report.drill.detailCalls, 1);
   assert.equal(report.drill.recallWithHits, 1);
   assert.equal(byId.G3.value, "1.00");
+});
+
+test("G1 refuses to judge when neither savings path is armed — FAIL would blame the config", () => {
+  const home = tmpDir("engram-home-");
+  const root = tmpDir("engram-sessions-");
+  const day = new Date().toISOString().slice(0, 10);
+  const rows = {};
+  for (let i = 1; i <= 6; i += 1) {
+    rows[`s${i}`] = { sessionId: `s${i}`, workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 900, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 };
+  }
+  fs.writeFileSync(ledgerFile(home), JSON.stringify({ version: 1, updatedAt: Date.now(), workspaces: {}, sessions: rows }), "utf8");
+  // The live shape from a profile that reverted Context GC to opt-in: L1 off,
+  // host compaction not engram's, web plane disabled.
+  fs.writeFileSync(
+    path.join(home, "context-gc.status.json"),
+    JSON.stringify({
+      version: 1,
+      host: "unavailable",
+      web: { action: "disabled", presets: [] },
+      boundaryPrune: { armed: false, reason: "no toolResultPruner service in the host plane" },
+    }),
+    "utf8",
+  );
+
+  const byId = Object.fromEntries(auditGates({ home, root, days: 14 }).gates.map((g) => [g.id, g]));
+  assert.equal(byId.G1.value, "0.0%", "the cost side still reads out");
+  assert.equal(byId.G1.verdict, "未测", "no credit path → no verdict, even with 6 rows");
+  assert.match(byId.G1.note, /no savings path is armed/);
+  assert.equal(byId.G1b.verdict, "未测");
 });
 
 test("G4 flags superseded rows in the memory table", () => {

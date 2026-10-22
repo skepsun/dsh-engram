@@ -121,6 +121,35 @@ function scanSession(file) {
   return facts;
 }
 
+/**
+ * Which savings paths are actually armed? NetTokens has two sides and the
+ * credit side is wired to services that may not exist on a given host:
+ *   · L1 BoundaryPrune needs a `toolResultPruner` service;
+ *   · compaction credit needs engram to BE the compaction provider.
+ * When neither is armed nothing can ever be credited, so `net` can only be
+ * ≤ 0 — a FAIL there blames the mechanism for a configuration, and a PASS is
+ * impossible. Report it as unmeasurable instead of guessing.
+ */
+function readCreditPaths(engramHome) {
+  const file = path.join(engramHome ?? path.join(os.homedir(), ".dsh", "engram"), "context-gc.status.json");
+  let status;
+  try {
+    status = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return { known: false, armed: false, note: "no context-gc.status.json — credit paths unknown" };
+  }
+  const prune = status?.boundaryPrune?.armed === true;
+  const hostCompaction = status?.host === "context-gc" || status?.host === "default";
+  const webCompaction = status?.web?.action !== void 0 && status?.web?.action !== "disabled";
+  const armed = prune || hostCompaction || webCompaction;
+  const parts = [
+    `L1 ${prune ? "armed" : "off"}`,
+    `host compaction ${status?.host ?? "?"}`,
+    `web ${status?.web?.action ?? "?"}`,
+  ];
+  return { known: true, armed, note: parts.join(" · ") };
+}
+
 function scanSessions({ root = sessionsRoot(), days = 14, now = Date.now() } = {}) {
   const cutoff = now - days * DAY_MS;
   const sessions = [];
@@ -192,6 +221,9 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   const sessions = scanSessions({ root: root ?? sessionsRoot(), days, now });
   const dshHome = home !== void 0 ? home : (process.env.DSH_HOME ?? path.join(os.homedir(), ".dsh"));
   const store = readMemoryShare(dshHome);
+  // The gate's credit side: without an armed savings path, `avoided` is 0 by
+  // construction and NetTokens measures only what engram costs.
+  const credit = readCreditPaths(engramHome);
 
   // ── G1 NetTokens: per-session distribution (rows only; no rows = no claim)
   const rows = ledger.sessions.filter((row) => row.requests > 0);
@@ -235,9 +267,11 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         name: "NetTokens · 净收益 > 0 的会话占比",
         value: fmtPct(netShare),
         target: "≥ 50%",
-        verdict: rows.length < MIN_SESSION_ROWS ? "未测" : verdict(netShare >= 50),
-        note:
-          rows.length < MIN_SESSION_ROWS
+        verdict:
+          !credit.armed || rows.length < MIN_SESSION_ROWS ? "未测" : verdict(netShare >= 50),
+        note: !credit.armed
+          ? `${positive.length}/${rows.length} rows, but no savings path is armed (${credit.note}) — net can only be ≤ 0`
+          : rows.length < MIN_SESSION_ROWS
             ? `${positive.length}/${rows.length} rows — need ≥ ${MIN_SESSION_ROWS} flushed sessions for a distribution`
             : `${positive.length}/${rows.length} sessions with ledger rows`,
       },
@@ -246,7 +280,8 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         name: "NetTokens · 长会话（≥200 请求）占比",
         value: fmtPct(longShare),
         target: "≥ 70%",
-        verdict: longRows.length < MIN_LONG_ROWS ? "未测" : verdict(longShare >= 70),
+        verdict:
+          !credit.armed || longRows.length < MIN_LONG_ROWS ? "未测" : verdict(longShare >= 70),
         note: `${longPositive.length}/${longRows.length} long sessions`,
       },
       {
