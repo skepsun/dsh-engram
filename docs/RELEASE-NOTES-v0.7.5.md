@@ -76,9 +76,28 @@ request header 带过 `[RECALL]`。重启宿主后这个数字应当由 0 变正
 G3 = 0.08 也值得注意：模型在 recall 上很勤（37 次有命中），但几乎不 `engram_detail`
 ——推送被采纳率低，正是 v0.8 要解决的问题（证据化 procedure + 更短的推送行）。
 
-## 5. 测试与兼容
+## 5. wiring harness：把 `apply()` 也纳入测试
 
-- `npm test` **425/425**（v0.7.4：416）；其中 ledger 14 → 18，usage 10 → 12，
-  新增 `test/gate-audit.test.mjs` 3 例。
+两次静默失效（会话日志改名的 8 号问题、`session.events` 被删）都发生在 **接线层**：
+模块本身是对的，`apply()` 读的宿主 API 变了，而没有任何测试真正调用过 `apply()`。
+
+新增 **`test/wiring.test.mjs`**：用假 cordis ctx（`get` / `inject` / `on` / `effect` /
+`provide` / `tools.register` + 内存 storage facility）挂载 `apply()`，断言：
+
+- 四个 section 全部注册（`engram:index` / `engram:jit` / `engram:esr-method` / `engram:esr`）；
+- **15 个工具**全部注册，`engramLedger` 服务被 provide；
+- 事件接线：`tools/result` ×3、`session/event` ×4、`session/disposed` ×4；
+- `enabled:false` 时零注册；
+- **端到端**：一个没有 `.events`、只有 `sessionQuery.live()` 租约的 0.2.x 会话，
+  index section 仍渲染出 `[ENGRAM]` + `[RECALL]`，且命中的正是预置的记忆
+  —— 这条用例在 v0.7.4 之前会失败。
+
+副产物：harness 暴露了「`apply` 的 effect disposer 必须被调用」——GC interval
+不清，测试进程不退出。
+
+## 6. 测试与兼容
+
+- `npm test` **428/428**（v0.7.4：416）；其中 ledger 14 → 18，usage 10 → 12，
+  新增 `test/gate-audit.test.mjs` 3 例、`test/wiring.test.mjs` 3 例。
 - 老 `ledger.json` 无需迁移：新增字段可选，读侧全部做了缺省处理。
 - `node client/typecheck.mjs` 干净。
