@@ -35,7 +35,11 @@ import { decodeZstd, readToolResult, recallStatsFromOutput, sessionLogFile, sess
 import { readLedger } from "../lib/ledger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LONG_SESSION_REQUESTS = 200; // §6: 长会话 = ≥200 请求
+const LONG_SESSION_REQUESTS = 200;
+/** Below this many rows a share is noise: one short session must not paint the
+ *  gate FAIL (or PASS). The gate says 未测 until there is a distribution. */
+const MIN_SESSION_ROWS = 5;
+const MIN_LONG_ROWS = 3; // §6: 长会话 = ≥200 请求
 const ENGRAM_TOOL_RE = /^(engram_|esr_)/;
 
 function parseArgs(argv) {
@@ -71,7 +75,7 @@ function scanSession(file) {
     recallWithHits: 0,
     detailCalls: 0,
     headers: 0,
-    headersWithRecall: 0,
+    pushSeen: false,
   };
   for (const line of raw.split("\n")) {
     if (line.length === 0) continue;
@@ -104,12 +108,14 @@ function scanSession(file) {
       if (recallStatsFromOutput(parsed.text).withHits > 0) facts.recallWithHits += 1;
       continue;
     }
-    if (event?.type === "request/header") {
-      facts.headers += 1;
-      const blob = JSON.stringify(event.data ?? "");
-      // The push leg's own signature: the [RECALL] block only renders when the
-      // host-side recall actually produced hits for this session.
-      if (blob.includes("[RECALL] recall ·")) facts.headersWithRecall += 1;
+    // The push leg's own signature: the block only renders when the host-side
+    // recall produced hits. Where it lands depends on the host generation:
+    //   · request/header — the assembled system prompt for each request;
+    //   · system/message — the section re-sent after a compaction / new turn.
+    // Both are prompt-side, so assistant text quoting the block never counts.
+    if (event?.type === "request/header" || event?.type === "system/message") {
+      if (event.type === "request/header") facts.headers += 1;
+      if (!facts.pushSeen && PUSH_RE.test(JSON.stringify(event.data ?? ""))) facts.pushSeen = true;
     }
   }
   return facts;
@@ -198,7 +204,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   // ── G2 Activation: mounted sessions where any engram/esr tool fired
   const mounted = sessions.filter((s) => s.tools.size > 0);
   const activated = mounted.filter((s) => [...s.tools.keys()].some((name) => ENGRAM_TOOL_RE.test(name)));
-  const pushFired = mounted.filter((s) => s.headersWithRecall > 0);
+  const pushFired = mounted.filter((s) => s.pushSeen);
   const activation = pct(activated.length, mounted.length);
   const pushShare = pct(pushFired.length, mounted.length);
 
@@ -229,15 +235,18 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         name: "NetTokens · 净收益 > 0 的会话占比",
         value: fmtPct(netShare),
         target: "≥ 50%",
-        verdict: rows.length === 0 ? "未测" : verdict(netShare >= 50),
-        note: `${positive.length}/${rows.length} sessions with ledger rows`,
+        verdict: rows.length < MIN_SESSION_ROWS ? "未测" : verdict(netShare >= 50),
+        note:
+          rows.length < MIN_SESSION_ROWS
+            ? `${positive.length}/${rows.length} rows — need ≥ ${MIN_SESSION_ROWS} flushed sessions for a distribution`
+            : `${positive.length}/${rows.length} sessions with ledger rows`,
       },
       {
         id: "G1b",
         name: "NetTokens · 长会话（≥200 请求）占比",
         value: fmtPct(longShare),
         target: "≥ 70%",
-        verdict: longRows.length === 0 ? "未测" : verdict(longShare >= 70),
+        verdict: longRows.length < MIN_LONG_ROWS ? "未测" : verdict(longShare >= 70),
         note: `${longPositive.length}/${longRows.length} long sessions`,
       },
       {
@@ -254,7 +263,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         value: fmtPct(pushShare),
         target: "观测项（无预声明门）",
         verdict: mounted.length === 0 ? "未测" : "—",
-        note: `${pushFired.length}/${mounted.length} sessions carry a [RECALL] block in their request header`,
+        note: `${pushFired.length}/${mounted.length} sessions carry a [RECALL] block in their prompt`,
       },
       {
         id: "G3",
@@ -304,6 +313,10 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
  * Fill G5 from the running host: the rendered [ENGRAM] block size is a
  * render-time fact, not something the disk can answer. Offline → 未测.
  */
+/** `[RECALL] recall · 3 hit(s)` / `[RECALL] newest memory · 3 hit(s)` — the
+ *  rendered block, never the static `drill: use [RECALL] below` instruction. */
+const PUSH_RE = /\[RECALL\] (?:recall|newest memory) · \d+ hit\(s\)/;
+
 async function fillIndexGate(report) {
   const gate = report.gates.find((entry) => entry.id === "G5");
   if (gate === void 0 || report.api === null || report.api === void 0) return;
@@ -317,8 +330,14 @@ async function fillIndexGate(report) {
     const chars = body?.meta?.engram?.chars;
     if (!Number.isFinite(chars)) throw new Error("no meta.engram.chars");
     gate.value = `${chars}c`;
-    gate.verdict = chars <= 700 ? "PASS" : "FAIL";
-    gate.note = `${workspace} · ${body?.meta?.counts?.memories ?? "?"} memories · ${body?.meta?.engram?.lines ?? "?"} lines`;
+    if (chars === 0) {
+      // An empty block trivially fits the budget — that is not the gate talking.
+      gate.verdict = "未测";
+      gate.note = `${workspace} · empty [ENGRAM] block (no memories for this workspace) — pass ?workspace=<repo>`;
+    } else {
+      gate.verdict = chars <= 700 ? "PASS" : "FAIL";
+      gate.note = `${workspace} · ${body?.meta?.counts?.memories ?? "?"} memories · ${body?.meta?.engram?.lines ?? "?"} lines`;
+    }
   } catch (error) {
     gate.note = `api unreachable (${String(error.message)}) — offline`;
   }
@@ -361,7 +380,10 @@ function renderMarkdown(report) {
   out.push(renderRows({ sessions: report.ledgerRows ?? [] }));
   out.push("");
   out.push("> 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。");
-  out.push("> 未测即未测——不猜。G5/G6/G7 需要运行中的宿主或配对实验。");
+  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G6/G7 需要配对实验。");
+  out.push("> G1 在行数 < 5 时只报数值、不给判定：一个会话不是分布。");
+  out.push("> 绝对值说明：injected 按名义价逐请求记，而宿主前缀缓存实际约 10% 付费；");
+  out.push("> 两侧同比例缩放不改变 net 的**正负号**（G1 判的就是符号），所以门不受影响，但「节省 token」的绝对量偏悲观。");
   return out.join("\n");
 }
 

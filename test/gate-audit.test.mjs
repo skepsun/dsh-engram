@@ -52,7 +52,8 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
   const home = tmpDir("engram-home-");
   const root = tmpDir("engram-sessions-");
 
-  // Two ledger rows: one profitable, one cost-only.
+  // Six ledger rows: five profitable, one cost-only. Five is the minimum the
+  // gate will judge (a single session is not a distribution).
   const day = new Date().toISOString().slice(0, 10);
   fs.writeFileSync(
     ledgerFile(home),
@@ -63,6 +64,10 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
       sessions: {
         s1: { sessionId: "s1", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 100, avoidedChars: 5000, rewriteCount: 0, rewriteChars: 0 },
         s2: { sessionId: "s2", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 2, injectedChars: 900, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 },
+        s3: { sessionId: "s3", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 8, injectedChars: 100, avoidedChars: 4000, rewriteCount: 0, rewriteChars: 0 },
+        s4: { sessionId: "s4", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 6, injectedChars: 100, avoidedChars: 3000, rewriteCount: 0, rewriteChars: 0 },
+        s5: { sessionId: "s5", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 5, injectedChars: 100, avoidedChars: 2000, rewriteCount: 0, rewriteChars: 0 },
+        s6: { sessionId: "s6", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 4, injectedChars: 100, avoidedChars: 1000, rewriteCount: 0, rewriteChars: 0 },
       },
     }),
     "utf8",
@@ -75,7 +80,7 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
     R4("c1", '# recall: "build" (1)\n- 3b9840b5 [error] fix build'),
     { type: "tool/call", data: { name: "engram_detail", callId: "c2" } },
     R4("c2", "record"),
-    { type: "request/header", data: { messages: [{ content: "[RECALL] recall · build → #3b9840b5" }] } },
+    { type: "request/header", data: { messages: [{ content: "[RECALL] recall · 1 hit(s) · first msg: build → #3b9840b5" }] } },
   ]);
   // s2: mounted but no engram/esr call (a miss for the activation gate).
   seedSession(root, "--p--", "s2", [
@@ -86,9 +91,9 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
 
   const report = auditGates({ home, root, days: 14 });
   const byId = Object.fromEntries(report.gates.map((g) => [g.id, g]));
-  assert.equal(report.ledger.rows, 2);
-  assert.equal(byId.G1.value, "50.0%", "one of two sessions is net-positive");
-  assert.equal(byId.G1.verdict, "PASS", "50% meets the pre-declared floor");
+  assert.equal(report.ledger.rows, 6);
+  assert.equal(byId.G1.value, "83.3%", "five of six sessions are net-positive");
+  assert.equal(byId.G1.verdict, "PASS", "83.3% meets the pre-declared floor");
   assert.equal(byId.G1b.verdict, "未测", "no ≥200-request session yet — not a pass");
   assert.equal(byId.G2.value, "50.0%");
   assert.equal(byId.G2.verdict, "FAIL", "below the 60% activation floor");

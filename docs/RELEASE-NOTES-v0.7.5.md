@@ -101,3 +101,34 @@ G3 = 0.08 也值得注意：模型在 recall 上很勤（37 次有命中），�
   新增 `test/gate-audit.test.mjs` 3 例、`test/wiring.test.mjs` 3 例。
 - 老 `ledger.json` 无需迁移：新增字段可选，读侧全部做了缺省处理。
 - `node client/typecheck.mjs` 干净。
+
+## 7. 真机首日：推送腿第一次被观测到
+
+重启到 0.7.5 后（宿主实际加载的是 `~/.dsh/profiles/web/node_modules/dsh-engram`——tarball 依赖，
+不是本仓库，见 §8）：
+
+- **G2b 从 0.0% 变成 6.5%（2/31 挂载会话带 `[RECALL]` 块）**：v0.7.4 修好的推送腿第一次
+  在真实日志里留下痕迹：`activation.recall = { injections: 5, hitInjections: 5, hitsInjected: 9 }`。
+- **账本第一次落行**：`ledger.json` 出现 `sessions` 行（首个会话 20 请求 / 注入 37,840c / avoided 0）。
+  写入时机 = 每 20 请求、或一次剪枝/压缩、或会话结束——所以行会迟到，但不会丢。
+
+审计脚本本身被这次真机数据校正了三处：
+
+1. **G2b 扫错了事件**：`[RECALL]` 块不只在 `request/header` 里，宿主还会在压缩/新一轮时把整段
+   system prompt 作为 `system/message` 事件发一次；只扫 header 会永远读到 0。现两者都扫，
+   且用 `/\[RECALL\] (?:recall|newest memory) · \d+ hit\(s\)/` 精确匹配渲染块——静态提示行
+   `drill: use [RECALL] below` 不算。
+2. **G5 的 0c 是假 PASS**：空 `[ENGRAM]` 块（工作区没记忆）天然 ≤700，判定无意义；现在报「未测」
+   并提示传 `?workspace=<repo>`。
+3. **G1 的最小样本**：1 条行也敢下 FAIL 是噪声。行数 < 5 时只报数值、判「未测」。
+
+另外记一条口径：`injected` 按名义价逐请求记，而前缀缓存实际约 10% 付费；两侧同比例缩放
+不改变 net 的**正负号**（G1 判的就是符号），所以门不受影响，但「节省 token」的绝对量偏悲观。
+
+## 8. 部署形态（为什么重启不一定生效）
+
+宿主从 **tarball 依赖**加载插件：`~/.dsh/profiles/web/package.json` →
+`file:~/.dsh/vendor/dsh-engram-<v>.tgz`。仓库改动不重启不生效，**重启也不生效**——要先
+`npm pack` → 换 profile 依赖 → `npm install`。本次已把 0.7.5 装进去（`--legacy-peer-deps`，
+因为 `dsh-context` 的 peer 由宿主提供）。顺带发现 `files` 漏了 `eval/`，导致安装副本里
+`npm run gate:audit` 指向不存在的文件；已补 `eval/gate-audit.mjs`。
