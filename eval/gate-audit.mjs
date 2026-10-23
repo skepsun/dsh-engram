@@ -143,7 +143,11 @@ function readCreditPaths(engramHome) {
   // "wired" only counts when it names the presets it rewrote: a report with no
   // presets changed nothing, and a preset row that fails to load looks exactly
   // like one that works until a compaction is attempted (see the attempt log).
-  const webCompaction = status?.web?.action === "wired" && (status?.web?.presets?.length ?? 0) > 0;
+  // "already" = the row was in place from an earlier provisioning pass; only a
+  // preset with a custom layout is skipped, and those are listed separately.
+  const webAction = status?.web?.action;
+  const webPresets = (status?.web?.presets ?? []).filter((p) => p?.action !== "skipped");
+  const webCompaction = (webAction === "wired" || webAction === "already") && webPresets.length > 0;
   const armed = prune || hostCompaction || webCompaction;
   const parts = [
     `L1 ${prune ? "armed" : "off"}`,

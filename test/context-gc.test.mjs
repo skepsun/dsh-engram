@@ -34,6 +34,13 @@ import {
 } from "../lib/context-gc.js";
 import { openEngramDomain } from "../lib/store.js";
 import { readGcAttempts } from "../lib/status.js";
+
+// Every summarize() appends a diagnostics line under $DSH_HOME/engram. Point
+// that at a throwaway home so a test run never litters the developer's real
+// ~/.dsh (it did: 27 lines of fixture attempts with workspace "/w").
+// Force it: DSH_HOME may already be exported by the shell (pointing at the
+// real ~/.dsh), and `??=` would then keep writing there.
+process.env.DSH_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "engram-test-home-"));
 import {
   name as compactionEntryName,
   inject as compactionEntryInject,
