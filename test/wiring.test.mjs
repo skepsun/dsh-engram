@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 
 import { apply } from "../lib/index.js";
 import { openEngramDomain } from "../lib/store.js";
-import { CONTEXT_GC_FOOTER } from "../lib/context-gc.js";
+import { CONTEXT_GC_FOOTER, CONTEXT_GC_HEADING } from "../lib/context-gc.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -221,12 +221,12 @@ test("compaction credit comes from the committed summary, not from summarize()",
 
   emit({
     type: "compaction/summary",
-    summary: [{ type: "text", text: "pointer summary\n" + CONTEXT_GC_FOOTER }],
+    summary: [{ type: "text", text: CONTEXT_GC_HEADING + "\npointer summary\n" + CONTEXT_GC_FOOTER }],
     shadowedTokenCount: 50000,
   });
   assert.equal(
     row()?.compactedChars,
-    200000 - ("pointer summary\n" + CONTEXT_GC_FOOTER).length,
+    200000 - (CONTEXT_GC_HEADING + "\npointer summary\n" + CONTEXT_GC_FOOTER).length,
     "credited span − summary",
   );
 });
