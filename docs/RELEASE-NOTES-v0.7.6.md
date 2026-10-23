@@ -1,3 +1,9 @@
+> **更正（v0.7.7）**：本文第 1 节的根因判断**是错的**。真机装了
+> `boundary-attempts.jsonl` 之后看到：同一个边界 `host` 与 `preset` 两个平面**都收到了**
+> ——不是 realm 隔离。真正的杀手是**工作区键不一致**（`Users-x-proj` vs `/Users/x/proj`），
+> 见 [RELEASE-NOTES-v0.7.7.md](RELEASE-NOTES-v0.7.7.md)。本文件保留当时的推理过程，
+> 第 2/3/4 节的脚手架（preset 行、尝试日志、状态文件防降级）依然有效且有用。
+
 # dsh-engram v0.7.6
 
 自 v0.7.5 以来：**修掉 L1 边界剪枝在 `dsh web` 上「已武装、永不触发」的结构性哑火**，

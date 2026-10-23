@@ -15,6 +15,7 @@ import {
   completedCount,
   expectedSessionRequests,
   workspaceHistory,
+  normalizeWorkspaceKey,
   boundaryPruneAvailability,
 } from "../lib/boundary-prune.js";
 
@@ -77,6 +78,39 @@ test("expectedSessionRequests: floor for unknown, empirical prior for known work
   assert.equal(expectedSessionRequests(1000, history, "/Users/x/proj", 50), 2000);
   // the floor can raise the prior when configured higher
   assert.equal(expectedSessionRequests(10, history, "/Users/x/proj", 200), 200);
+});
+
+test("normalizeWorkspaceKey: bucket names and absolute paths collapse to one key", () => {
+  assert.equal(normalizeWorkspaceKey("/Users/x/proj"), "Users-x-proj");
+  assert.equal(normalizeWorkspaceKey("Users-x-proj"), "Users-x-proj");
+  assert.equal(normalizeWorkspaceKey("--Users-x-proj--"), "Users-x-proj");
+  assert.equal(normalizeWorkspaceKey("/Users/x/proj/"), "Users-x-proj");
+  assert.equal(normalizeWorkspaceKey(""), "");
+  assert.equal(normalizeWorkspaceKey(undefined), "");
+});
+
+test("workspaceHistory: a real bucket is found by the live cwd (the bug that silenced L1)", () => {
+  // Regression: buckets are named `--Users-x-proj--` while the session header
+  // carries `/Users/x/proj`. Before normalisation the lookup always missed, the
+  // prior collapsed to the floor, and the repayment gate skipped every boundary
+  // past the first request — L1 was armed and could never fire.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "engram-hist-"));
+  try {
+    const bucket = path.join(root, "--Users-x-proj--");
+    const sessionDir = path.join(bucket, "session-1");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    // the log file name `sessionLogFile()` looks for, with non-zero size
+    fs.writeFileSync(path.join(sessionDir, "session.jsonl.zstd"), "x");
+    const history = workspaceHistory(root);
+    assert.equal(history.size, 1);
+    assert.ok(history.get("Users-x-proj"), "stored under the normalised bucket key");
+    assert.equal(expectedSessionRequests(10, history, "/Users/x/proj", 50), 120);
+    // and the gate now has headroom where it used to skip unconditionally
+    const gate = (requests, minRemaining, total) => requests + minRemaining <= total;
+    assert.equal(gate(10, 50, expectedSessionRequests(10, history, "/Users/x/proj", 50)), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("expectedSessionRequests with no history map at all", () => {
