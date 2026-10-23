@@ -196,7 +196,8 @@ Fetch the exact records that are still in the store:
 | 极小被驱逐片段（span 小于 checkpoint 开销）不压缩 | harness 收缩闸门对**任何**后端一视同仁 | 属正常，没必要为几十 token 起 checkpoint |
 | 改配置后没变化 | web 行要重启才刷新 | 重启 dsh web |
 | 遥测「节省 · 剪枝/压缩」一直是 0、净 token 恒负 | 两条入账腿都没触发：L1 拿不到 host 平面的 `toolResultPruner`（0.2.0 的 host 行被禁），压缩节省此前进不了账本 | 确认状态快照 `boundaryPrune.armed: true`（`npx dsh-engram status` 会打印）；压缩自 0.7.5 起按**已提交的** `compaction/summary` 入账（`shadowedTokenCount×4 − 摘要字符数`） |
-| 状态文件说 `host: unavailable` / `web: disabled`，但 `/overview` 说 `host: context-gc` | 同一进程里两个插件实例（一个拿到 profile 配置、一个拿到出厂默认）抢写同一个状态文件，后写的把好的覆盖了 | 0.7.5+ 同 pid 内不允许降级覆盖；以 `/overview` 与 `npx dsh-engram gate-audit --api` 为准 |
+
+| `boundaryPrune.armed: true` 但 `activation.boundaryPrune: null`、剪枝节省恒 0 | **工作区键不一致**：历史表键是 `Users-x-proj`（桶名），查询键是 `/Users/x/proj`（header.cwd）→ 历史永远 miss → 还款闸门恒跳过。0.7.7 起两侧归一见 `normalizeWorkspaceKey` | 看 `~/.dsh/engram/boundary-attempts.jsonl`：`kind: skipped` 且 `expectedTotal` 恰等于 50 就是它；修好后 `expectedTotal` 应变成 120（有历史的工作区） || 状态文件说 `host: unavailable` / `web: disabled`，但 `/overview` 说 `host: context-gc` | 同一进程里两个插件实例（一个拿到 profile 配置、一个拿到出厂默认）抢写同一个状态文件，后写的把好的覆盖了 | 0.7.5+ 同 pid 内不允许降级覆盖；以 `/overview` 与 `npx dsh-engram gate-audit --api` 为准 |
 | 老会话还在用默认 LLM 摘要（checkpoint 没有 GC 页眉） | 该会话的 agent realm 是在插件接管**之前**组合出来的，realm 里没有 `dsh-engram/compaction` 行；新开会话才拿到 | 新开一次会话即可；已存在的 realm 不会热换 provider |
 | L1 状态报 `no toolResultPruner service …` 但 `--dump-config` 里行是启用的 | 行存在却被**运行时**关掉（如 `- id: tool-result-pruner, disabled: true` 的 profile override） | 删掉该 override；bundle patch 只负责重新启用出厂行 |
 | L1 状态报 `registered but its fiber is not active yet` | 启动时序：剪枝器 fiber 比插件晚激活（v0.7.2 前会因此永久休眠） | 升到 0.7.2+（改经 `ctx.inject` 武装），然后重启 |
