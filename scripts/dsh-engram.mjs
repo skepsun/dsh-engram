@@ -29,6 +29,7 @@ import {
   revertWebCompaction,
 } from "../lib/web-provision.js";
 import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
+import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -245,8 +246,9 @@ async function printStatus(presetsDirFlag) {
         continue;
       }
       const cs = compactionWireStatus(text);
+      const hasPrune = text.includes(ENGRAM_PRUNE_ROW_NAME);
       const note = cs === "wired"
-        ? "已接管（dsh-engram/compaction 行）"
+        ? `已接管（dsh-engram/compaction 行${hasPrune ? " + dsh-engram/prune 行" : " · 缺 prune 行：L1 在这个预设里看不见边界，重跑 enable 补齐"}）`
         : cs === "stock"
           ? "出厂布局，重启 dsh web 后自动接管"
           : "自定义/无 compaction，插件不碰";
