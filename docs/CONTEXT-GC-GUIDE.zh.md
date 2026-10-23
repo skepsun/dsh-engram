@@ -195,7 +195,9 @@ Fetch the exact records that are still in the store:
 | 日志 `dsh-compaction-basic unavailable` | 环境缺后端依赖 | 安装依赖；自动回退默认压缩，host 不崩 |
 | 极小被驱逐片段（span 小于 checkpoint 开销）不压缩 | harness 收缩闸门对**任何**后端一视同仁 | 属正常，没必要为几十 token 起 checkpoint |
 | 改配置后没变化 | web 行要重启才刷新 | 重启 dsh web |
-| 遥测「节省 · 剪枝/压缩」一直是 0、净 token 恒负 | 两条入账腿都没触发：L1 拿不到 host 平面的 `toolResultPruner`（0.2.0 的 host 行被禁），压缩节省此前进不了账本 | 确认状态快照 `boundaryPrune.armed: true`（`npx dsh-engram status` 会打印）；压缩在 0.7.1+ 按 `区间字符数 − checkpoint 字符数` 入账 |
+| 遥测「节省 · 剪枝/压缩」一直是 0、净 token 恒负 | 两条入账腿都没触发：L1 拿不到 host 平面的 `toolResultPruner`（0.2.0 的 host 行被禁），压缩节省此前进不了账本 | 确认状态快照 `boundaryPrune.armed: true`（`npx dsh-engram status` 会打印）；压缩自 0.7.5 起按**已提交的** `compaction/summary` 入账（`shadowedTokenCount×4 − 摘要字符数`） |
+| 状态文件说 `host: unavailable` / `web: disabled`，但 `/overview` 说 `host: context-gc` | 同一进程里两个插件实例（一个拿到 profile 配置、一个拿到出厂默认）抢写同一个状态文件，后写的把好的覆盖了 | 0.7.5+ 同 pid 内不允许降级覆盖；以 `/overview` 与 `npx dsh-engram gate-audit --api` 为准 |
+| 老会话还在用默认 LLM 摘要（checkpoint 没有 GC 页眉） | 该会话的 agent realm 是在插件接管**之前**组合出来的，realm 里没有 `dsh-engram/compaction` 行；新开会话才拿到 | 新开一次会话即可；已存在的 realm 不会热换 provider |
 | L1 状态报 `no toolResultPruner service …` 但 `--dump-config` 里行是启用的 | 行存在却被**运行时**关掉（如 `- id: tool-result-pruner, disabled: true` 的 profile override） | 删掉该 override；bundle patch 只负责重新启用出厂行 |
 | L1 状态报 `registered but its fiber is not active yet` | 启动时序：剪枝器 fiber 比插件晚激活（v0.7.2 前会因此永久休眠） | 升到 0.7.2+（改经 `ctx.inject` 武装），然后重启 |
 
@@ -209,6 +211,10 @@ Fetch the exact records that are still in the store:
 - **injected**：`[ENGRAM]`/`[RECALL]`/`[JIT]`/`[ESR]` 块每请求重计的注入成本；
 - **avoided**：**已入账**的节省，只有两条腿——L1 边界剪枝（`toolResultPruner` 剪掉的
   chars × 后续请求数）与压缩（每次 checkpoint 的「被替换区间字符数 − checkpoint 字符数」× 后续请求数）；
+- **压缩节省按「已提交」记账**（0.7.5+）：账本不认引擎在 `summarize()` 里算出的数字，只认会话里
+  真正落地的 `compaction/summary` 事件——且摘要必须带 Context GC 页眉/尾注（证明是本插件写的）。
+  被宿主拒绝、回滚、或退了默认摘要器的压缩，**一律不入账**。这条是踩过的坑：早期版本按引擎
+  自报记账，结果把一次没落地的 checkpoint 也记了 29 万字符；
 - **rewrite penalty**：L1 剪枝会击穿 KV 前缀缓存，按 `1 − 缓存折价` 一次性计价；
   压缩**不额外计**罚金（压缩是宿主自己的动作，默认后端同样会改写前缀，计了会重复）。
 
