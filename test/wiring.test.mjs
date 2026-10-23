@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 
 import { apply } from "../lib/index.js";
 import { openEngramDomain } from "../lib/store.js";
+import { CONTEXT_GC_FOOTER } from "../lib/context-gc.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -189,4 +190,43 @@ test("index section renders [ENGRAM] + [RECALL] on a 0.2.x session (no `.events`
   assert.match(text, /\[ENGRAM\]/, "index block renders without session.events");
   assert.match(text, /\[RECALL\]/, "session-start recall fires off the sessionQuery lease");
   assert.match(text, /seed memory/, "the seeded memory is what got recalled");
+});
+
+test("compaction credit comes from the committed summary, not from summarize()", async (t) => {
+  // A summary that engram did NOT author (the host's own default summarizer, or
+  // one the harness substituted after rejecting our checkpoint) must credit
+  // nothing: the ledger's whole value is that it only counts savings that
+  // actually landed in the session.
+  const facility = makeFacility();
+  const harness = fakeCtx({ facility, sessionQuery: emptySessionQuery() });
+  t.after(() => harness.dispose());
+  apply(harness.ctx, {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const ledger = harness.provided.get("engramLedger");
+  assert.ok(ledger, "ledger service is reachable");
+  const emit = (event) => {
+    for (const handler of harness.listeners.get("session/event") ?? []) {
+      handler({ id: "sess-c", header: { cwd: "/repo/compaction" } }, event);
+    }
+  };
+
+  emit({
+    type: "compaction/summary",
+    summary: [{ type: "text", text: "## Primary Request and Intent\n- someone else's summary" }],
+    shadowedTokenCount: 50000,
+  });
+  const row = () => (ledger.summary().sessions ?? []).find((s) => s.workspace === "/repo/compaction");
+  assert.equal(row()?.compactedChars ?? 0, 0, "foreign summary credits nothing");
+
+  emit({
+    type: "compaction/summary",
+    summary: [{ type: "text", text: "pointer summary\n" + CONTEXT_GC_FOOTER }],
+    shadowedTokenCount: 50000,
+  });
+  assert.equal(
+    row()?.compactedChars,
+    200000 - ("pointer summary\n" + CONTEXT_GC_FOOTER).length,
+    "credited span − summary",
+  );
 });

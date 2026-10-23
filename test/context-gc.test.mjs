@@ -424,6 +424,10 @@ test("engine: every summarize() attempt is recorded — success with its credit,
     assert.equal(attempts[0].plane, "compaction");
     assert.equal(attempts[0].workspace, "/w");
     assert.equal(typeof attempts[0].charsSaved, "number");
+    // The head/length identify OUR checkpoint, so the committed
+    // `compaction/summary` can be compared against it.
+    assert.equal(attempts[0].summaryChars, [...okResult.summary[0].text].length);
+    assert.equal(attempts[0].head, [...okResult.summary[0].text].slice(0, 60).join(""));
     assert.equal(attempts[1].ok, false);
     assert.match(attempts[1].error, /store exploded/, "the error is durable, not just a terminal warning");
   } finally {
@@ -540,14 +544,18 @@ test("compaction entry: apply in context-gc mode mounts the ContextGcEngine over
   assert.equal(typeof engine._contextGc, "function", "context-gc mode carries the mechanical eviction override");
 });
 
-test("compaction entry: credits the host ledger through the engramLedger service", async () => {
+test("compaction entry: never credits the ledger from summarize() (the commit decides)", async () => {
+  // Regression for a false credit: the preset-plane row used to call
+  // `engramLedger.noteCompaction` inside summarize(), so a checkpoint the
+  // harness rejected/overrode still booked ~300k chars of savings. Credit now
+  // comes from the committed `compaction/summary` event in the host plugin.
   const credits = [];
   const ctx = capturingCtx({
     engramLedger: { noteCompaction: (sessionId, workspace, opts) => credits.push([sessionId, workspace, opts]) },
   });
   await compactionEntryApply(ctx, { gcReplacesCompaction: true, gcNarrative: false });
   const engine = ctx.engine();
-  await engine.summarize(
+  const out = await engine.summarize(
     {
       messages: [
         userText("ask"),
@@ -557,10 +565,8 @@ test("compaction entry: credits the host ledger through the engramLedger service
     },
     fakeAgent("/w"),
   );
-  assert.equal(credits.length, 1, "the preset-plane row must reach the host ledger");
-  assert.equal(credits[0][0], "sess-1");
-  assert.equal(credits[0][1], "/w");
-  assert.ok(credits[0][2].charsSaved > 3000, `charsSaved=${credits[0][2].charsSaved}`);
+  assert.equal(credits.length, 0, "summarize() must not book a saving the session may never see");
+  assert.match(out.summary.map((b) => b.text).join("\n"), /Context GC/, "the checkpoint itself still carries the footer");
 });
 
 test("compaction entry: no ledger service → compaction still works (no throw)", async () => {
