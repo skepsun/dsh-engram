@@ -130,7 +130,23 @@ function scanSession(file) {
  * ≤ 0 — a FAIL there blames the mechanism for a configuration, and a PASS is
  * impossible. Report it as unmeasurable instead of guessing.
  */
-function readCreditPaths(engramHome) {
+function readCreditPaths(engramHome, live = void 0) {
+  // The live instance is authoritative: the on-disk snapshot is written by
+  // whichever plugin instance settles LAST, and a sibling instance that lost
+  // the `compaction` provider writes "unavailable" over a working host. Prefer
+  // the running plugin's own view when the caller passed --api.
+  if (live?.compaction !== void 0) {
+    const c = live.compaction;
+    const presets = (c?.web?.presets ?? []).filter((p) => p?.action !== "skipped");
+    const prune = c?.boundaryPrune?.armed === true;
+    const hostCompaction = c?.host === "context-gc" || c?.host === "default";
+    const webCompaction = (c?.web?.action === "wired" || c?.web?.action === "already") && presets.length > 0;
+    return {
+      known: true,
+      armed: prune || hostCompaction || webCompaction,
+      note: `live · L1 ${prune ? "armed" : "off"} · host compaction ${c?.host ?? "?"} · web ${c?.web?.action ?? "?"}`,
+    };
+  }
   const file = path.join(engramHome ?? path.join(os.homedir(), ".dsh", "engram"), "context-gc.status.json");
   let status;
   try {
@@ -222,7 +238,7 @@ function verdict(ok) {
 }
 
 /** The §6 gate table, computed from whatever data actually exists. */
-export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0 } = {}) {
+export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0, live = void 0 } = {}) {
   const engramHome = home ?? void 0;
   const ledger = readLedger({ home: engramHome });
   const sessions = scanSessions({ root: root ?? sessionsRoot(), days, now });
@@ -230,7 +246,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   const store = readMemoryShare(dshHome);
   // The gate's credit side: without an armed savings path, `avoided` is 0 by
   // construction and NetTokens measures only what engram costs.
-  const credit = readCreditPaths(engramHome);
+  const credit = readCreditPaths(engramHome, live);
 
   // ── G1 NetTokens: per-session distribution (rows only; no rows = no claim)
   const rows = ledger.sessions.filter((row) => row.requests > 0);
@@ -359,6 +375,21 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
  *  rendered block, never the static `drill: use [RECALL] below` instruction. */
 const PUSH_RE = /\[RECALL\] (?:recall|newest memory) · \d+ hit\(s\)/;
 
+/** The running plugin's own compaction view (authoritative over the file). */
+async function fetchLiveCompaction(api) {
+  if (api === null || api === void 0) return void 0;
+  const [base, query = ""] = String(api).split("?");
+  const workspace = new URLSearchParams(query).get("workspace") ?? process.cwd();
+  try {
+    const response = await fetch(`${base}/overview?workspace=${encodeURIComponent(workspace)}`);
+    if (!response.ok) return void 0;
+    const body = await response.json();
+    return body?.compaction === void 0 ? void 0 : { compaction: body.compaction };
+  } catch {
+    return void 0;
+  }
+}
+
 async function fillIndexGate(report) {
   const gate = report.gates.find((entry) => entry.id === "G5");
   if (gate === void 0 || report.api === null || report.api === void 0) return;
@@ -432,7 +463,8 @@ function renderMarkdown(report) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const home = args.home ?? void 0;
-  const report = auditGates({ days: args.days, home, api: args.api });
+  const live = await fetchLiveCompaction(args.api);
+  const report = auditGates({ days: args.days, home, api: args.api, live });
   await fillIndexGate(report);
   const ledger = readLedger({ home });
   report.ledgerRows = ledger.sessions;
