@@ -76,7 +76,11 @@ test("prune entry: a todo boundary prunes through the realm's pruner and credits
       type: "todo/write",
       data: { todos: [{ status: "completed" }, { status: "pending" }] },
     });
-    assert.equal(pruner.calls, 1, "realm pruner was invoked");
+    // The fire is deferred out of the session's commit() stack (a prune inside
+    // the publishing window is a reentrant append and the host rejects it).
+    assert.equal(pruner.calls, 0, "nothing prunes synchronously inside commit()");
+    await flushLog();
+    assert.equal(pruner.calls, 1, "realm pruner was invoked after commit()");
     assert.equal(credits.length, 1, "ledger credited the prune");
     assert.equal(credits[0][1], "/tmp/ws-preset", "credited under the workspace key");
     assert.equal(credits[0][2].charsRemoved, 9000);
@@ -156,4 +160,66 @@ test("prune entry: boundaryPrune:false mounts nothing", () => {
   const dispose = apply(ctx, { boundaryPrune: false });
   assert.equal(handlers.has("session/event"), false);
   dispose();
+});
+
+test("prune entry: a prune that appends during the publish window is deferred, not lost", async () => {
+  // The live failure mode (2026-10-23): DSH publishes `todo/write` with
+  // `appending` set, so a synchronous `session.append("compaction/prune")`
+  // throws "session append cannot reenter". Swallowed by the listener's safety
+  // net, it looked exactly like "fired, pruned nothing": L1 alive and useless.
+  const home = await mkdtemp(join(tmpdir(), "engram-prune-reenter-"));
+  const previous = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  try {
+    const handlers = new Map();
+    let publishing = false;
+    const appends = [];
+    const session = {
+      id: "sess-reenter",
+      header: { cwd: "/tmp/ws-reenter" },
+      surface: { nodes: [] },
+      eventAt: () => undefined,
+      deriveEventMessage: () => ({ content: [] }),
+      append(type) {
+        if (publishing) throw new Error("session append cannot reenter while another append is being published");
+        appends.push(type);
+      },
+    };
+    const pruner = {
+      config: { thresholdChars: 8192, headChars: 4096, tailChars: 1024 },
+      pruneSession() {
+        session.append("compaction/prune"); // what the host pruner really does
+        return { pruned: [{ seq: 1 }], charsRemoved: 5000 };
+      },
+    };
+    const ctx = {
+      logger: () => ({ info() {}, warn() {}, debug() {} }),
+      get: (name) => (name === "toolResultPruner" ? pruner : undefined),
+      on: (name, fn) => {
+        handlers.set(name, fn);
+        return () => handlers.delete(name);
+      },
+    };
+    apply(ctx, { boundaryPrune: true, boundaryPruneMinRemaining: 0 });
+
+    publishing = true; // emulate commit()
+    try {
+      handlers.get("session/event")(session, {
+        type: "todo/write",
+        data: { todos: [{ status: "completed" }] },
+      });
+    } finally {
+      publishing = false;
+    }
+    await flushLog();
+    assert.deepEqual(appends, ["compaction/prune"], "the prune landed after the publish window");
+    const attempts = await readPruneAttempts();
+    assert.equal(attempts.length, 1);
+    assert.equal(attempts[0].kind, "fired");
+    assert.equal(attempts[0].pruned, 1);
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previous;
+    await rm(home, { recursive: true, force: true });
+  }
 });
