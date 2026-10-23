@@ -12,6 +12,16 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// THE HARNESS RUNS THE REAL `apply()`, WHICH WRITES REAL FILES. Point DSH_HOME
+// at a throwaway directory before the first apply: without this, `npm test`
+// clobbers the developer's live `~/.dsh/engram/context-gc.status.json` with a
+// factory-default snapshot ("host unavailable / L1 not armed") and the CLI then
+// reports a healthy server as broken.
+process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "engram-wiring-home-"));
 
 import { apply } from "../lib/index.js";
 import { openEngramDomain } from "../lib/store.js";

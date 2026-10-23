@@ -28,7 +28,7 @@ import {
   provisionWebCompaction,
   revertWebCompaction,
 } from "../lib/web-provision.js";
-import { contextGcStatusPath, readContextGcStatus } from "../lib/status.js";
+import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -206,6 +206,18 @@ async function printStatus(presetsDirFlag) {
       if (!bp.armed) {
         log("  ⚠ L1 未武装时「节省 · 剪枝/压缩」不会入账（账本净 token 只会是负值）；0.2.0 web profile 需要 bundle patch 重新启用 host 平面的 tool-result-pruner 行。");
       }
+    }
+    const attempts = await readPruneAttempts(20).catch(() => []);
+    if (attempts.length === 0) {
+      log("  L1 边界尝试：0 次（还没有任何 todo/goal 边界出现过——注意「已武装」不等于「会开火」）");
+    } else {
+      const byPlane = new Map();
+      const fired = attempts.filter((a) => a.kind === "fired" && a.pruned > 0);
+      for (const a of attempts) byPlane.set(a.plane ?? "?", (byPlane.get(a.plane ?? "?") ?? 0) + 1);
+      const planeLine = [...byPlane].map(([plane, n]) => `${plane} ${n}`).join(" · ");
+      const last = attempts[attempts.length - 1];
+      log(`  L1 边界尝试：${attempts.length} 次见过的边界（${planeLine}）· 真剪到东西的 ${fired.length} 次`);
+      log(`    最近一次：${last.at ?? "?"} · ${last.kind}${last.boundary?.kind ? ` · ${last.boundary.kind}` : ""}${last.pruned !== undefined ? ` · 剪了 ${last.pruned} 条 / ${last.charsRemoved ?? 0} 字符` : ""}`);
     }
     if (status.configSource?.autoWebCompaction === false) {
       log("  ⚠ autoWebCompaction=false：web 平面不会自动接管（设置卡「记忆 GC」里打开后重启 dsh web）");

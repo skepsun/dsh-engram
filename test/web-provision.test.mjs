@@ -14,9 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ENGRAM_ROW_NAME,
+  ENGRAM_PRUNE_ROW_NAME,
   STOCK_COMPACTION_ROW,
   ENGRAM_COMPACTION_ROW,
   engramCompactionRowText,
+  engramPruneRowText,
+  ensurePruneRow,
   stockCompactionRowText,
   discoverPresetsDir,
   compactionWireStatus,
@@ -57,7 +60,13 @@ const STOCK = `# agent composition
         tailChars: 1024
 `;
 
-const WIRED = STOCK.replace(STOCK_COMPACTION_ROW, ENGRAM_COMPACTION_ROW);
+// A wired composition carries BOTH rows: the engine and the realm-side
+// BoundaryPrune row (the latter is what lets L1 see a `todo/write` boundary
+// inside the agent preset's realm).
+const WIRED = STOCK.replace(
+  STOCK_COMPACTION_ROW,
+  `${ENGRAM_COMPACTION_ROW}\n${engramPruneRowText(4)}`,
+);
 
 const CUSTOM = STOCK.replace(
   "      name: '@deepseek-ai/dsh-compaction-basic'",
