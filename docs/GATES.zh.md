@@ -1,4 +1,4 @@
-# 门审计（gate audit）· 2026-10-22
+# 门审计（gate audit）· 2026-10-23
 
 窗口：最近 14 天 · 扫描 43 个会话（其中 32 个挂载了工具）· 账本行 4 条
 
@@ -9,8 +9,8 @@
 | G2 | Activation · 机制激活率（挂载会话 fire ≥1 次） | 78.1% | ≥ 60% | **PASS** | 25/32 mounted sessions |
 | G2b | Push · [RECALL] 注入命中会话占比 | 12.5% | 观测项（无预声明门） | **—** | 4/32 sessions carry a [RECALL] block in their prompt |
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 40 recall-with-hits |
-| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/356 memories (10 tagged stale) |
-| G5 | 索引 ≤ 700 chars | 680c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 86 memories · 6 lines |
+| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/357 memories (10 tagged stale) |
+| G5 | 索引 ≤ 700 chars | 680c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 87 memories · 6 lines |
 | G6 | Quality Δ · 配对任务成功率差 | 未测 | ≤ 2pp | **未测** | needs paired A/B runs (not derivable from logs) |
 | G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | in-memory accumulation; needs a timed benchmark |
 

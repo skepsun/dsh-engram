@@ -272,6 +272,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   const staleRate = store === null ? null : pct(store.superseded, store.total);
 
   return {
+    auditedAt: now,
     window: { days, now, sessions: sessions.length, mounted: mounted.length },
     ledger: { rows: rows.length, totals: ledger.totals, positive: positive.length, longRows: longRows.length },
     activation: {
@@ -431,7 +432,7 @@ function renderRows(ledger, limit = 10) {
 
 function renderMarkdown(report) {
   const out = [];
-  out.push(`# 门审计（gate audit）· 2026-10-22`);
+  out.push(`# 门审计（gate audit）· ${new Date(report.auditedAt ?? Date.now()).toISOString().slice(0, 10)}`);
   out.push("");
   out.push(`窗口：最近 ${report.window.days} 天 · 扫描 ${report.window.sessions} 个会话（其中 ${report.window.mounted} 个挂载了工具）· 账本行 ${report.ledger.rows} 条`);
   out.push("");
