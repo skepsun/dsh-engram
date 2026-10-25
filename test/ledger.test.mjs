@@ -280,3 +280,28 @@ test("finalizeSessionRow keeps the bucket arithmetic but drops the session count
   assert.equal(row.sessions, void 0, "a row is one session — no nested count");
   assert.equal(row.firstDay, "2026-10-01");
 });
+
+test("notePrune: host prunes land in hostPrunedChars, never in the engram leg", () => {
+  const home = tmpHome();
+  const ledger = createLedger({ home, every: 0 });
+  const ws = "/tmp/ws-attrib";
+
+  // The host pruned on its own (12,491 tokens observed live).
+  ledger.notePrune("s-host", ws, { charsRemoved: 49_964, rewriteChars: 60_000, source: "host" });
+  // Engram's own boundary prune.
+  ledger.notePrune("s-host", ws, { charsRemoved: 9_000, rewriteChars: 12_000 });
+
+  const row = readLedger({ home }).sessions.find((r) => r.sessionId === "s-host");
+  assert.equal(row.hostPrunedChars, 49_964, "host leg recorded separately");
+  assert.equal(row.prunedChars, 9_000, "engram leg untouched by host prunes");
+  assert.equal(row.rewriteCount, 2, "both prunes pay the rewrite cost");
+
+  // Only the engram leg can reach avoidedChars (what NetTokens spends).
+  ledger.noteInjection("s-host", ws, "index", 1_000);
+  ledger.tick("s-host", ws);
+  const after = ledger.summary();
+  const sessionRow = after.sessions.find((r) => r.sessionId === "s-host") ?? after.sessions[0];
+  assert.equal(sessionRow.avoidedChars, 9_000, "host savings are not claimed as avoided");
+  assert.ok(after.hostPrunedChars >= 49_964, "summary surfaces the host leg");
+  fs.rmSync(home, { recursive: true, force: true });
+});

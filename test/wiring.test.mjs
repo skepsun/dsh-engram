@@ -240,3 +240,26 @@ test("compaction credit comes from the committed summary, not from summarize()",
     "credited span − summary",
   );
 });
+
+test("a host prune lands on the host leg; an engram prune stays on the engram leg", async (t) => {
+  // Live evidence (2026-10-25): DSH prunes over-threshold tool results on its
+  // own between steps — 12,491 tokens shadowed with no boundary involved. That
+  // saving must be visible but never claimed as engram's.
+  const facility = makeFacility();
+  const harness = fakeCtx({ facility, sessionQuery: emptySessionQuery() });
+  t.after(() => harness.dispose());
+  apply(harness.ctx, {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const ledger = harness.provided.get("engramLedger");
+  const session = { id: "sess-host", header: { cwd: "/repo/host-prune" } };
+  const emit = (event) => {
+    for (const handler of harness.listeners.get("session/event") ?? []) handler(session, event);
+  };
+  const row = () => (ledger.summary().sessions ?? []).find((s) => s.sessionId === "sess-host");
+
+  emit({ type: "compaction/prune", data: { shadowedSeqs: [77], shadowedTokenCount: 12_491 } });
+  assert.equal(row()?.hostPrunedChars, 12_491 * 4, "the host's own prune is credited separately");
+  assert.equal(row()?.prunedChars ?? 0, 0, "and never as engram's saving");
+  assert.equal(ledger.summary().hostPrunedChars >= 12_491 * 4, true, "summary surfaces the host leg");
+});
