@@ -1,0 +1,28 @@
+{
+  "tasks": [
+    {
+      "id": "codec",
+      "prompt": "实现 src/codec.js 里的 encodeCheck(input)，按团队约定补上校验字符。改完自己验证一下。",
+      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs codec --dir oracle-blind",
+      "timeoutMs": 900000
+    },
+    {
+      "id": "errcode",
+      "prompt": "实现 src/errcode.js 里的 fail(code, message, details)，按团队约定抛错。改完自己验证一下。",
+      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs errcode --dir oracle-blind",
+      "timeoutMs": 900000
+    },
+    {
+      "id": "money",
+      "prompt": "实现 src/money.js 里的 toCents 和 sumAmounts，按团队约定的取整与累加口径。改完自己验证一下。",
+      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs money --dir oracle-blind",
+      "timeoutMs": 900000
+    },
+    {
+      "id": "ordering",
+      "prompt": "实现 src/ordering.js 里的 sortByScore(rows)，按团队约定的排序口径。改完自己验证一下。",
+      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs ordering --dir oracle-blind",
+      "timeoutMs": 900000
+    }
+  ]
+}

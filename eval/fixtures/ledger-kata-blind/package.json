@@ -1,0 +1,6 @@
+{
+  "name": "ledger-kata-blind",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/" }
+}

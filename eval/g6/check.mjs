@@ -20,7 +20,11 @@ if (!task) {
   process.exit(2);
 }
 const ws = process.cwd();
-const oracle = path.join(import.meta.dirname, "oracle", `${task}.test.mjs`);
+// `--dir` lets a second corpus keep its oracles in its own folder; both corpora
+// call the same helper so "how a run is graded" has exactly one implementation.
+const dirIndex = process.argv.indexOf("--dir");
+const oracleDir = dirIndex === -1 ? "oracle" : process.argv[dirIndex + 1];
+const oracle = path.join(import.meta.dirname, oracleDir, `${task}.test.mjs`);
 if (!fs.existsSync(oracle)) {
   console.error(`check: no oracle for "${task}"`);
   process.exit(2);

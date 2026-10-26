@@ -1,0 +1,52 @@
+[
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "codec"
+    ],
+    "text": "ledger-kata 约定（codec）：encodeCheck(input) 返回 `${input}-${checkChar}`；checkChar 取字符表 '0123456789abcdefghijklmnopqrstuvwxyz' 的第 (Σ 每位数字×3+7) mod 36 位（下标从 0 起）。例：'1234' → '1234-m'。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "errcode"
+    ],
+    "text": "ledger-kata 约定（errcode）：fail(code,message,details) 抛 Error，message 形如 `E_<CODE>: <message>`；error.code 放不带前缀的 CODE；未传 details 时 error.details 为 {}；code 必须 UPPER_SNAKE_CASE，否则抛错且不把坏 code 写进 .code。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "money"
+    ],
+    "text": "ledger-kata 约定（money）：toCents(x) 按「四舍五入远离零」到分并返回整数（1.005→101、-1.005→-101、1.004→100）；sumAmounts 先把每笔换成分再累加，最后除以 100（0.1+0.2=0.3、1.005+1.005=2.02）。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "ordering"
+    ],
+    "text": "ledger-kata 约定（ordering）：sortByScore(rows) 返回新数组，按 score 降序，分数相同保持入参顺序（稳定）；不得原地改动入参。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.6,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "misc"
+    ],
+    "text": "ledger-kata 约定（misc）：提交信息用中文一句话，结尾不加句号。这条跟本次改动无关，仅供参考。"
+  }
+]
