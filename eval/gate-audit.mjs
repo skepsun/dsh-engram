@@ -471,7 +471,8 @@ function renderMarkdown(report) {
   out.push(renderRows({ sessions: report.ledgerRows ?? [] }));
   out.push("");
   out.push("> 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。");
-  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，G6 需要配对实验。");
+  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，");
+  out.push("> G6 需要配对实验：`npm run quality:ab -- run …`（协议见 docs/G6-quality-ab.zh.md，< 10 对配对一律报未测）。");
   out.push("> G1 的分母是「有节省机会」的会话（`prunedChars + compactedChars > 0`）：没有任何剪枝/压缩的会话结构上必为负，");
   out.push("> 把它们算进分母测的是激活率而不是收益。机会会话 < 5 时只报数值、不给判定：一个会话不是分布。");
   out.push("> 绝对值说明：injected 按名义价逐请求记，而宿主前缀缓存实际约 10% 付费；");
