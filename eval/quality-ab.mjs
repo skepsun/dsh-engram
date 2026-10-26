@@ -25,6 +25,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { buildProfile, denyFor } from "./g6/sandbox-profile.mjs";
+
+/** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 
 const DSH_BIN = process.env.AB_DSH_BIN || "dsh";
 const defaultHome = path.join(os.homedir(), ".dsh", "quality-ab");
@@ -45,6 +49,7 @@ function parseArgs(argv) {
     else if (arg === "--control-first") out.controlFirst = true;
     else if (arg === "--exclude") out.exclude = next().split(",").map((x) => x.trim()).filter(Boolean);
     else if (arg === "--log-dir") out.logDir = next();
+    else if (arg === "--sandbox") out.sandbox = true;
     // One task is not a quality measurement — same discipline as G1's row floor.
     else if (arg === "--min-pairs") out.minPairs = Number(next()) || 10;
     else if (arg === "--arm") {
@@ -115,6 +120,11 @@ function linkCredentials(home) {
 
 function prepare(args) {
   const home = args.home;
+  if (args.sandbox) {
+    // Prior runs' session logs live here and would be readable by the next run.
+    // `--control-first` means only control sessions can exist at this point.
+    fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
+  }
   fs.mkdirSync(home, { recursive: true });
   const profiles = Object.entries(args.arm);
   if (profiles.length !== 2) throw new Error("prepare needs --arm on=<profile>,off=<profile>");
@@ -322,6 +332,11 @@ function run(args) {
   fs.mkdirSync(args.out, { recursive: true });
 
   const home = args.home;
+  if (args.sandbox) {
+    // Prior runs' session logs live here and would be readable by the next run.
+    // `--control-first` means only control sessions can exist at this point.
+    fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
+  }
   const env = { ...process.env, DSH_HOME: home };
   const credential = liftCredential(env);
   if (!credential) {
@@ -377,8 +392,34 @@ function run(args) {
         const hideStore = args.hideStoreFor === arm && fs.existsSync(storeFile);
         if (hideStore) fs.renameSync(storeFile, hiddenFile);
         let res;
+        // OS-level fence: the arm's shell cannot read the repo, earlier rounds,
+        // the host store, its own session logs, or the OTHER arm's profile —
+        // whatever it thinks of next. Without this, "Δ is a lower bound" was the
+        // honest claim; with it, Δ is a measurement.
+        const sandboxFile = args.sandbox
+          ? (() => {
+              const denyRead = denyFor({
+                repo: path.resolve(ROOT),
+                home: os.homedir(),
+                arm,
+                otherArm: arms.find((candidate) => candidate !== arm) ?? null,
+                artifacts: ["/tmp/g6"],
+              });
+              const file = path.join(os.tmpdir(), `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
+              fs.writeFileSync(file, buildProfile({ denyRead }));
+              return file;
+            })()
+          : null;
         try {
-          res = dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs });
+          res = sandboxFile === null
+            ? dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs })
+            : spawnSync("/usr/bin/sandbox-exec", ["-f", sandboxFile, DSH_BIN, "--profile", arm, prompt], {
+                cwd: ws,
+                env,
+                encoding: "utf8",
+                timeout: args.timeoutMs,
+                maxBuffer: 32 * 1024 * 1024,
+              });
         } finally {
           if (hideStore) fs.renameSync(hiddenFile, storeFile);
         }
