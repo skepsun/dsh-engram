@@ -154,3 +154,24 @@ test("cli: unknown command exits non-zero with a hint", async () => {
     await box.close();
   }
 });
+
+test("status prints the two ledger legs and calls out a host-only ledger", async (t) => {
+  // The line exists so nobody has to re-derive the v0.7.11 conclusion: when the
+  // host prunes everything and engram prunes nothing, enabling L1 is just work
+  // done twice.
+  const home = await mkdtemp(join(tmpdir(), "engram-cli-legs-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const { createLedger } = await import("../lib/ledger.js");
+  const ledger = createLedger({ home, every: 0 });
+  ledger.notePrune("s1", "/tmp/ws-legs", { charsRemoved: 7_841, rewriteChars: 9_000 });
+  ledger.notePrune("s1", "/tmp/ws-legs", { charsRemoved: 64_200, rewriteChars: 0, source: "host" });
+  ledger.noteInjection("s1", "/tmp/ws-legs", "index", 1_000);
+  ledger.tick("s1", "/tmp/ws-legs"); // a row only lands once the delta is non-empty
+  ledger.flush();
+  const { stdout } = await exec(process.execPath, [CLI, "status"], {
+    env: { ...process.env, DSH_HOME: home, DSH_WEB_PRESETS_DIR: join(home, "presets") },
+    encoding: "utf8",
+  });
+  assert.match(stdout, /账本两条腿：engram 剪枝 7841 字符 · 宿主自剪 64200 字符/);
+  assert.match(stdout, /宿主腿远大于 engram 腿/);
+});

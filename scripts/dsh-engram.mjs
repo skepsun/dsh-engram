@@ -29,6 +29,7 @@ import {
   revertWebCompaction,
 } from "../lib/web-provision.js";
 import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
+import { readLedger } from "../lib/ledger.js";
 import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -194,6 +195,27 @@ async function printStatus(presetsDirFlag) {
   const presets = await discoverPresets(status, presetsDirFlag);
 
   log("── dsh-engram Context GC 状态 ──────────────────────────────");
+  // The two ledger legs decide whether L1 is worth turning on at all: if the
+  // host prunes far more than engram does, enabling it only repeats that work.
+  // Printed regardless of the status snapshot (it is ledger data, not plugin
+  // startup state).
+  try {
+    const ledger = readLedger();
+    const rows = ledger.sessions ?? [];
+    if (rows.length > 0) {
+      const engram = rows.reduce((sum, row) => sum + (row.prunedChars ?? 0), 0);
+      const host = ledger.hostPrunedChars ?? 0;
+      const verdict =
+        host > 0 && engram === 0
+          ? "（宿主全干了，engram 一条没剪 → L1 开着只是重复劳动）"
+          : host > engram * 5
+            ? "（宿主腿远大于 engram 腿 → 先确认边界源有没有覆盖到你的用法）"
+            : "";
+      log(`  账本两条腿：engram 剪枝 ${engram} 字符 · 宿主自剪 ${host} 字符${verdict}`);
+      log("");
+    }
+  } catch {}
+
   if (status === undefined) {
     log("  尚无状态文件（插件还没写过，或本机没跑过 dsh web）。");
   } else {
