@@ -4,28 +4,28 @@
 
 | 门 | 指标 | 实测 | 目标 | 判定 | 备注 |
 |---|---|---|---|---|---|
-| G1 | NetTokens · 净收益 > 0 的会话占比（有节省机会的会话） | 100.0% | ≥ 50% | **未测** | 2/2 opportunity rows of 7 — need ≥ 5 for a distribution |
-| G1b | NetTokens · 长会话（≥200 请求）占比 | 100.0% | ≥ 70% | **未测** | 1/1 long opportunity sessions |
+| G1 | NetTokens · 净收益 > 0 的会话占比（有节省机会的会话） | 100.0% | ≥ 50% | **未测** | 3/3 opportunity rows of 7 — need ≥ 5 for a distribution |
+| G1b | NetTokens · 长会话（≥200 请求）占比 | 100.0% | ≥ 70% | **未测** | 2/2 long opportunity sessions |
 | G2 | Activation · 机制激活率（挂载会话 fire ≥1 次） | 77.1% | ≥ 60% | **PASS** | 27/35 mounted sessions |
 | G2b | Push · [RECALL] 注入命中会话占比 | 20.0% | 观测项（无预声明门） | **—** | 7/35 sessions carry a [RECALL] block in their prompt |
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 45 recall-with-hits |
-| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/380 memories (12 tagged stale) |
-| G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 106 memories · 6 lines |
-| G6 | Quality Δ · 配对任务成功率差 | 未测 | ≤ 2pp | **未测** | needs paired A/B runs (not derivable from logs) |
-| G7 | 账本自身开销 | 0.2137% | < 0.5% 请求时延 | **PASS** | from `npm run bench:ledger` (worst op vs a 300ms request floor) |
+| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/398 memories (12 tagged stale) |
+| G5 | 索引 ≤ 700 chars | 未测 | ≤ 700c | **未测** | pass --api <base>?workspace=<ws> to read the rendered block size |
+| G6 | Quality Δ · 配对任务成功率差 | 0.0pp | ≤ 2pp | **PASS** | 12 对配对 · 6 任务 × 2 种子 · eval/g6/runs/g6-2026-10-26/runs.json |
+| G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | run `npm run bench:ledger` and pass --g7 <pct> |
 
 ## 账本合计
 
-- injected 9,943,344c（≈2,485,836 tok）· avoided 1,480,967,187c（≈370,241,797 tok）
+- injected 11,023,992c（≈2,755,998 tok）· avoided 1,673,544,423c（≈418,386,106 tok）
 - rewrites 17 次 / 4,024,426c（按 cacheDiscount 计罚 3,621,983c）
-- **net 1,467,401,860c ≈ 366,850,465 tok**；开源会话 7 条，其中净收益为正 2 条
+- **net 1,658,898,448c ≈ 414,724,612 tok**；开源会话 7 条，其中净收益为正 3 条
 
 ## 最近会话（按会话落行）
 
 | session | requests | injected | avoided | net | workspace |
 |---|---|---|---|---|---|
-| session-746c03… | 624 | 1,286,964c | 25,007,097c | 23,435,269c | dsh-loom |
-| session-419cfc… | 61 | 168,927c | 0c | -168,927c | kototoro-parsers |
+| session-746c03… | 784 | 1,602,804c | 74,576,707c | 72,689,039c | dsh-loom |
+| session-419cfc… | 320 | 933,735c | 143,007,626c | 142,073,891c | kototoro-parsers |
 | 91e9c39a-2231-… | 66 | 179,382c | 286,224c | 106,842c | kototoro-parsers |
 | session-775f51… | 220 | 609,289c | 0c | -1,711,542c | kototoro-parsers |
 | session-71f597… | 140 | 392,295c | 0c | -392,295c | kototoro-parsers |

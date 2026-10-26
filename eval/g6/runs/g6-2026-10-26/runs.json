@@ -1,0 +1,238 @@
+{
+  "startedAt": 1792998261101,
+  "seedMemory": "eval/g6/seed-memory.json",
+  "finishedAt": 1792999153877,
+  "seeds": 2,
+  "tasks": [
+    "money",
+    "retry",
+    "timefmt",
+    "queue",
+    "errors",
+    "csv"
+  ],
+  "arms": [
+    "ab-engram",
+    "ab-bare"
+  ],
+  "summary": {
+    "ab-engram": {
+      "runs": 12,
+      "passes": 12,
+      "rate": 1,
+      "meanWallMs": 42455
+    },
+    "ab-bare": {
+      "runs": 12,
+      "passes": 12,
+      "rate": 1,
+      "meanWallMs": 31153
+    }
+  },
+  "paired": {
+    "pairs": 12,
+    "onlyA": 0,
+    "onlyB": 0
+  },
+  "deltaPp": 0,
+  "gate": {
+    "id": "G6",
+    "target": "≤ 2pp",
+    "minPairs": 10,
+    "verdict": "PASS"
+  },
+  "rows": [
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 74587
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 53955
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 76655
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 79593
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 27255
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 18113
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 34577
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 28391
+    },
+    {
+      "task": "timefmt",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 41472
+    },
+    {
+      "task": "timefmt",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 27245
+    },
+    {
+      "task": "timefmt",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 36751
+    },
+    {
+      "task": "timefmt",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 18539
+    },
+    {
+      "task": "queue",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 24016
+    },
+    {
+      "task": "queue",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 9607
+    },
+    {
+      "task": "queue",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 21438
+    },
+    {
+      "task": "queue",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 12167
+    },
+    {
+      "task": "errors",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 42149
+    },
+    {
+      "task": "errors",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 25559
+    },
+    {
+      "task": "errors",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 47495
+    },
+    {
+      "task": "errors",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 44996
+    },
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 41639
+    },
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 31539
+    },
+    {
+      "task": "csv",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 41430
+    },
+    {
+      "task": "csv",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 24132
+    }
+  ]
+}

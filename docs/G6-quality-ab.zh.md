@@ -93,3 +93,47 @@ harness 已落地并**真机跑通**（1 任务 × 2 臂，两臂都跑完、ora
 但按自己的规则报 **未测**：1 对配对是管线验证，不是质量证据。
 
 下一次真实运行从这里开始：`node eval/quality-ab.mjs run … --seeds 3`。
+
+## 5. 实测（2026-10-26，第一轮）
+
+```bash
+node eval/quality-ab.mjs run --tasks eval/g6/tasks.json \
+  --workspace eval/fixtures/ledger-kata --arm ab-engram,ab-bare --seeds 2 \
+  --out eval/g6/runs/g6-2026-10-26 --home ~/.dsh/quality-ab \
+  --seed-memory eval/g6/seed-memory.json
+```
+
+| arm | pass | rate | median wall |
+|---|---|---|---|
+| ab-engram | 12/12 | 100% | 41.5s |
+| ab-bare | 12/12 | 100% | 27.2s |
+
+**Δ = 0.0pp · 12 对配对 · G6 PASS（PASS 条件 \|Δ\| ≤ 2pp）。**
+
+### 两臂差在哪（否则这不是实验）
+
+同一个 fixture（`eval/fixtures/ledger-kata`，6 个模块各带一条会失败的测试），
+同一个 prompt，同一个本地模型（local-vllm-61 / deepseek-v4-flash）。
+**on 臂额外预置 4 条记忆**（`eval/g6/seed-memory.json`）：2 条真事实（guard 是 oracle、
+金额用整数分）+ **2 条故意过时的经验**（「timefmt 固定 TZ 再用 toLocaleString 就行」、
+「sort 直接用就够」）。预置是逐 run 覆盖写入的，所以每个 run 的记忆状态相同——
+否则两臂就不是配对了。
+
+不加预置的话，on 臂只有一个协议块，两臂几乎没差别，实验测的是空气。
+
+### 这轮测得的是「不伤害」，不是「有提升」
+
+12/12 vs 12/12 是**天花板效应**：fixture 的 6 个任务对这一档模型都太容易，两臂都做满。
+所以这轮证据支持的结论只有一条硬结论（PASS 的门本身）：**挂上 engram 没有让任务质量下降**；
+它**不能**支持「记忆让任务更容易」。
+
+值得单独记的是延迟：on 臂中位 41.5s vs bare 27.2s（+52%，max 都撞到 ~77s）。
+这是 `[ENGRAM]` 注入 + 2 条过期经验测带来的一次性成本，不是质量差。
+下一步要提高区分度，得换更难的任务（多文件、跨模块、需要历史决策），
+或者把 fixture 的测试藏起来让记忆成为唯一规格来源。
+
+### 关于那 2 条过期经验
+
+两臂都 12/12 —— 没有一次「照抄过时 playbook 导致失败」。但注意：**没观察到不等于不会发生**，
+本轮任务里过期经验恰好都不致命（TZ 方案在 timezone 测试上会挂，两个 on 臂也没照抄，
+而是自己读了测试）。要测这一条，得设计「照抄就会挂、且不看测试就会信」的任务。
