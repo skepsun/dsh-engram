@@ -137,3 +137,12 @@ node eval/quality-ab.mjs run --tasks eval/g6/tasks.json \
 两臂都 12/12 —— 没有一次「照抄过时 playbook 导致失败」。但注意：**没观察到不等于不会发生**，
 本轮任务里过期经验恰好都不致命（TZ 方案在 timezone 测试上会挂，两个 on 臂也没照抄，
 而是自己读了测试）。要测这一条，得设计「照抄就会挂、且不看测试就会信」的任务。
+
+### 第三轮之前的一个坑（流程证据）
+
+第一次 pilot 里，harness 写入的预置行用了 `sessionId: null`，违反 `MemorySchema`
+（`z.string().min(1)`），插件把整个域判成不可用 —— on 臂实际是「engram 离线」，
+不是「engram 在场」。数字照样是 100% / 100%，**但它测的是故障**。
+修好后才跑正式轮。这条记在这里，是因为「先跑一对看接缝通不通」救了这次实验：
+12 对跑完再发现 schema 漂移，代价是半小时和一个假结论。
+`eval/g6/runs/pilot/README.md` 保留了当时的日志说明。
