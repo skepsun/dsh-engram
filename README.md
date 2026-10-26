@@ -284,7 +284,12 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.6.0` | published | 同 `0.5.0` — Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
 | `0.7.0` | published | 同 `0.5.0` — session episode、resume brief、entity pages/cards、revalidatable anchors + layered TTL | 同 `0.5.0` |
 | `0.7.1` (npm) | published | 同 `0.5.0` — web-plane Context GC on DSH `0.2.0` declarative presets (14-space rows), bundle patch re-enables the host `tool-result-pruner`, compaction savings feed the Context Ledger | 同 `0.5.0` |
-| `0.7.2` (本期 / this release) | prepared | 同 `0.5.0` — L1 boundary prune arms through `ctx.inject`, fixing the boot-ordering race where a pruner activating one tick after the plugin stayed dormant for the whole process | 同 `0.5.0` |
+| `0.7.2` (npm) | published | 同 `0.5.0` — L1 boundary prune arms through `ctx.inject`, fixing the boot-ordering race where a pruner activating one tick after the plugin stayed dormant for the whole process | 同 `0.5.0` |
+| `0.7.3` | 未发布 | 设置卡迁到「Engram 记忆 → 设置」tab（DSH `0.2.1` 删了旧 section）——随 `0.7.4` 一起发布 | 同 `0.5.0` |
+| `0.7.4` (npm) | published | 同 `0.5.0` — 修「推送腿」在 DSH `0.2.x` 上整条静默失效（`[RECALL]` 启动召回、JIT 推送） | 同 `0.5.0` |
+| `0.7.5`–`0.7.9` | 本地 | 同 `0.5.0` — 账本按会话落行 + `gate-audit`；L1 三个真机 bug：还款闸门工作区键（`Users-x-proj` vs `/Users/x/proj`）、`session.append` 重入、归因不对称；L1 从「自己剪」转成「记账 + 归因」 | 同 `0.5.0` |
+| `0.7.10`–`0.7.12` | 本地 | 同 `0.5.0` — 归因对称（宿主剪枝不进我们的 rewrite 账）、`boundaryPrune` 默认关闭改 opt-in、`status` 打印「账本两条腿」让开关判断可复核 | 同 `0.5.0` |
+| `0.7.13` (本期 / this release) | 本地 | 同 `0.5.0` — 压缩入账读真实事件形状（`event.data`，此前 82 个 GC checkpoint 全部未入账 + 29.6M 字符）、会话计数重启不再清零（delta 累加）、CLI 尊重 `DSH_HOME` | 同 `0.5.0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 
