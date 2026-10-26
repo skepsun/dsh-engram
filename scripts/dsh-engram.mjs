@@ -200,7 +200,9 @@ async function printStatus(presetsDirFlag) {
   // Printed regardless of the status snapshot (it is ledger data, not plugin
   // startup state).
   try {
-    const ledger = readLedger();
+    // Honour DSH_HOME like every other read in this CLI: without it the legs
+    // line silently reports the real machine's ledger even under a sandbox.
+    const ledger = readLedger({ home: join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "engram") });
     const rows = ledger.sessions ?? [];
     if (rows.length > 0) {
       const engram = rows.reduce((sum, row) => sum + (row.prunedChars ?? 0), 0);

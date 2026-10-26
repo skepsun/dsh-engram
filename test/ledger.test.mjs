@@ -306,3 +306,37 @@ test("notePrune: host prunes land in hostPrunedChars, never in the engram leg", 
   assert.ok(after.hostPrunedChars >= 49_964, "summary surfaces the host leg");
   fs.rmSync(home, { recursive: true, force: true });
 });
+
+test("a restart does not zero a session's prune counters", async (t) => {
+  // Live bug (2026-10-26): flush wrote `row.prunedChars = session.prunedChars`,
+  // and a freshly booted process starts that counter at 0 — so the first flush
+  // after any restart erased the durable row's prune history. Same class as the
+  // reentrancy bug: the in-memory object is not the durable truth.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "engram-ledger-restart-"));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const file = ledgerFile(home);
+
+  const first = createLedger({ home, flushEvery: 0 });
+  first.notePrune("sess-r", "/repo/restart", { charsRemoved: 7_841, rewriteChars: 9_000 });
+  first.noteInjection("sess-r", "/repo/restart", "index", 1_000);
+  first.tick("sess-r", "/repo/restart");
+  first.flush();
+  const rowAfterOne = JSON.parse(fs.readFileSync(file, "utf8")).sessions["sess-r"];
+  assert.equal(rowAfterOne.prunedChars, 7_841);
+
+  // "Restart": a new process opens the same file, does ordinary work, flushes.
+  const second = createLedger({ home, flushEvery: 0 });
+  second.noteInjection("sess-r", "/repo/restart", "index", 500);
+  second.tick("sess-r", "/repo/restart");
+  second.flush();
+  const rowAfterTwo = JSON.parse(fs.readFileSync(file, "utf8")).sessions["sess-r"];
+  assert.equal(rowAfterTwo.prunedChars, 7_841, "prune history survives the restart");
+  assert.equal(rowAfterTwo.injectedChars, 1_500, "traffic keeps accumulating");
+
+  // And a new prune after the restart adds on top instead of resetting.
+  second.notePrune("sess-r", "/repo/restart", { charsRemoved: 2_000, rewriteChars: 1_000 });
+  second.noteInjection("sess-r", "/repo/restart", "index", 100);
+  second.tick("sess-r", "/repo/restart");
+  second.flush();
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).sessions["sess-r"].prunedChars, 9_841);
+});

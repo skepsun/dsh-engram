@@ -229,15 +229,23 @@ test("compaction credit comes from the committed summary, not from summarize()",
   const row = () => (ledger.summary().sessions ?? []).find((s) => s.workspace === "/repo/compaction");
   assert.equal(row()?.compactedChars ?? 0, 0, "foreign summary credits nothing");
 
+  // DSH's REAL event shape: the payload lives under `data`. The flat shape
+  // above is kept as a compatibility case — but it is the shape that made this
+  // test green for months while every production checkpoint went uncredited.
   emit({
     type: "compaction/summary",
-    summary: [{ type: "text", text: CONTEXT_GC_HEADING + "\npointer summary\n" + CONTEXT_GC_FOOTER }],
-    shadowedTokenCount: 50000,
+    seq: 7,
+    time: 1,
+    data: {
+      compactionId: "c-1",
+      summary: [{ type: "text", text: CONTEXT_GC_HEADING + "\npointer summary\n" + CONTEXT_GC_FOOTER }],
+      shadowedTokenCount: 50000,
+    },
   });
   assert.equal(
     row()?.compactedChars,
     200000 - (CONTEXT_GC_HEADING + "\npointer summary\n" + CONTEXT_GC_FOOTER).length,
-    "credited span − summary",
+    "credited span − summary (data-wrapped event)",
   );
 });
 

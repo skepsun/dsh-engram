@@ -162,7 +162,7 @@ test("status prints the two ledger legs and calls out a host-only ledger", async
   const home = await mkdtemp(join(tmpdir(), "engram-cli-legs-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   const { createLedger } = await import("../lib/ledger.js");
-  const ledger = createLedger({ home, every: 0 });
+  const ledger = createLedger({ home: join(home, "engram"), every: 0 });
   ledger.notePrune("s1", "/tmp/ws-legs", { charsRemoved: 7_841, rewriteChars: 9_000 });
   ledger.notePrune("s1", "/tmp/ws-legs", { charsRemoved: 64_200, rewriteChars: 0, source: "host" });
   ledger.noteInjection("s1", "/tmp/ws-legs", "index", 1_000);
