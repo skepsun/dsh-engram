@@ -43,7 +43,7 @@ const MIN_LONG_ROWS = 3; // §6: 长会话 = ≥200 请求
 const ENGRAM_TOOL_RE = /^(engram_|esr_)/;
 
 function parseArgs(argv) {
-  const out = { days: 14, md: false, out: null, api: null, home: null, g7: null };
+  const out = { days: 14, md: false, out: null, api: null, home: null, g7: null, g6: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--days") out.days = Number(argv[++i]) || 14;
@@ -53,6 +53,7 @@ function parseArgs(argv) {
     // `npm run bench:ledger` prints the worst per-operation share; feed it back
     // so the gate is a measurement, not a "未测" placeholder.
     else if (arg === "--g7") out.g7 = Number(argv[++i]);
+    else if (arg === "--g6") out.g6 = argv[++i] ?? null;
     else if (arg === "--home") out.home = argv[++i] ?? null;
   }
   return out;
@@ -241,7 +242,26 @@ function verdict(ok) {
 }
 
 /** The §6 gate table, computed from whatever data actually exists. */
-export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0, live = void 0, g7 = null } = {}) {
+/**
+ * Read a G6 artifact (`quality:ab run` → runs.json).
+ *
+ * The gate is only as honest as its input: an unparsable file is reported as
+ * absent, never guessed. A run below the pair floor carries its own `未测`
+ * verdict from the harness, so the floor rule lives in one place (the tool that
+ * produced the number).
+ */
+function readG6(file) {
+  if (file === null || file === undefined) return null;
+  try {
+    const report = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (report === null || typeof report !== "object") return null;
+    return { ...report, source: path.relative(process.cwd(), file) };
+  } catch {
+    return null;
+  }
+}
+
+export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0, live = void 0, g7 = null, g6 = null } = {}) {
   const engramHome = home ?? void 0;
   const ledger = readLedger({ home: engramHome });
   const sessions = scanSessions({ root: root ?? sessionsRoot(), days, now });
@@ -366,10 +386,14 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
       {
         id: "G6",
         name: "Quality Δ · 配对任务成功率差",
-        value: "未测",
+        // G6 cannot be derived from logs: it needs the paired A/B artifact. Read
+        // it from `quality:ab run`'s runs.json — never from a hand-typed number.
+        value: g6 === null || g6.deltaPp === null || g6.deltaPp === undefined ? "未测" : `${g6.deltaPp.toFixed(1)}pp`,
         target: "≤ 2pp",
-        verdict: "未测",
-        note: "needs paired A/B runs (not derivable from logs)",
+        verdict: g6 === null ? "未测" : (g6.gate?.verdict ?? "未测"),
+        note: g6 === null
+          ? "needs paired A/B runs (not derivable from logs) — pass --g6 <runs.json>"
+          : `${g6.paired?.pairs ?? 0} 对配对 · ${g6.tasks?.length ?? 0} 任务 × ${g6.seeds ?? 1} 种子 · ${g6.source ?? ""}`.trim(),
       },
       {
         id: "G7",
@@ -484,7 +508,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const home = args.home ?? void 0;
   const live = await fetchLiveCompaction(args.api);
-  const report = auditGates({ days: args.days, home, api: args.api, live, g7: args.g7 });
+  const report = auditGates({ days: args.days, home, api: args.api, live, g7: args.g7, g6: readG6(args.g6) });
   await fillIndexGate(report);
   const ledger = readLedger({ home });
   report.ledgerRows = ledger.sessions;

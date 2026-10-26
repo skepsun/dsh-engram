@@ -40,24 +40,24 @@
     "dsh": ">=0.1.2-alpha.2 <0.3.0-0"
   },
   "scripts": {
-    "setup": "node scripts/setup-links.mjs",
-    "prepublishOnly": "node scripts/prepublish-check.mjs",
+    "bench:ledger": "node eval/ledger-bench.mjs",
     "build:client": "node client/build.mjs && node client/build-model.mjs",
-    "test": "node --test \"test/**/*.test.mjs\"",
-    "eval": "node eval/recall-bench.mjs",
-    "gate:audit": "node eval/gate-audit.mjs",
-    "typecheck": "node client/typecheck.mjs",
-    "web-compaction": "node scripts/dsh-engram.mjs",
-    "web-compaction:status": "node scripts/dsh-engram.mjs status",
-    "web-compaction:enable": "node scripts/dsh-engram.mjs enable",
-    "web-compaction:revert": "node scripts/dsh-engram.mjs revert",
     "dsh-engram": "node scripts/dsh-engram.mjs",
     "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor",
-    "release-notes": "node scripts/gen-release-notes.mjs",
-    "bench:ledger": "node eval/ledger-bench.mjs",
-    "quality:ab": "node eval/quality-ab.mjs",
+    "eval": "node eval/recall-bench.mjs",
+    "gate:audit": "node eval/gate-audit.mjs",
     "playbook:audit": "node eval/playbook-audit.mjs",
-    "skill:check": "node eval/skill-export-check.mjs"
+    "prepublishOnly": "node scripts/prepublish-check.mjs",
+    "quality:ab": "node eval/quality-ab.mjs",
+    "release-notes": "node scripts/gen-release-notes.mjs",
+    "setup": "node scripts/setup-links.mjs",
+    "skill:check": "node eval/skill-export-check.mjs",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "typecheck": "node client/typecheck.mjs",
+    "web-compaction": "node scripts/dsh-engram.mjs",
+    "web-compaction:enable": "node scripts/dsh-engram.mjs enable",
+    "web-compaction:revert": "node scripts/dsh-engram.mjs revert",
+    "web-compaction:status": "node scripts/dsh-engram.mjs status"
   },
   "publishConfig": {
     "access": "public"

@@ -330,6 +330,20 @@ async function printDoctor(presetsDirFlag) {
     }
   }
 
+  // v0.8-D: an approval prompt nobody sees is a gate that silently blocks. The
+  // doctor line is where a user finds out there is something to approve.
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+    const { key, rows } = await loadExportable(process.cwd(), home);
+    const approved = new Set(approvedIds(loadApprovals(home), key));
+    const pending = exportSkills(rows, { config: SKILL_GATE, dir: defaultSkillDir(key), dryRun: true, approved, requireApproval: true }).pending;
+    if (pending.length > 0) {
+      notes.push(`有 ${pending.length} 条过门的 auto procedure 等批准才能导出成 skill：npx dsh-engram skill pending`);
+    }
+  } catch {
+    // no store yet — nothing to approve
+  }
+
   const stockLeft = presets.filter((p) => {
     try {
       return compactionWireStatus(readFileSyncSafe(p.path)) === "stock";
