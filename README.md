@@ -1079,7 +1079,17 @@ Explicit `engram_store` writes are always recorded regardless of these rules
 
 **Who earns a `[ENGRAM]` index line** (this is what actually touches the prompt):
 `signal >= minIndexSignal` **or** `hits >= promoteHits` **or** `kind === "task"`,
-then capped by `indexMaxLines` / `indexMaxChars`. One extra guard keeps the pipe
+then capped by `indexMaxLines` / `indexMaxChars`.
+
+**Procedures are evidence-gated (v0.8-A).** An auto-captured `fixed: <cmd>` row is
+a hypothesis, not a lesson: it starts with `evidenceCount = 1` and stays out of
+the index until the same command is verified **3** times with the last
+verification younger than **14 days** (`procedureMinEvidence` /
+`procedureMaxAgeDays`). The moment that command fails again the row is
+invalidated (`invalidatedBy` = the failing memory's id, signal → 0.2) and leaves
+the index immediately — a just-broken procedure is worse than none, because the
+next agent would copy it verbatim. Hand-written procedures with no evidence
+fields keep the older `hits >= promoteHits` path. One extra guard keeps the pipe
 clean: auto-captured git command echoes — text that embeds a shell chain
 (`git push: cd … && …`) — stay out of the index even when above the signal
 threshold, until recall hits have promoted them. Everything else sits quietly in
@@ -1164,6 +1174,9 @@ Defaults are token-conscious; override any key via the profile patch
                              # (git command echoes are excluded regardless,
                              # until promoted by recall hits)
     promoteHits: 3           # ...until recalled this many times
+    procedureMinEvidence: 3  # verified successes before a `fixed:` procedure
+                             # earns an index line (one success proves nothing)
+    procedureMaxAgeDays: 14  # ...and the last verification must be this fresh
     expireDays: 180          # memory TTL (0 = never)
     maxMemoriesPerWorkspace: 2000
     gcEnabled: true          # scheduled memory GC
