@@ -1107,7 +1107,17 @@ own files, so a hand-written skill sharing the root is never touched. When a
 procedure stops holding, its skill file disappears on the next export — the host
 catalog must not keep advertising a fix that just broke. `npm run skill:check`
 proves the seam end-to-end by loading DSH's own `dsh-skill-filesystem` provider
-and listing the exported skill through it. One extra guard keeps the pipe
+and listing the exported skill through it.
+
+**Subagent reports become durable capsules (v0.8-C, advisory).** A child's final
+report above `capsuleMinSourceChars` (1500) is distilled by structure — headings,
+bullets, question marks, next-step cues — into a `handoff` memory (结论 / 证据 /
+未决 / 下一步) whose footer records `source → capsule` chars. It does **not** shrink
+what the parent reads: DSH emits `tools/result` to observers only ("without
+exposing a mutation or error channel into the outcome"), so substitution needs a
+host seam that does not exist yet. What you get today is durability — the
+conclusion survives the child session and compaction — plus a real measurement of
+the saving for the day that seam lands. One extra guard keeps the pipe
 clean: auto-captured git command echoes — text that embeds a shell chain
 (`git push: cd … && …`) — stay out of the index even when above the signal
 threshold, until recall hits have promoted them. Everything else sits quietly in
