@@ -224,6 +224,10 @@ Fetch the exact records that are still in the store:
 只代表这一段时间只花了钱没省到。状态快照的 `boundaryPrune.armed` 告诉你 L1 是否真的
 武装；压缩入账要等第一次 checkpoint。
 
+**L1 自 0.7.11 起默认关闭**（`boundaryPrune: false`，需要时手动打开）。依据是两天的真机账本：
+宿主自己剪了 64,200 字符，而 engram 的边界剪枝在一个 220 请求、没有 todo 进度的会话里一次都没
+触发——只有规划型会话（真的在用 todo/goal）才吃得到这份收益。
+
 ## 10. FAQ
 
 - **有损吗？** 锚定细节**无损**（全部可通过工具重取）；只有无锚轮次走叙事/截断；所有原文仍留在

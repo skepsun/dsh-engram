@@ -846,7 +846,7 @@ means that preset was customized (or has no compaction group) and was left untou
 `dsh-compaction-basic unavailable` means the backend is missing and everything
 falls back to the default compressor.
 
-### BoundaryPrune (subtask-boundary pruning, default ON + ledger veto)
+### BoundaryPrune (subtask-boundary pruning, opt-in since v0.7.11 + ledger veto)
 
 Context GC owns *what a compaction summary says*; BoundaryPrune owns *when a
 deterministic prune fires*: at todo-completion progress and goal terminal
@@ -869,6 +869,11 @@ later request. The two switches are independent.
   simply never trigger (no boundary → no prune, zero side effects); the
   corpus-wide dry run activates on 38% of sessions. If the pruner service is
   absent the mechanism disables itself with one log line.
+- **Live read (2026-10-26, two days of real use)**: the Context Ledger recorded
+  the host pruning 64,200 chars on its own across two sessions (4 prunes in a
+  220-request session that never wrote a completed todo), while engram's own
+  leg produced 7,841 chars from a single boundary prune. The chain itself works
+  (v0.7.7–v0.7.9 fixed gate/execution/accounting); the *coverage* does not.
 - **Boundary sources**: todo-progress completion and goal terminal events
   (default), plus an optional **request-count cadence**
   (`boundaryPruneIdleCadence`, default 0/off) — the "step idle" source that
@@ -881,7 +886,11 @@ later request. The two switches are independent.
   T2048+small-edges lands 2.4× the first-prune savings of the host default on
   the real corpus (10.14M vs 4.23M chars). Lowering the threshold is safe with
   `resultPack` on, which archives the removed middles.
-- Default **on**: `boundaryPrune: true` (`false` is the opt-out). Adaptive gate
+- Default **off since v0.7.11**: `boundaryPrune: true` is the opt-in. Fifteen
+  hours of live ledger proved the host prunes over-threshold results on its own
+  (64,200 chars across two sessions, zero engram involvement) and that the
+  boundary source never fires in an ordinary 220-request session — only planning
+  sessions that use todos/goals get anything out of it. Adaptive gate
   `boundaryPruneAdaptive: true` lets the Context Ledger stop further fires once
   this workspace's own accounting is net negative (≥3 fires) — evidence can only
   turn pruning off. The log shows

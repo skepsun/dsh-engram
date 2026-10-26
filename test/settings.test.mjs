@@ -20,7 +20,11 @@ test("autoSupersede + verifyArtifact are exposed and propa-gateable", () => {
   assert.equal(defaults.autoSinkTodosOnEnd, true, "session-end todo auto-sink defaults ON");
   assert.equal(defaults.autoWebCompaction, false, "web auto-wiring of Context GC is opt-in (v0.6 default correction)");
   assert.equal(defaults.gcReplacesCompaction, false, "replacing host compaction is opt-in (v0.6)");
-  assert.equal(defaults.boundaryPrune, true, "BoundaryPrune defaults ON with the ledger veto (v0.6)");
+  assert.equal(
+    defaults.boundaryPrune,
+    false,
+    "BoundaryPrune defaults OFF since v0.7.11: the host prunes on its own and the boundary source never fires in ordinary sessions (live ledger: host 64,200 chars vs engram 7,841)",
+  );
   assert.equal(defaults.boundaryPruneAdaptive, true, "adaptive ledger gate defaults ON");
   assert.equal(defaults.resultPack, true, "default pruning stays lossless via the archive");
   assert.equal(defaults.jitEnabled, true, "JIT push defaults ON (bounded, silent without hits)");
