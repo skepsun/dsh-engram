@@ -26,6 +26,7 @@ arm="$2"
 case "${mode}" in
   perfect)   [ "$arm" = "on" ] && echo ok > ok.txt; [ "$arm" = "off" ] && echo ok > ok.txt ;;
   gap)       [ "$arm" = "on" ] && echo ok > ok.txt ;;
+  hurt)      [ "$arm" = "off" ] && echo ok > ok.txt ;;
   none-ok)   echo nope > no.txt ;;
 esac
 exit 0
@@ -71,15 +72,27 @@ test("identical arms score Δ=0pp and PASS the 2pp gate", () => {
   assert.equal(report.summary.on.rate, 1);
 });
 
-test("a real gap shows up as the paired delta, not as a raw rate", () => {
+test("a positive gap shows up as the paired delta and PASSES (the gate is one-sided)", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
   const res = runHarness("gap", out);
-  assert.equal(res.status, 1, "a >2pp delta fails the gate");
+  assert.equal(res.status, 0, "memory carrying the answer is a gain, not a gate failure");
   const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
   assert.equal(report.summary.on.rate, 1);
   assert.equal(report.summary.off.rate, 0);
   assert.equal(report.deltaPp, 100);
   assert.equal(report.paired.onlyA, 2, "both pairs are on-only wins");
+  assert.equal(report.gate.verdict, "PASS");
+  assert.equal(report.gate.target, "Δ ≥ −2pp");
+  assert.match(report.gate.note, /记忆带去了可用的信息/);
+});
+
+test("the gate fails only when the mounted arm is WORSE", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const res = runHarness("hurt", out);
+  assert.equal(res.status, 1, "a −100pp delta fails the gate");
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(report.deltaPp, -100);
+  assert.equal(report.paired.onlyB, 2, "both pairs are off-only wins");
   assert.equal(report.gate.verdict, "FAIL");
 });
 
@@ -90,7 +103,7 @@ test("when both arms fail everywhere the gate is a tie, not a fake pass on 0/0",
   const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
   assert.equal(report.summary.on.passes, 0);
   assert.equal(report.deltaPp, 0);
-  assert.equal(report.gate.verdict, "PASS", "0pp is a tie; a tie does not violate ≤2pp");
+  assert.equal(report.gate.verdict, "PASS", "0pp is a tie; a tie does not violate Δ ≥ −2pp");
 });
 
 test("the harness writes every run log so a verdict can be audited", () => {

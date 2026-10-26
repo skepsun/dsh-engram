@@ -1,0 +1,50 @@
+[
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "money"],
+    "text": "ledger-kata 约定（money）：sumAmounts 必须先把每个金额换算成整数「分」再累加（Math.round(x*100)），结果再除以 100；applyDiscount 对折扣后的结果做四舍五入（half up）到分，而不是对折扣额取整。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "retry"],
+    "text": "ledger-kata 约定（retry）：attempt(fn,{tries}) 最多调用 fn 共 tries 次（不是 tries+1），首次调用传下标 0，依次递增；全部失败时抛出最后一次的错误。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "timefmt"],
+    "text": "ledger-kata 约定（timefmt）：formatStamp 输出 UTC ISO 到秒并以 Z 结尾（2026-01-02T03:04:05Z），不得依赖机器时区；parseStamp 必须能把该格式解析回同一个时刻。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "queue"],
+    "text": "ledger-kata 约定（queue）：sortByScore 必须返回新数组、不改动入参；按 score 降序；分数相同时保持原数组中的先后顺序（稳定）。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "errors"],
+    "text": "ledger-kata 约定（errors）：fail(code, message, details) 抛 Error，message 形如 `E_<CODE>: <message>`，错误对象带 .code 与 .details（无 details 时为空对象或 undefined）；code 必须是 UPPER_SNAKE_CASE，否则抛 code 不合法的错误。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": ["seeded", "ledger-kata", "csv"],
+    "text": "ledger-kata 约定（csv）：parseCsvLine 支持双引号包裹的字段（字段内可含逗号），双引号用 \"\" 转义；toCsvLine 在字段含逗号或引号时加引号并转义，保证 toCsvLine→parseCsvLine 往返一致。"
+  },
+  {
+    "kind": "insight",
+    "signal": 0.7,
+    "tags": ["seeded", "ledger-kata", "outdated"],
+    "text": "ledger-kata 老约定：时间戳一律用本机本地时区 toLocaleString 输出，方便人看（2025 年的做法）。"
+  },
+  {
+    "kind": "insight",
+    "signal": 0.65,
+    "tags": ["seeded", "ledger-kata", "outdated"],
+    "text": "ledger-kata 老约定：排序直接对入参 sort 就行，省一次拷贝（2025 年的做法）。"
+  }
+]

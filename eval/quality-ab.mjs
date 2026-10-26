@@ -41,6 +41,7 @@ function parseArgs(argv) {
     else if (arg === "--home") out.home = next();
     else if (arg === "--timeout-ms") out.timeoutMs = Number(next()) || out.timeoutMs;
     else if (arg === "--seed-memory") out.seedMemory = next();
+    else if (arg === "--hide-store-for") out.hideStoreFor = next();
     // One task is not a quality measurement — same discipline as G1's row floor.
     else if (arg === "--min-pairs") out.minPairs = Number(next()) || 10;
     else if (arg === "--arm") {
@@ -201,6 +202,7 @@ function run(args) {
   if (!args.workspace) throw new Error("run needs --workspace <fixture dir>");
   const tasks = loadTasks(args.tasks);
   const arms = args.armIds ?? [];
+  args.arms = arms;
   if (arms.length !== 2) throw new Error("run needs exactly two arms: --arm on,off");
   fs.mkdirSync(args.out, { recursive: true });
 
@@ -230,14 +232,35 @@ function run(args) {
         // pin it verbatim and keep the arm the only difference.
         const prompt = task.prompt;
         const runStarted = Date.now();
-        const res = dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs });
+        // A control arm must not be able to read what the treatment arm was
+        // given. Both arms share one DSH_HOME, so the seeded store is physically
+        // moved aside for the control's run (a pilot proved a bare agent will
+        // `cat` the store if it is reachable — fair only if we make it
+        // unreachable).
+        const storeFile = path.join(home, "storages", "dsh_engram.json");
+        // Move it OUT of DSH_HOME: renaming inside the same directory is not
+        // hiding — a pilot's control arm listed `storages/` and read the file
+        // anyway (it was named `dsh_engram.json.g6-hidden`).
+        const hiddenFile = path.join(os.tmpdir(), `dsh_engram.json.g6-hidden-${process.pid}`);
+        const hideStore = args.hideStoreFor === arm && fs.existsSync(storeFile);
+        if (hideStore) fs.renameSync(storeFile, hiddenFile);
+        let res;
+        try {
+          res = dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs });
+        } finally {
+          if (hideStore) fs.renameSync(hiddenFile, storeFile);
+        }
         const wallMs = Date.now() - runStarted;
-        fs.writeFileSync(path.join(dir, "run.log"), `${res.stdout ?? ""}\n--- stderr ---\n${res.stderr ?? ""}\n`);
+        const log = `${res.stdout ?? ""}\n--- stderr ---\n${res.stderr ?? ""}\n`;
+        fs.writeFileSync(path.join(dir, "run.log"), log);
 
         const check = spawnSync("bash", ["-lc", task.check], { cwd: ws, encoding: "utf8", timeout: args.timeoutMs });
         const pass = check.status === 0;
         fs.writeFileSync(path.join(dir, "check.log"), `${check.stdout ?? ""}\n--- stderr ---\n${check.stderr ?? ""}\n`);
-        rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs });
+        // Contamination flag: a control run that mentions the memory store did
+        // not run blind, whatever it scored.
+        const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]/.test(log);
+        rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}) });
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }
     }
@@ -264,6 +287,23 @@ function run(args) {
     }
   }
   const deltaPp = summary[arms[0]].rate === null || summary[arms[1]].rate === null ? null : (summary[arms[0]].rate - summary[arms[1]].rate) * 100;
+  /**
+   * Gate semantics (deliberately one-sided).
+   *
+   * G6 asks a hard question — "does mounting this make tasks worse?" — and a soft
+   * one — "does it make them better?". A symmetric |Δ| ≤ 2pp would fail a run
+   * where memory carried the answer, which is the mechanism working, not
+   * breaking. So: Δ ≥ −2pp passes the hard condition; Δ > +2pp is reported as a
+   * measured gain (the proposal's aspiration, not its floor).
+   */
+  const floors =
+    pairs.length < args.minPairs
+      ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "未测", note: `${pairs.length} 对配对 — 需要 ≥ ${args.minPairs}` }
+      : deltaPp <= -2.0001
+        ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "FAIL", note: `${arms[0]} 比 ${arms[1]} 低 ${Math.abs(deltaPp).toFixed(1)}pp — 挂载让任务变差了` }
+        : deltaPp > 2
+          ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "PASS", note: `${arms[0]} 高 ${deltaPp.toFixed(1)}pp — 记忆带去了可用的信息` }
+          : { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "PASS", note: "两臂持平（不伤害）" };
   const report = {
     startedAt,
     seedMemory: args.seedMemory ?? null,
@@ -272,15 +312,11 @@ function run(args) {
     tasks: tasks.map((task) => task.id),
     arms,
     summary,
+    hideStoreFor: args.hideStoreFor ?? null,
+    contaminated: rows.filter((row) => row.contaminated === true).length,
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,
-    gate: {
-      id: "G6",
-      target: "≤ 2pp",
-      minPairs: args.minPairs,
-      verdict:
-        pairs.length < args.minPairs ? "未测" : Math.abs(deltaPp) <= 2 ? "PASS" : "FAIL",
-    },
+    gate: floors,
     rows,
   };
   fs.writeFileSync(path.join(args.out, "runs.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -299,7 +335,7 @@ function run(args) {
       ? `_${pairs.length} paired runs is a plumbing check, not a quality measurement._`
       : "",
     "",
-    `G6 ${report.gate.verdict} (target ≤ 2pp${pairs.length < args.minPairs ? `; ${pairs.length} paired runs — need ≥ ${args.minPairs}` : ""})`,
+    `G6 ${report.gate.verdict} (target ${report.gate.target}${pairs.length < args.minPairs ? `; ${pairs.length} paired runs — need ≥ ${args.minPairs}` : ""}) — ${report.gate.note}`,
     "",
   ];
   fs.writeFileSync(path.join(args.out, "REPORT.md"), lines.join("\n"));

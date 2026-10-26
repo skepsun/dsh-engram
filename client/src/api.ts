@@ -304,6 +304,17 @@ export class EngramApiError extends Error {
   }
 }
 
+/** One row of the skill-export approval queue (GET /api/dsh-engram/approvals). */
+export interface ApprovalItem {
+  id: string;
+  workspace?: string;
+  name: string;
+  description: string;
+  approved: boolean;
+  evidence: number;
+  lastVerifiedAt: number | null;
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   let body: unknown;
   try {
@@ -344,6 +355,25 @@ export class EngramApi {
 
   async tasks(workspace: string, includeStable = false): Promise<{ items: TaskRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/tasks${query({ workspace, includeStable: includeStable ? "1" : undefined })}`));
+  }
+
+  /**
+   * v0.8-D approvals: evidence-passed procedures the exporter would write, split
+   * into approved/pending. The server recomputes it from the same planner the
+   * CLI uses, so a click here can never approve something `skill export` skips.
+   */
+  async approvals(workspace: string): Promise<{ items: ApprovalItem[] }> {
+    return readJson(await fetch(`${API_PREFIX}/approvals${query({ workspace })}`));
+  }
+
+  async setApproval(workspace: string, id: string, action: "approve" | "revoke", note?: string): Promise<{ items: ApprovalItem[] }> {
+    return readJson(
+      await fetch(`${API_PREFIX}/approvals`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspace, id, action, note }),
+      }),
+    );
   }
 
   /** Real tool-call rollup over recent session logs (host /toolstats). */

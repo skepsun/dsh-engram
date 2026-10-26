@@ -1,0 +1,61 @@
+{
+  "startedAt": 1793000208040,
+  "seedMemory": "eval/g6/seed-memory-hidden.json",
+  "finishedAt": 1793000507570,
+  "seeds": 1,
+  "tasks": [
+    "csv"
+  ],
+  "arms": [
+    "ab-engram",
+    "ab-bare"
+  ],
+  "summary": {
+    "ab-engram": {
+      "runs": 1,
+      "passes": 1,
+      "rate": 1,
+      "meanWallMs": 175191
+    },
+    "ab-bare": {
+      "runs": 1,
+      "passes": 1,
+      "rate": 1,
+      "meanWallMs": 123115
+    }
+  },
+  "hideStoreFor": "ab-bare",
+  "contaminated": 1,
+  "paired": {
+    "pairs": 1,
+    "onlyA": 0,
+    "onlyB": 0
+  },
+  "deltaPp": 0,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "未测",
+    "note": "1 对配对 — 需要 ≥ 10"
+  },
+  "rows": [
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 175191
+    },
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 123115,
+      "contaminated": true
+    }
+  ]
+}

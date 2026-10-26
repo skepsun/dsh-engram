@@ -712,3 +712,74 @@ test("api: /stats exposes the Context Ledger, null when disabled", async () => {
   await domain.close();
   fs.rmSync(statsRoot, { recursive: true, force: true });
 });
+
+// ── v0.8-D: the approvals surface ──────────────────────────────────────────
+// The GUI must not be able to approve what the CLI would refuse, so both read
+// the same planner. This test pins the round trip: pending → approve → pending
+// empty, and the record lands outside the memory store.
+
+test("GET /approvals lists evidence-passed procedures as pending, POST approves them", async () => {
+  const store = await openEngramDomain(fakeFacility(), CONFIG);
+  const now = Date.now();
+  const ws = "/w-approvals";
+  const stored = await store.storeMemory(
+    {
+      text: "fixed: npm test — 2 failing runs now succeed",
+      kind: "procedure",
+      workspace: ws,
+      tags: ["procedure", "auto-captured", "fix", "cmd:npm_test"],
+      sessionId: "s1",
+      signal: 0.5,
+      evidenceCount: 3,
+      lastVerifiedAt: now - 1000,
+      createdAt: now - 3 * 86_400_000,
+      updatedAt: now - 1000,
+    },
+    CONFIG,
+  );
+  const procedure = stored.stored;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "engram-api-approvals-"));
+  const service = {
+    config: CONFIG,
+    engramHome: () => home,
+    openedDomain: () => store,
+    getDomain: () => Promise.resolve(store),
+  };
+  const routes = makeEngramRoutes(service);
+  const approvals = routes.find((r) => r.path === `${API_PREFIX}/approvals`);
+  assert.ok(approvals, "/approvals route");
+
+  const before = res();
+  await approvals.handler(req({ url: `${API_PREFIX}/approvals?workspace=${encodeURIComponent(ws)}` }), before);
+  assert.equal(before._out.status, 200);
+  const listed = JSON.parse(before._out.body);
+  assert.equal(listed.items.length, 1, "one pending procedure");
+  assert.equal(listed.items[0].id, procedure.id);
+  assert.equal(listed.items[0].approved, false);
+  assert.match(listed.items[0].name, /^engram-fix-/);
+
+  const approved = res();
+  await approvals.handler(
+    req({ method: "POST", url: `${API_PREFIX}/approvals`, body: { workspace: ws, id: procedure.id, action: "approve", note: "看过了" } }),
+    approved,
+  );
+  assert.equal(approved._out.status, 200);
+  const afterBody = JSON.parse(approved._out.body);
+  assert.equal(afterBody.items[0].approved, true, "approval is reflected");
+
+  const record = JSON.parse(fs.readFileSync(path.join(home, "playbook-approvals.json"), "utf8"));
+  assert.equal(record.workspaces[ws][procedure.id].note, "看过了", "record lives outside the store");
+
+  const revoked = res();
+  await approvals.handler(req({ method: "POST", url: `${API_PREFIX}/approvals`, body: { workspace: ws, id: procedure.id, action: "revoke" } }), revoked);
+  // Revoking does not delete evidence: the row falls back to "pending", which is
+  // exactly what the operator needs to see (it will be written again the moment
+  // it is re-approved).
+  const afterRevoke = JSON.parse(revoked._out.body).items;
+  assert.equal(afterRevoke.length, 1);
+  assert.equal(afterRevoke[0].approved, false, "revoked rows return to pending");
+
+  const bad = res();
+  await approvals.handler(req({ method: "POST", url: `${API_PREFIX}/approvals`, body: { workspace: ws, id: procedure.id, action: "yeet" } }), bad);
+  assert.equal(bad._out.status, 400);
+});

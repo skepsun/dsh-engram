@@ -1109,6 +1109,12 @@ catalog must not keep advertising a fix that just broke. `npm run skill:check`
 proves the seam end-to-end by loading DSH's own `dsh-skill-filesystem` provider
 and listing the exported skill through it.
 
+**The approval queue is in the GUI too (v0.8.4).** The memory tab shows
+"Playbook 待批准" with evidence counts and approve/revoke buttons, backed by
+`GET|POST /api/dsh-engram/approvals`. The route recomputes the list with the same
+planner `skill export` uses, so a click can never approve something the CLI would
+skip; revoking returns a row to pending rather than deleting its evidence.
+
 **Writing a skill needs a human yes (v0.8-D).** Evidence (`≥3` verified
 successes) gets a procedure into the private index line; it does not, on its own,
 put a file where the host advertises it to every agent. `skill export` therefore

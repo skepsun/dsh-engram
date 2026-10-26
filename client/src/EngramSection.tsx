@@ -21,7 +21,7 @@ import { EngramTelemetry } from "./EngramTelemetry";
 import { EngramConfigCard, type EngramConfigValue } from "./EngramConfigCard";
 import type { EngramScope } from "./scope";
 import { EngramDetail, type DetailTarget } from "./EngramDetail";
-import type { EngramApi, EngramConfig, EngramOverview, ImportReport, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport } from "./api";
+import type { EngramApi, EngramConfig, EngramOverview, ImportReport, MemoryRecord, TaskRecord, LinkRecord, EntityRecord, GcReport, ApprovalItem } from "./api";
 import { useEngramTheme } from "./theme";
 import { POLL_MS, taskGaps } from "./esrModel";
 
@@ -255,6 +255,9 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [nodes, setNodes] = useState<EntityRecord[]>([]);
+  /** v0.8-D: procedures whose evidence passed and that wait for a human yes. */
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -299,6 +302,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
       // workspace === "" → 全部工作区：stat 卡显示全局总数，表格按工作区分组
       // 完整展示所有记忆（默认视图）；选中某个工作区时各卡片与表格跟随该工作区。
       const wsList = workspace ? [workspace] : Object.keys(ov.workspaces);
+      const approvalGroups = await Promise.all(wsList.map((w) => api.approvals(w).catch(() => ({ items: [] as ApprovalItem[] }))));
       const [mem, taskGroups, linkGroups, nodeGroups] = await Promise.all([
         api.memories({
           workspace: workspace || undefined,
@@ -314,6 +318,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
       setTasks(taskGroups.flatMap((x) => x.items));
       setLinks(linkGroups.flatMap((x) => x.items));
       setNodes(nodeGroups.flatMap((x) => x.items));
+      setApprovals(approvalGroups.flatMap((x) => x.items));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -506,6 +511,20 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
     if (memPage >= memPageCount) setMemPage(Math.max(0, memPageCount - 1));
   }, [memPage, memPageCount]);
 
+  /** v0.8-D: 人在 GUI 里点头/收回——写文件给宿主广告的只有这一步。 */
+  const toggleApproval = async (item: ApprovalItem) => {
+    setApprovalBusy(item.id);
+    setError(null);
+    try {
+      await api.setApproval(item.workspace ?? workspace, item.id, item.approved ? "revoke" : "approve");
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApprovalBusy(null);
+    }
+  };
+
   /** GUI 新建任务（POST /api/dsh-engram/tasks），默认落到当前选中的工作区。 */
   const createNewTask = async () => {
     const ws = newTaskWs || workspace || workspaces[0] || "";
@@ -604,6 +623,34 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+
+      {view === "mem" && approvals.length > 0 && (
+        <div style={{ ...s.card, marginBottom: 12, borderColor: "#f0c36d" }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+            Playbook 待批准（{approvals.filter((a) => !a.approved).length} 条 / 共 {approvals.length}）
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+            证据已过关（≥3 次验证、14 天内）。写文件给宿主广告需要你点头 —— 证据证明命令跑通过，不证明指令是对的。
+            批准后：<code>npx dsh-engram skill export</code>。
+          </div>
+          {approvals.map((item) => (
+            <div key={item.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 12 }}>
+              <code style={{ fontWeight: 600 }}>{item.name}</code>
+              <span style={{ opacity: 0.7 }}>{item.id.slice(0, 8)} · 证据 {item.evidence} 次</span>
+              <span style={{ opacity: 0.7, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {item.description}
+              </span>
+              <button
+                style={s.btn}
+                disabled={approvalBusy === item.id}
+                onClick={() => void toggleApproval(item)}
+              >
+                {item.approved ? "撤销" : "批准"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {view === "mem" && (
         <>
