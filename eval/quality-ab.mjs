@@ -42,6 +42,8 @@ function parseArgs(argv) {
     else if (arg === "--timeout-ms") out.timeoutMs = Number(next()) || out.timeoutMs;
     else if (arg === "--seed-memory") out.seedMemory = next();
     else if (arg === "--hide-store-for") out.hideStoreFor = next();
+    else if (arg === "--control-first") out.controlFirst = true;
+    else if (arg === "--log-dir") out.logDir = next();
     // One task is not a quality measurement — same discipline as G1's row floor.
     else if (arg === "--min-pairs") out.minPairs = Number(next()) || 10;
     else if (arg === "--arm") {
@@ -217,9 +219,26 @@ function run(args) {
   const rows = [];
   const startedAt = Date.now();
 
+  // Run ORDER is part of the isolation. A control run that happens after a
+  // treatment run can read the treatment's `run.log` (a real control arm did
+  // exactly that in round 2: it walked to `ab-engram/<task>/seed-0/run.log` and
+  // lifted the convention out of the summary). `--control-first` runs every
+  // control first, so no treatment artifact exists yet; `--log-dir` moves logs
+  // outside the run tree entirely.
+  const plan = [];
   for (const task of tasks) {
     for (let seed = 0; seed < args.seeds; seed += 1) {
-      for (const arm of arms) {
+      for (const arm of arms) plan.push({ task, seed, arm });
+    }
+  }
+  if (args.controlFirst) {
+    const control = arms[1];
+    plan.sort((a, b) => (a.arm === control ? 0 : 1) - (b.arm === control ? 0 : 1));
+  }
+
+  for (const { task, seed, arm } of plan) {
+    {
+      {
         const dir = path.join(args.out, arm, task.id, `seed-${seed}`);
         const ws = path.join(dir, "ws");
         fs.rmSync(dir, { recursive: true, force: true });
@@ -252,14 +271,22 @@ function run(args) {
         }
         const wallMs = Date.now() - runStarted;
         const log = `${res.stdout ?? ""}\n--- stderr ---\n${res.stderr ?? ""}\n`;
-        fs.writeFileSync(path.join(dir, "run.log"), log);
+        // Default location keeps the old layout; --log-dir keeps the workspace
+        // tree free of anything another arm could read.
+        const logPath = args.logDir === undefined
+          ? path.join(dir, "run.log")
+          : (fs.mkdirSync(path.join(args.logDir, arm, task.id), { recursive: true }), path.join(args.logDir, arm, task.id, `seed-${seed}.log`));
+        fs.writeFileSync(logPath, log);
 
         const check = spawnSync("bash", ["-lc", task.check], { cwd: ws, encoding: "utf8", timeout: args.timeoutMs });
         const pass = check.status === 0;
         fs.writeFileSync(path.join(dir, "check.log"), `${check.stdout ?? ""}\n--- stderr ---\n${check.stderr ?? ""}\n`);
         // Contamination flag: a control run that mentions the memory store did
         // not run blind, whatever it scored.
-        const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]/.test(log);
+        // A control run that mentions the store, the tool, or a SIBLING arm's
+        // artifact did not run blind (round 2 caught one reading the treatment's
+        // run.log for the very same task).
+        const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md/.test(log);
         rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}) });
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }

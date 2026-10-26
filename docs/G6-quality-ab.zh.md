@@ -165,7 +165,28 @@ node eval/quality-ab.mjs run --tasks eval/g6/tasks.json \
 （`eval/g6/seed-memory-hidden.json`，6 条团队约定 + 2 条故意过时的旧约定）。
 同样的 prompt、同样的模型、同样的工作区——两臂唯一的差别是那份记忆。
 
-### 不许「偷看」——第一次 pilot 就是这么废掉的
+### 三个泄漏，一个教训：agent 有 shell，隔离必须是结构性的
+
+第一次 pilot：on 臂 247s、bare 77s，两臂都过。翻日志发现控制组干了两件事——prompt
+里还留着旧版本的「先查记忆」提示（我生成任务文件时没重生成），而且它真的去
+`ls $DSH_HOME/storages/`，把 `dsh_engram.json.g6-hidden` 读走了。只改名不搬走，等于没藏。
+
+第二次（正式矩阵）跑完才发现**第三个泄漏**：控制组能顺着 `..` 走到
+`ab-engram/<task>/seed-0/run.log`——同任务的 on 臂日志里，agent 自己把团队约定
+复述了一遍。这一轮的 12 对因此**无效**：控制组不是「没有记忆」，而是「读了对手的笔记」。
+
+现在的三道结构性隔离：
+
+1. 控制臂运行时把记忆库文件**移出 `DSH_HOME`**（系统临时目录，跑完移回）；
+2. `--control-first`：**所有控制组先跑完**，再跑实验组——控制组运行时，同任务
+   的实验组日志还不存在；
+3. `--log-dir`：日志写到运行树**外面**；跑批输出本身也不在仓库里（否则能顺着
+   `..` 读到 `eval/g6/oracle/` 和种子文件）。
+
+外加污染检测（`dsh_engram` / `engram_recall` / `[ENGRAM]` / `ab-engram/` / `runs.json`），
+报告里计数——一个跑出漂亮数字的 pilot 差点被当成证据，这条是那次教训的产物。
+
+### 旧版记录：第一版隔离方法
 
 第一版 pilot 里 on 臂 247s、bare 77s，两臂都过。翻日志发现 bare 臂干了两件事：
 
