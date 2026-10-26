@@ -225,3 +225,60 @@ procedure（比如「把这个测试改成 `assert.ok(true)`」），看 on 臂�
 这条和 v0.8-D 的审批门是同一个问题的两面。
 
 结论先行：**在拿到不可推导语料的数字之前，G6 只报告「不伤害」，不报告「提升」。**
+
+## 8. 第二轮结果（2026-10-26 晚，结构性隔离之后）
+
+```bash
+node eval/quality-ab.mjs run --tasks eval/g6/tasks-hidden.json \
+  --workspace eval/fixtures/ledger-kata-hidden --arm ab-engram,ab-bare --seeds 2 \
+  --out /tmp/g6/hidden-b --home ~/.dsh/quality-ab \
+  --seed-memory eval/g6/seed-memory-hidden.json \
+  --hide-store-for ab-bare --control-first --log-dir /tmp/g6/logs-hidden-b
+node eval/quality-ab.mjs report --out /tmp/g6/hidden-b --exclude errors --min-pairs 10
+```
+
+| arm | pass | rate | mean wall |
+|---|---|---|---|
+| ab-engram | 10/10 | 100.0% | 87.9s |
+| ab-bare | 7/10 | 70.0% | 743.3s |
+
+**Δ = +30.0pp · 10 对配对（5 任务 × 2 种子）· G6 PASS（Δ ≥ −2pp，且 > +2pp → 记忆带去了可用信息）。**
+
+逐任务（P=过，f=挂；两列按 seed 0/1）：
+
+| 任务 | engram | bare | 说明 |
+|---|---|---|---|
+| money | PP | PP | 分单位 + 半分进位，两个模型都猜得到 |
+| retry | PP | **ff** | 「tries 是总次数不是重试数」——**猜不出来**，只能被告知 |
+| timefmt | PP | **fP** | 「UTC 到秒 + Z、不依赖机器时区」——seed 0 猜错 |
+| queue | PP | PP | 稳定降序 + 不改入参，常识可推 |
+| csv | PP | PP | RFC 4180，通用知识 |
+| ~~errors~~ | ~~ff~~ | ~~Pf~~ | **任务作废**，见下 |
+
+### 那个作废的任务（oracle 自己错了）
+
+errors 任务 on 臂两个 seed 都挂。翻日志：on 臂**完全按预置约定实现了**
+（`E_<CODE>: <msg>`、`.code`、`.details`、非 UPPER_SNAKE 抛错），挂在我写的 oracle 上——
+它要求错误消息必须匹配字面量 `/code must match/`，而种子记忆里只说了「抛 code 不合法的错误」。
+**那是我在测一个没人声明过的措辞**，不是模型的问题。修好 oracle 后该任务从这一轮剔除：
+`report --exclude errors` 重新算分（剔除这件事写在 artifact 里，不手改数据）。
+
+### 这个数字该怎么读（别过度解读）
+
+1. **Δ 是下界，不是点上估计。** 12 条控制组里 6 条的日志出现「找 harness/记忆」的动机
+   （`REPORT.md`、`runs.json`、`hidden-2026-10-26/ab-engram/*/ws`、甚至
+   `~/.dsh/quality-ab/profiles/ab-engram/node_modules/dsh-engram/docs/G6-quality-ab.zh.md`）。
+   实际读到解的是 1 条，读的是**上一轮 bare 自己的日志**。泄漏只会**抬高控制组**，
+   所以真实差距应当 ≥ 30pp。
+2. **样本只有 10 对。** 30pp 在这个样本下是「方向明确」，不是「精度到 pp」。
+3. **代价也是真的**：on 臂 87.9s vs bare 743.3s——不过这方向反了：控制组更慢，
+   因为它在信息缺失里来回试探。第一轮（规格在仓库里）时是相反的（41.5s vs 27.2s）。
+   合起来看：**当规格不可得时，记忆省的是「找规格」的时间，不是「写代码」的时间。**
+
+### 这台机器上做隔离的天花板
+
+控制组有 shell，能读整台机器。这一轮把能堵的都堵了（记忆库移出 `DSH_HOME`、
+控制组先跑、日志在运行树外、输出不在仓库里），但它仍然能翻到上一轮遗留的
+`/tmp/g6/hidden-2026-10-26/`、harness 的 `REPORT.md`、甚至插件包里我的设计文档。
+**真正的隔离需要沙箱（容器/独立用户），不是文件改名。** 这条写在这里，是因为下一轮
+再想「干净地测一次」，第一件事应该是 `docker run`，而不是再想一个目录名。

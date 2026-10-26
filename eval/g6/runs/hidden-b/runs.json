@@ -1,0 +1,252 @@
+{
+  "startedAt": 1793004219850,
+  "seedMemory": "eval/g6/seed-memory-hidden.json",
+  "finishedAt": 1793013778496,
+  "seeds": 2,
+  "tasks": [
+    "money",
+    "retry",
+    "timefmt",
+    "queue",
+    "csv"
+  ],
+  "arms": [
+    "ab-engram",
+    "ab-bare"
+  ],
+  "summary": {
+    "ab-engram": {
+      "runs": 10,
+      "passes": 10,
+      "rate": 1,
+      "meanWallMs": 87938
+    },
+    "ab-bare": {
+      "runs": 10,
+      "passes": 7,
+      "rate": 0.7,
+      "meanWallMs": 743307
+    }
+  },
+  "hideStoreFor": "ab-bare",
+  "contaminated": 6,
+  "paired": {
+    "pairs": 10,
+    "onlyA": 3,
+    "onlyB": 0
+  },
+  "deltaPp": 30.000000000000004,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "ab-engram 高 30.0pp — 记忆带去了可用的信息"
+  },
+  "rows": [
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 136288
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 933831,
+      "contaminated": true
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 2277801
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 953611
+    },
+    {
+      "task": "timefmt",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 1918682
+    },
+    {
+      "task": "timefmt",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 825032,
+      "contaminated": true
+    },
+    {
+      "task": "queue",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 111430
+    },
+    {
+      "task": "queue",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 59629
+    },
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 131949,
+      "contaminated": true
+    },
+    {
+      "task": "csv",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 84814,
+      "contaminated": true
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 187421
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 73880
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 100587
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 55867
+    },
+    {
+      "task": "timefmt",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 59859
+    },
+    {
+      "task": "timefmt",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 76172
+    },
+    {
+      "task": "queue",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 50727
+    },
+    {
+      "task": "queue",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 69946
+    },
+    {
+      "task": "csv",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 107364
+    },
+    {
+      "task": "csv",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 97557
+    }
+  ],
+  "excluded": [
+    "errors"
+  ],
+  "recomputedAt": 1793014068092,
+  "invalidRows": [
+    {
+      "task": "errors",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 106692,
+      "contaminated": true
+    },
+    {
+      "task": "errors",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 188064,
+      "contaminated": true
+    },
+    {
+      "task": "errors",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 134397
+    },
+    {
+      "task": "errors",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 82703
+    }
+  ]
+}

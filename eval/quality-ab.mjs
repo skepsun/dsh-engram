@@ -43,6 +43,7 @@ function parseArgs(argv) {
     else if (arg === "--seed-memory") out.seedMemory = next();
     else if (arg === "--hide-store-for") out.hideStoreFor = next();
     else if (arg === "--control-first") out.controlFirst = true;
+    else if (arg === "--exclude") out.exclude = next().split(",").map((x) => x.trim()).filter(Boolean);
     else if (arg === "--log-dir") out.logDir = next();
     // One task is not a quality measurement — same discipline as G1's row floor.
     else if (arg === "--min-pairs") out.minPairs = Number(next()) || 10;
@@ -199,10 +200,122 @@ function seedStore(home, ws, memories) {
   fs.writeFileSync(file, `${JSON.stringify(unit)}\n`);
 }
 
+/** Write both artifacts (machine + human) from one report object. */
+function writeArtifacts(out, report, minPairs) {
+  fs.writeFileSync(path.join(out, "runs.json"), `${JSON.stringify(report, null, 2)}\n`);
+  const { summary, arms, deltaPp, paired, gate, tasks } = report;
+  const lines = [
+    "# G6 · paired quality A/B",
+    "",
+    `tasks ${tasks.length} · seeds ${report.seeds} · paired runs ${paired.pairs}`,
+    ...(report.excluded?.length ? ["", `excluded (broken oracle, not a data point): ${report.excluded.join(", ")}`] : []),
+    "",
+    "| arm | pass | rate | mean wall |",
+    "|---|---|---|---|",
+    ...arms.map((arm) => `| ${arm} | ${summary[arm].passes}/${summary[arm].runs} | ${(summary[arm].rate * 100).toFixed(1)}% | ${(summary[arm].meanWallMs / 1000).toFixed(1)}s |`),
+    "",
+    `Δ (${arms[0]} − ${arms[1]}) = ${deltaPp === null ? "未测" : `${deltaPp.toFixed(1)}pp`} · only-${arms[0]} wins ${paired.onlyA} · only-${arms[1]} wins ${paired.onlyB}`,
+    paired.pairs < minPairs ? `_${paired.pairs} paired runs is a plumbing check, not a quality measurement._` : "",
+    "",
+    `G6 ${gate.verdict} (target ${gate.target}${paired.pairs < minPairs ? `; ${paired.pairs} paired runs — need ≥ ${minPairs}` : ""}) — ${gate.note}`,
+    "",
+  ];
+  fs.writeFileSync(path.join(out, "REPORT.md"), lines.join("\n"));
+}
+
+/**
+ * Score rows into summary + paired delta + the gate verdict. Shared by `run`
+ * (fresh runs) and `report` (recomputing an existing artifact with an
+ * exclusion), so a number is never produced two different ways.
+ */
+function analyze({ rows, tasks, seeds, arms, minPairs }) {
+const summary = {};
+for (const arm of arms) {
+  const armRows = rows.filter((row) => row.arm === arm);
+  const passes = armRows.filter((row) => row.pass).length;
+  summary[arm] = {
+    runs: armRows.length,
+    passes,
+    rate: armRows.length === 0 ? null : passes / armRows.length,
+    meanWallMs: armRows.length === 0 ? null : Math.round(armRows.reduce((sum, row) => sum + row.wallMs, 0) / armRows.length),
+  };
+}
+// Paired delta: only task×seed pairs where BOTH arms ran count.
+const pairs = [];
+for (const task of tasks) {
+  for (let seed = 0; seed < seeds; seed += 1) {
+    const a = rows.find((row) => row.task === task.id && row.seed === seed && row.arm === arms[0]);
+    const b = rows.find((row) => row.task === task.id && row.seed === seed && row.arm === arms[1]);
+    if (a && b) pairs.push({ task: task.id, seed, a: a.pass, b: b.pass });
+  }
+}
+const deltaPp = summary[arms[0]].rate === null || summary[arms[1]].rate === null ? null : (summary[arms[0]].rate - summary[arms[1]].rate) * 100;
+/**
+ * Gate semantics (deliberately one-sided).
+ *
+ * G6 asks a hard question — "does mounting this make tasks worse?" — and a soft
+ * one — "does it make them better?". A symmetric |Δ| ≤ 2pp would fail a run
+ * where memory carried the answer, which is the mechanism working, not
+ * breaking. So: Δ ≥ −2pp passes the hard condition; Δ > +2pp is reported as a
+ * measured gain (the proposal's aspiration, not its floor).
+ */
+const gate =
+  pairs.length < minPairs
+    ? { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "未测", note: `${pairs.length} 对配对 — 需要 ≥ ${minPairs}` }
+    : deltaPp <= -2.0001
+      ? { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "FAIL", note: `${arms[0]} 比 ${arms[1]} 低 ${Math.abs(deltaPp).toFixed(1)}pp — 挂载让任务变差了` }
+      : deltaPp > 2
+        ? { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "PASS", note: `${arms[0]} 高 ${deltaPp.toFixed(1)}pp — 记忆带去了可用的信息` }
+        : { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "PASS", note: "两臂持平（不伤害）" };
+  return { summary, pairs, deltaPp, gate };
+}
+
+/**
+ * `report --out <dir> [--exclude task,…] [--min-pairs 10]`
+ *
+ * Recompute an EXISTING artifact after the fact. The only legitimate use is a
+ * task whose oracle turned out to be wrong: excluding it is a corpus decision
+ * that must be visible in the artifact, not a hand-edit of runs.json.
+ */
+function republish(args) {
+  if (!args.out) throw new Error("report needs --out <dir>");
+  const file = path.join(args.out, "runs.json");
+  const previous = JSON.parse(fs.readFileSync(file, "utf8"));
+  const excluded = new Set(args.exclude ?? []);
+  const rows = previous.rows.filter((row) => !excluded.has(row.task));
+  const tasks_ = (previous.tasks ?? []).filter((id) => !excluded.has(id)).map((id) => ({ id }));
+  const { summary, pairs, deltaPp, gate } = analyze({
+    rows,
+    tasks: tasks_,
+    seeds: previous.seeds,
+    arms: previous.arms,
+    minPairs: args.minPairs,
+  });
+  const report = {
+    ...previous,
+    tasks: tasks_.map((task) => task.id),
+    summary,
+    paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
+    deltaPp,
+    gate,
+    excluded: [...excluded],
+    recomputedAt: Date.now(),
+    rows,
+    invalidRows: previous.rows.filter((row) => excluded.has(row.task)),
+  };
+  writeArtifacts(args.out, report, args.minPairs);
+  return report;
+}
+
 function run(args) {
   if (!args.out) throw new Error("run needs --out <dir>");
   if (!args.workspace) throw new Error("run needs --workspace <fixture dir>");
-  const tasks = loadTasks(args.tasks);
+  // `--exclude <task,…>`: a corpus task whose ORACLE is wrong is not a data
+  // point, it is a bug. Excluding it here keeps the exclusion in the tool (and
+  // in the artifact's own task list) instead of hand-editing runs.json later.
+  const excluded = new Set(args.exclude ?? []);
+  const tasks = loadTasks(args.tasks).filter((task) => !excluded.has(task.id));
+  if (tasks.length === 0) throw new Error("every task was excluded — nothing to run");
   const arms = args.armIds ?? [];
   args.arms = arms;
   if (arms.length !== 2) throw new Error("run needs exactly two arms: --arm on,off");
@@ -293,44 +406,8 @@ function run(args) {
     }
   }
 
-  const summary = {};
-  for (const arm of arms) {
-    const armRows = rows.filter((row) => row.arm === arm);
-    const passes = armRows.filter((row) => row.pass).length;
-    summary[arm] = {
-      runs: armRows.length,
-      passes,
-      rate: armRows.length === 0 ? null : passes / armRows.length,
-      meanWallMs: armRows.length === 0 ? null : Math.round(armRows.reduce((sum, row) => sum + row.wallMs, 0) / armRows.length),
-    };
-  }
-  // Paired delta: only task×seed pairs where BOTH arms ran count.
-  const pairs = [];
-  for (const task of tasks) {
-    for (let seed = 0; seed < args.seeds; seed += 1) {
-      const a = rows.find((row) => row.task === task.id && row.seed === seed && row.arm === arms[0]);
-      const b = rows.find((row) => row.task === task.id && row.seed === seed && row.arm === arms[1]);
-      if (a && b) pairs.push({ task: task.id, seed, a: a.pass, b: b.pass });
-    }
-  }
-  const deltaPp = summary[arms[0]].rate === null || summary[arms[1]].rate === null ? null : (summary[arms[0]].rate - summary[arms[1]].rate) * 100;
-  /**
-   * Gate semantics (deliberately one-sided).
-   *
-   * G6 asks a hard question — "does mounting this make tasks worse?" — and a soft
-   * one — "does it make them better?". A symmetric |Δ| ≤ 2pp would fail a run
-   * where memory carried the answer, which is the mechanism working, not
-   * breaking. So: Δ ≥ −2pp passes the hard condition; Δ > +2pp is reported as a
-   * measured gain (the proposal's aspiration, not its floor).
-   */
-  const floors =
-    pairs.length < args.minPairs
-      ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "未测", note: `${pairs.length} 对配对 — 需要 ≥ ${args.minPairs}` }
-      : deltaPp <= -2.0001
-        ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "FAIL", note: `${arms[0]} 比 ${arms[1]} 低 ${Math.abs(deltaPp).toFixed(1)}pp — 挂载让任务变差了` }
-        : deltaPp > 2
-          ? { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "PASS", note: `${arms[0]} 高 ${deltaPp.toFixed(1)}pp — 记忆带去了可用的信息` }
-          : { id: "G6", target: "Δ ≥ −2pp", minPairs: args.minPairs, verdict: "PASS", note: "两臂持平（不伤害）" };
+  const { summary, pairs, deltaPp, gate } = analyze({ rows, tasks, seeds: args.seeds, arms, minPairs: args.minPairs });
+
   const report = {
     startedAt,
     seedMemory: args.seedMemory ?? null,
@@ -343,37 +420,19 @@ function run(args) {
     contaminated: rows.filter((row) => row.contaminated === true).length,
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,
-    gate: floors,
+    gate,
     rows,
   };
-  fs.writeFileSync(path.join(args.out, "runs.json"), `${JSON.stringify(report, null, 2)}\n`);
-
-  const lines = [
-    "# G6 · paired quality A/B",
-    "",
-    `tasks ${report.tasks.length} · seeds ${args.seeds} · paired runs ${pairs.length}`,
-    "",
-    "| arm | pass | rate | mean wall |",
-    "|---|---|---|---|",
-    ...arms.map((arm) => `| ${arm} | ${summary[arm].passes}/${summary[arm].runs} | ${(summary[arm].rate * 100).toFixed(1)}% | ${(summary[arm].meanWallMs / 1000).toFixed(1)}s |`),
-    "",
-    `Δ (${arms[0]} − ${arms[1]}) = ${deltaPp === null ? "未测" : `${deltaPp.toFixed(1)}pp`} · only-${arms[0]} wins ${report.paired.onlyA} · only-${arms[1]} wins ${report.paired.onlyB}`,
-    pairs.length < args.minPairs
-      ? `_${pairs.length} paired runs is a plumbing check, not a quality measurement._`
-      : "",
-    "",
-    `G6 ${report.gate.verdict} (target ${report.gate.target}${pairs.length < args.minPairs ? `; ${pairs.length} paired runs — need ≥ ${args.minPairs}` : ""}) — ${report.gate.note}`,
-    "",
-  ];
-  fs.writeFileSync(path.join(args.out, "REPORT.md"), lines.join("\n"));
-  console.log(`\n${lines.slice(-4).join("\n")}`);
+  writeArtifacts(args.out, report, args.minPairs);
+  console.log(`\nG6 ${report.gate.verdict} (${report.gate.target}) — ${report.gate.note}`);
   process.exitCode = report.gate.verdict === "FAIL" ? 1 : 0;
 }
 
 const args = parseArgs(process.argv.slice(2));
 if (args.cmd === "prepare") prepare(args);
 else if (args.cmd === "run") run(args);
+else if (args.cmd === "report") republish(args);
 else {
-  console.error("usage: quality-ab.mjs prepare|run … (see the header comment)");
+  console.error("usage: quality-ab.mjs prepare|run|report … (see the header comment)");
   process.exitCode = 2;
 }
