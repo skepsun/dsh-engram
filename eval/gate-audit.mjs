@@ -43,13 +43,16 @@ const MIN_LONG_ROWS = 3; // §6: 长会话 = ≥200 请求
 const ENGRAM_TOOL_RE = /^(engram_|esr_)/;
 
 function parseArgs(argv) {
-  const out = { days: 14, md: false, out: null, api: null, home: null };
+  const out = { days: 14, md: false, out: null, api: null, home: null, g7: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--days") out.days = Number(argv[++i]) || 14;
     else if (arg === "--md") out.md = true;
     else if (arg === "--out") out.out = argv[++i] ?? null;
     else if (arg === "--api") out.api = (argv[++i] ?? "").replace(/\/+$/, "") || null;
+    // `npm run bench:ledger` prints the worst per-operation share; feed it back
+    // so the gate is a measurement, not a "未测" placeholder.
+    else if (arg === "--g7") out.g7 = Number(argv[++i]);
     else if (arg === "--home") out.home = argv[++i] ?? null;
   }
   return out;
@@ -238,7 +241,7 @@ function verdict(ok) {
 }
 
 /** The §6 gate table, computed from whatever data actually exists. */
-export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0, live = void 0 } = {}) {
+export function auditGates({ days = 14, now = Date.now(), home = void 0, api = null, root = void 0, live = void 0, g7 = null } = {}) {
   const engramHome = home ?? void 0;
   const ledger = readLedger({ home: engramHome });
   const sessions = scanSessions({ root: root ?? sessionsRoot(), days, now });
@@ -359,10 +362,12 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
       {
         id: "G7",
         name: "账本自身开销",
-        value: "未测",
+        value: Number.isFinite(g7) ? `${g7.toFixed(4)}%` : "未测",
         target: "< 0.5% 请求时延",
-        verdict: "未测",
-        note: "in-memory accumulation; needs a timed benchmark",
+        verdict: Number.isFinite(g7) ? (g7 < 0.5 ? "PASS" : "FAIL") : "未测",
+        note: Number.isFinite(g7)
+          ? "from `npm run bench:ledger` (worst op vs a 300ms request floor)"
+          : "run `npm run bench:ledger` and pass --g7 <pct>",
       },
     ],
   };
@@ -454,7 +459,7 @@ function renderMarkdown(report) {
   out.push(renderRows({ sessions: report.ledgerRows ?? [] }));
   out.push("");
   out.push("> 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。");
-  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G6/G7 需要配对实验。");
+  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，G6 需要配对实验。");
   out.push("> G1 在行数 < 5 时只报数值、不给判定：一个会话不是分布。");
   out.push("> 绝对值说明：injected 按名义价逐请求记，而宿主前缀缓存实际约 10% 付费；");
   out.push("> 两侧同比例缩放不改变 net 的**正负号**（G1 判的就是符号），所以门不受影响，但「节省 token」的绝对量偏悲观。");
@@ -465,7 +470,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const home = args.home ?? void 0;
   const live = await fetchLiveCompaction(args.api);
-  const report = auditGates({ days: args.days, home, api: args.api, live });
+  const report = auditGates({ days: args.days, home, api: args.api, live, g7: args.g7 });
   await fillIndexGate(report);
   const ledger = readLedger({ home });
   report.ledgerRows = ledger.sessions;

@@ -164,3 +164,17 @@ test("G4 flags superseded rows in the memory table", () => {
   assert.equal(g4.value, "50.0%");
   assert.equal(g4.verdict, "FAIL");
 });
+
+test("G7 stays 未测 without a measurement, and reports the bench number when given", () => {
+  // G7 is a benchmark, not a log-derived metric: it must never invent a PASS.
+  const untested = auditGates({ home: "/nonexistent-engram-home-for-test", days: 14 });
+  assert.equal(untested.gates.find((g) => g.id === "G7").verdict, "未测");
+
+  const measured = auditGates({ home: "/nonexistent-engram-home-for-test", days: 14, g7: 0.2137 });
+  const gate = measured.gates.find((g) => g.id === "G7");
+  assert.equal(gate.verdict, "PASS");
+  assert.match(gate.value, /0\.2137%/);
+
+  const failing = auditGates({ home: "/nonexistent-engram-home-for-test", days: 14, g7: 1.2 });
+  assert.equal(failing.gates.find((g) => g.id === "G7").verdict, "FAIL");
+});
