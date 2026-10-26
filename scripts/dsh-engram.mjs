@@ -34,6 +34,7 @@ import {
 import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
 import { readLedger } from "../lib/ledger.js";
 import { defaultSkillDir, exportSkills } from "../lib/skill-export.js";
+import { isProvenProcedure, invalidatedProcedure } from "../lib/status-insights.js";
 import { workspaceKey } from "../lib/util.js";
 import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
 
@@ -220,6 +221,17 @@ async function printStatus(presetsDirFlag) {
             : "";
       log(`  账本两条腿：engram 剪枝 ${engram} 字符 · 宿主自剪 ${host} 字符${verdict}`);
       log("");
+      const insights = await readPlaybookInsights();
+      if (insights !== null) {
+        log(`  playbook（当前 workspace）：${insights.total} 条 procedure · 过门 ${insights.promoted} · 未过门 ${insights.unproven} · 失效 ${insights.invalidated}`);
+        if (insights.capsules > 0) {
+          log(`  subagent 胶囊：${insights.capsules} 条 · ${insights.capsuleSource} → ${insights.capsuleChars} 字符（只做留档，父代理仍收到全文）`);
+        }
+        if (insights.promoted > 0) {
+          log("  可导出为 DSH Skill：npx dsh-engram skill export（写入 <workspace>/.dsh/skills）");
+        }
+        log("");
+      }
     }
   } catch {}
 
@@ -460,6 +472,47 @@ async function runSkillExport({ workspace, dir, home, dryRun }) {
     log("  没有 procedure 通过证据门（≥3 次验证、14 天内、未失效）——无导出。");
   }
   log("  下一步：DSH 从项目根的 .dsh/skills 发现技能，catalog 里出现名字即生效（新会话无需重启）。");
+}
+
+/** Playbook + capsule counters for `status` (best effort; missing store → null). */
+async function readPlaybookInsights(workspaceArg) {
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+    const storage = join(home, "storages", "dsh_engram.json");
+    if (!(await exists(storage))) return null;
+    const unit = JSON.parse(await readFile(storage, "utf8"));
+    const table = unit?.tables?.memories ?? unit?.memories ?? {};
+    const all = Array.isArray(table) ? table : Object.values(table);
+    const key = workspaceKey(workspaceArg ?? process.cwd());
+    const rows = all.filter((m) => m?.workspace === key);
+    const config = { ...SKILL_GATE };
+    const procedures = rows.filter((m) => m?.kind === "procedure" && m.status !== "archived");
+    const capsules = rows.filter((m) => (m.tags ?? []).includes("subagent-capsule"));
+    const size = (m) => {
+      const match = /胶囊：.*? (\d+) → (\d+) 字符/.exec(String(m.text ?? ""));
+      return match === null ? null : [Number(match[1]), Number(match[2])];
+    };
+    let capsuleSource = 0;
+    let capsuleChars = 0;
+    for (const capsule of capsules) {
+      const parsed = size(capsule);
+      if (parsed !== null) {
+        capsuleSource += parsed[0];
+        capsuleChars += parsed[1];
+      }
+    }
+    return {
+      total: procedures.length,
+      promoted: procedures.filter((m) => isProvenProcedure(m, config)).length,
+      unproven: procedures.filter((m) => !isProvenProcedure(m, config) && !invalidatedProcedure(m)).length,
+      invalidated: procedures.filter((m) => invalidatedProcedure(m)).length,
+      capsules: capsules.length,
+      capsuleSource,
+      capsuleChars,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function main() {
