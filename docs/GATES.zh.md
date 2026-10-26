@@ -1,31 +1,32 @@
-# 门审计（gate audit）· 2026-10-23
+# 门审计（gate audit）· 2026-10-26
 
-窗口：最近 14 天 · 扫描 43 个会话（其中 32 个挂载了工具）· 账本行 4 条
+窗口：最近 14 天 · 扫描 44 个会话（其中 33 个挂载了工具）· 账本行 5 条
 
 | 门 | 指标 | 实测 | 目标 | 判定 | 备注 |
 |---|---|---|---|---|---|
-| G1 | NetTokens · 净收益 > 0 的会话占比 | 25.0% | ≥ 50% | **未测** | 1/4 rows — need ≥ 5 flushed sessions for a distribution |
-| G1b | NetTokens · 长会话（≥200 请求）占比 | 50.0% | ≥ 70% | **未测** | 1/2 long sessions |
-| G2 | Activation · 机制激活率（挂载会话 fire ≥1 次） | 78.1% | ≥ 60% | **PASS** | 25/32 mounted sessions |
-| G2b | Push · [RECALL] 注入命中会话占比 | 12.5% | 观测项（无预声明门） | **—** | 4/32 sessions carry a [RECALL] block in their prompt |
+| G1 | NetTokens · 净收益 > 0 的会话占比 | 20.0% | ≥ 50% | **FAIL** | 1/5 sessions with ledger rows |
+| G1b | NetTokens · 长会话（≥200 请求）占比 | 33.3% | ≥ 70% | **FAIL** | 1/3 long sessions |
+| G2 | Activation · 机制激活率（挂载会话 fire ≥1 次） | 78.8% | ≥ 60% | **PASS** | 26/33 mounted sessions |
+| G2b | Push · [RECALL] 注入命中会话占比 | 15.2% | 观测项（无预声明门） | **—** | 5/33 sessions carry a [RECALL] block in their prompt |
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 40 recall-with-hits |
-| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/357 memories (10 tagged stale) |
-| G5 | 索引 ≤ 700 chars | 680c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 87 memories · 6 lines |
+| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/374 memories (12 tagged stale) |
+| G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 100 memories · 6 lines |
 | G6 | Quality Δ · 配对任务成功率差 | 未测 | ≤ 2pp | **未测** | needs paired A/B runs (not derivable from logs) |
 | G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | in-memory accumulation; needs a timed benchmark |
 
 ## 账本合计
 
-- injected 8,055,731c（≈2,013,933 tok）· avoided 1,463,469,816c（≈365,867,454 tok）
-- rewrites 11 次 / 2,483,185c（按 cacheDiscount 计罚 2,234,867c）
-- **net 1,453,179,218c ≈ 363,294,805 tok**；开源会话 4 条，其中净收益为正 1 条
+- injected 9,177,459c（≈2,294,365 tok）· avoided 1,463,916,753c（≈365,979,189 tok）
+- rewrites 17 次 / 4,024,426c（按 cacheDiscount 计罚 3,621,983c）
+- **net 1,451,117,311c ≈ 362,779,328 tok**；开源会话 5 条，其中净收益为正 1 条
 
 ## 最近会话（按会话落行）
 
 | session | requests | injected | avoided | net | workspace |
 |---|---|---|---|---|---|
-| session-746c03… | 220 | 415,769c | 7,795,950c | 7,380,181c | dsh-loom |
-| session-71f597… | 120 | 333,475c | 0c | -333,475c | kototoro-parsers |
+| session-746c03… | 440 | 869,388c | 8,242,887c | 7,088,635c | dsh-loom |
+| session-775f51… | 220 | 609,289c | 0c | -1,711,542c | kototoro-parsers |
+| session-71f597… | 140 | 392,295c | 0c | -392,295c | kototoro-parsers |
 | session-ffbe89… | 120 | 361,254c | 0c | -361,254c | Kototoro |
 | session-ed8929… | 260 | 775,040c | 0c | -775,040c | Kototoro |
 

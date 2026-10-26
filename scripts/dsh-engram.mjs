@@ -227,7 +227,14 @@ async function printStatus(presetsDirFlag) {
       const bp = status.boundaryPrune;
       log(`  L1 边界剪枝：${bp.armed ? "已武装" : "未启用"}${bp.reason ? `（${bp.reason}）` : ""}`);
       if (!bp.armed) {
-        log("  ⚠ L1 未武装时「节省 · 剪枝/压缩」不会入账（账本净 token 只会是负值）；0.2.0 web profile 需要 bundle patch 重新启用 host 平面的 tool-result-pruner 行。");
+        const reason = String(bp.reason ?? "");
+        if (/boundaryPrune:false|config/i.test(reason)) {
+          // Default off since v0.7.11 — not a misconfiguration.
+          log("  说明：L1 自 0.7.11 起默认关闭（宿主会自己剪超阈值结果，边界源只在用 todo/goal 的规划型会话里有收益）。");
+          log("  需要时在设置卡或 profile 里设 boundaryPrune: true；打开前先看上面那行「账本两条腿」。");
+        } else {
+          log("  ⚠ L1 未武装（服务缺失/装配问题）：此时账本只有注入支出，没有剪枝入账。");
+        }
       }
     }
     const attempts = await readPruneAttempts(20).catch(() => []);
