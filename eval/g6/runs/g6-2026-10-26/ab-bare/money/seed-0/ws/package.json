@@ -1,0 +1,9 @@
+{
+  "name": "ledger-kata",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/guard.mjs && node --test",
+    "test:unit": "node scripts/guard.mjs && node --test"
+  }
+}

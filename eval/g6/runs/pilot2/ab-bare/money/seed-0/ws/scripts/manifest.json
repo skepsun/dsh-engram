@@ -1,0 +1,8 @@
+{
+  "test/errors.test.mjs": "8e5bd9995824c8590710525cf2a30522389ff899f54c243306318d814a81aac1",
+  "test/money.test.mjs": "388bed4c3e659d272f6c9088c2b77eb9eb9db3361a4d17fe1f67430d09bcc4a1",
+  "test/queue.test.mjs": "285b8080c1fbfcc1e31a7c62ec880737ae4e350834458e126f8125d8ec9dc625",
+  "test/retry.test.mjs": "49073e861c11b531a0307c73c1bbc0dd3ce5255939c5b6e4ac809def4d1558f5",
+  "test/timefmt.test.mjs": "ef02f6e268cf5a6a4aa649212db2c906cce71c38f458fdb0e59128a6f55b620f",
+  "test/csv.test.mjs": "8be6d3bd6acb65a9ea989325418766f0b5c82a8119c81b253a69a485a3c41b8a"
+}

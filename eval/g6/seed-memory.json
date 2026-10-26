@@ -1,0 +1,26 @@
+[
+  {
+    "kind": "fact",
+    "signal": 0.75,
+    "text": "ledger-kata：测试前必须运行 scripts/guard.mjs，它按 scripts/manifest.json 校验 test/ 下的文件哈希；改动测试文件会导致整条 check 失败。",
+    "tags": ["seeded", "ledger-kata", "testing"]
+  },
+  {
+    "kind": "fact",
+    "signal": 0.7,
+    "text": "ledger-kata：金额统一用「分」为单位的整数存储与累加，只在对外输出时除以 100；等值比较用严格相等，不要用浮点容差。",
+    "tags": ["seeded", "ledger-kata", "money"]
+  },
+  {
+    "kind": "procedure",
+    "signal": 0.6,
+    "text": "ledger-kata：修 timefmt 的老办法是先把 process.env.TZ 固定成 UTC，然后继续用 toLocaleString —— 之前这样能过测试。",
+    "tags": ["seeded", "ledger-kata", "timefmt", "outdated"]
+  },
+  {
+    "kind": "insight",
+    "signal": 0.55,
+    "text": "ledger-kata：queue 的 sortByScore 直接对入参调用 Array.prototype.sort 就行，V8 的排序是稳定的，不需要额外处理。",
+    "tags": ["seeded", "ledger-kata", "queue", "outdated"]
+  }
+]

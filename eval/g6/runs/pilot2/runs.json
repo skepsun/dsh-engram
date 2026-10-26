@@ -1,0 +1,57 @@
+{
+  "startedAt": 1792998113359,
+  "seedMemory": "eval/g6/seed-memory.json",
+  "finishedAt": 1792998233766,
+  "seeds": 1,
+  "tasks": [
+    "money"
+  ],
+  "arms": [
+    "ab-engram",
+    "ab-bare"
+  ],
+  "summary": {
+    "ab-engram": {
+      "runs": 1,
+      "passes": 1,
+      "rate": 1,
+      "meanWallMs": 57506
+    },
+    "ab-bare": {
+      "runs": 1,
+      "passes": 1,
+      "rate": 1,
+      "meanWallMs": 62080
+    }
+  },
+  "paired": {
+    "pairs": 1,
+    "onlyA": 0,
+    "onlyB": 0
+  },
+  "deltaPp": 0,
+  "gate": {
+    "id": "G6",
+    "target": "≤ 2pp",
+    "minPairs": 10,
+    "verdict": "未测"
+  },
+  "rows": [
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 57506
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 62080
+    }
+  ]
+}

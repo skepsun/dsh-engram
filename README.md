@@ -1109,6 +1109,16 @@ catalog must not keep advertising a fix that just broke. `npm run skill:check`
 proves the seam end-to-end by loading DSH's own `dsh-skill-filesystem` provider
 and listing the exported skill through it.
 
+**Writing a skill needs a human yes (v0.8-D).** Evidence (`≥3` verified
+successes) gets a procedure into the private index line; it does not, on its own,
+put a file where the host advertises it to every agent. `skill export` therefore
+writes only **approved** procedures — `skill pending` lists what is waiting,
+`skill approve <id>` / `skill revoke <id>` maintain the record in
+`~/.dsh/engram/playbook-approvals.json` (kept out of the memory store: an approval
+is a human act, and a pool must not approve itself), and `--force` is the audited
+escape hatch. Three successful runs prove a command worked; they do not prove the
+instruction is sound.
+
 **Subagent reports become durable capsules (v0.8-C, advisory).** A child's final
 report above `capsuleMinSourceChars` (1500) is distilled by structure — headings,
 bullets, question marks, next-step cues — into a `handoff` memory (结论 / 证据 /

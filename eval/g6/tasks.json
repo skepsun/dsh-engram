@@ -1,0 +1,40 @@
+{
+  "tasks": [
+    {
+      "id": "money",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/money.test.mjs` 会失败。请修好 src/money.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/money.test.mjs",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "retry",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/retry.test.mjs` 会失败。请修好 src/retry.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/retry.test.mjs",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "timefmt",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/timefmt.test.mjs` 会失败。请修好 src/timefmt.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/timefmt.test.mjs",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "queue",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/queue.test.mjs` 会失败。请修好 src/queue.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/queue.test.mjs",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "errors",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/errors.test.mjs` 会失败。请修好 src/errors.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/errors.test.mjs",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "csv",
+      "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）。运行 `node scripts/guard.mjs && node --test test/csv.test.mjs` 会失败。请修好 src/csv.js 让它全部通过。测试文件是 oracle，不要改动 test/ 下任何文件。修完用同样的命令确认通过。",
+      "check": "node scripts/guard.mjs && node --test test/csv.test.mjs",
+      "timeoutMs": 600000
+    }
+  ]
+}

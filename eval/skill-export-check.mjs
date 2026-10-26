@@ -101,6 +101,23 @@ fs.writeFileSync(
 const first = exportSkills(rows, { config: CONFIG, dir: skillsDir });
 const second = exportSkills(rows, { config: CONFIG, dir: skillsDir });
 
+// v0.8-D: the approval gate. Same evidence, no approval → nothing written; the
+// row is reported as pending instead, so the user knows what to approve.
+const gatedDir = path.join(project, ".dsh", "skills-gated");
+const gated = exportSkills(rows, { config: CONFIG, dir: gatedDir, approved: new Set(), requireApproval: true });
+const gatedFiles = fs.existsSync(gatedDir)
+  ? fs.readdirSync(gatedDir).filter((name) => fs.existsSync(path.join(gatedDir, name, "SKILL.md")))
+  : [];
+const afterApprove = exportSkills(rows, {
+  config: CONFIG,
+  dir: gatedDir,
+  approved: new Set([promoted.id]),
+  requireApproval: true,
+});
+// A forced export is the audited escape hatch and must still write.
+const forcedDir = path.join(project, ".dsh", "skills-forced");
+const forced = exportSkills(rows, { config: CONFIG, dir: forcedDir, approved: new Set(), requireApproval: false });
+
 const { ctx, registrations } = fakeCtx();
 const mod = await import(DSH_SKILL_FS);
 mod.apply(ctx, {
@@ -130,6 +147,10 @@ const checks = [
   ["host loads the full body", typeof body?.content === "string" && body.content.includes("## Evidence")],
   ["name matches the host grammar", /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skillName(promoted))],
   ["model-invocable + user-invocable by default", body?.invocation?.modelInvocable === true && body?.invocation?.userInvocable === true],
+  ["unapproved procedure writes no file", gatedFiles.length === 0 && gated.written.length === 0],
+  ["unapproved procedure is reported as pending", gated.pending.length === 1 && gated.pending[0].id === promoted.id],
+  ["approval unlocks the export", afterApprove.written.length === 1 && afterApprove.pending.length === 0],
+  ["--force bypasses the gate", forced.written.length === 1],
 ];
 
 const ok = checks.every(([, pass]) => pass);

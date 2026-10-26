@@ -33,7 +33,8 @@ import {
 } from "../lib/web-provision.js";
 import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
 import { readLedger } from "../lib/ledger.js";
-import { defaultSkillDir, exportSkills } from "../lib/skill-export.js";
+import { defaultSkillDir, exportSkills, skillDescription, skillName, planSkillExport } from "../lib/skill-export.js";
+import { approvedIds, isApproved, loadApprovals, recordApproval, revokeApproval } from "../lib/approvals.js";
 import { isProvenProcedure, invalidatedProcedure } from "../lib/status-insights.js";
 import { workspaceKey } from "../lib/util.js";
 import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
@@ -452,7 +453,53 @@ async function runEnableRevert(command, fileFlag, presetsDirFlag) {
 /** Evidence gate defaults; mirrors lib/index.js (kept here so the CLI stays DSH-free). */
 const SKILL_GATE = { procedureMinEvidence: 3, procedureMaxAgeDays: 14, promoteHits: 3 };
 
-async function runSkillExport({ workspace, dir, home, dryRun }) {
+/** Rows the exporter would consider (proof gate passed, auto-captured). */
+async function loadExportable(workspace, home) {
+  const storage = join(home, "storages", "dsh_engram.json");
+  if (!(await exists(storage))) throw new Error(`找不到记忆库：${storage}（DSH 还没在这个机器上写过记忆？）`);
+  const unit = JSON.parse(await readFile(storage, "utf8"));
+  const table = unit?.tables?.memories ?? unit?.memories ?? {};
+  const all = Array.isArray(table) ? table : Object.values(table);
+  const key = workspaceKey(workspace);
+  return { key, rows: all.filter((m) => m?.workspace === key) };
+}
+
+async function runSkillApprove({ workspace, home, id, note, revoke }) {
+  const { key, rows } = await loadExportable(workspace, home);
+  const row = rows.find((m) => m?.id === id || String(m?.id ?? "").startsWith(id));
+  if (row === undefined) throw new Error(`workspace ${key} 里没有 id 以 "${id}" 开头的记忆`);
+  if (revoke) {
+    revokeApproval(home, key, row.id);
+    log(`已撤销批准：${row.id}（${skillName(row)}）——下次 export 会删掉它的 SKILL.md`);
+    return;
+  }
+  const state = recordApproval(home, key, row.id, { note: note ?? null });
+  const plan = planSkillExport(rows, { config: SKILL_GATE, dir: defaultSkillDir(key), approved: new Set(approvedIds(state, key)), requireApproval: true });
+  log(`已批准：${row.id} → ${skillName(row)}${note ? `（${note}）` : ""}`);
+  log(`  证据：${row.evidenceCount ?? 0} 次验证 · 最近 ${row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toISOString().slice(0, 10) : "未知"}`);
+  log(plan.length > 0 ? "  现在可以运行：npx dsh-engram skill export" : "  但它还没通过证据门（≥3 次验证 / 14 天内 / 未失效），批准不替代证据。");
+}
+
+async function runSkillPending({ workspace, home }) {
+  const { key, rows } = await loadExportable(workspace, home);
+  const state = loadApprovals(home);
+  const approved = new Set(approvedIds(state, key));
+  const report = exportSkills(rows, { config: SKILL_GATE, dir: defaultSkillDir(key), dryRun: true, approved, requireApproval: true });
+  const ready = planSkillExport(rows, { config: SKILL_GATE, dir: defaultSkillDir(key), approved, requireApproval: true });
+  log(`skill pending · workspace ${key}`);
+  if (ready.length > 0) {
+    log(`  已批准待导出 ${ready.length}:`);
+    for (const skill of ready) log(`    ${skill.name}  (${skill.memoryId})`);
+  }
+  if (report.pending.length > 0) {
+    log(`  等批准 ${report.pending.length}（批准后才写文件）：`);
+    for (const item of report.pending) log(`    ${item.name}  ${item.id.slice(0, 8)}  ${item.description}`);
+    log("  批准：npx dsh-engram skill approve <id> [--note \"…\"]");
+  }
+  if (ready.length === 0 && report.pending.length === 0) log("  没有过门的 auto procedure —— 无事可批。");
+}
+
+async function runSkillExport({ workspace, dir, home, dryRun, force }) {
   const storage = join(home, "storages", "dsh_engram.json");
   if (!(await exists(storage))) throw new Error(`找不到记忆库：${storage}（DSH 还没在这个机器上写过记忆？）`);
   const unit = JSON.parse(await readFile(storage, "utf8"));
@@ -461,14 +508,23 @@ async function runSkillExport({ workspace, dir, home, dryRun }) {
   const key = workspaceKey(workspace);
   const rows = all.filter((m) => m?.workspace === key);
   const target = dir ?? defaultSkillDir(key);
-  const report = exportSkills(rows, { config: SKILL_GATE, dir: target, dryRun });
-  log(`skill export · workspace ${key} · ${rows.length} 条记忆 · 目标 ${target}${dryRun ? "（dry-run）" : ""}`);
+  // v0.8-D: evidence gets a procedure into the index; a human yes gets it into
+  // a file the host advertises. `--force` is the audited escape hatch.
+  const approved = new Set(approvedIds(loadApprovals(home), key));
+  const requireApproval = !force;
+  const report = exportSkills(rows, { config: SKILL_GATE, dir: target, dryRun, approved, requireApproval });
+  log(`skill export · workspace ${key} · ${rows.length} 条记忆 · 目标 ${target}${dryRun ? "（dry-run）" : ""}${force ? " · --force（跳过批准门）" : ""}`);
   if (report.written.length > 0) log(`  写入 ${report.written.length}: ${report.written.join(", ")}`);
   if (report.unchanged.length > 0) log(`  未变 ${report.unchanged.length}: ${report.unchanged.join(", ")}`);
   if (report.removed.length > 0) log(`  移除（证据不再成立）${report.removed.length}: ${report.removed.join(", ")}`);
   for (const skip of report.skipped) log(`  跳过 ${skip}`);
+  if (report.pending.length > 0) {
+    log(`  等批准 ${report.pending.length}（证据已够，但写文件需要你点头）：`);
+    for (const item of report.pending) log(`    ${item.name}  ${item.id.slice(0, 8)}`);
+    log("  批准：npx dsh-engram skill approve <id>；或本次强制：--force");
+  }
   for (const error of report.errors) log(`  失败 ${error}`);
-  if (report.written.length + report.unchanged.length + report.removed.length === 0 && report.skipped.length === 0) {
+  if (report.written.length + report.unchanged.length + report.removed.length === 0 && report.skipped.length === 0 && report.pending.length === 0) {
     log("  没有 procedure 通过证据门（≥3 次验证、14 天内、未失效）——无导出。");
   }
   log("  下一步：DSH 从项目根的 .dsh/skills 发现技能，catalog 里出现名字即生效（新会话无需重启）。");
@@ -524,17 +580,31 @@ async function main() {
   const presetsDirFlag = presetsDirIndex >= 0 ? rest[presetsDirIndex + 1] : undefined;
   if (command === "skill") {
     const sub = rest[0];
-    if (sub !== "export") throw new Error(`未知子命令 "skill ${sub ?? ""}"（用 skill export）`);
+    if (!["export", "approve", "revoke", "pending"].includes(sub ?? "")) {
+      throw new Error(`未知子命令 "skill ${sub ?? ""}"（用 skill export|pending|approve|revoke）`);
+    }
     const flag = (name) => {
       const at = rest.indexOf(name);
       return at >= 0 ? rest[at + 1] : undefined;
     };
-    await runSkillExport({
+    const shared = {
       workspace: flag("--workspace") ?? process.cwd(),
-      dir: flag("--dir"),
       home: flag("--home") ?? process.env.DSH_HOME ?? join(homedir(), ".dsh"),
-      dryRun: rest.includes("--dry-run"),
-    });
+    };
+    if (sub === "export") {
+      await runSkillExport({
+        ...shared,
+        dir: flag("--dir"),
+        dryRun: rest.includes("--dry-run"),
+        force: rest.includes("--force"),
+      });
+    } else if (sub === "pending") {
+      await runSkillPending(shared);
+    } else {
+      const id = rest[1];
+      if (id === undefined || id.startsWith("--")) throw new Error(`skill ${sub} 需要一个记忆 id`);
+      await runSkillApprove({ ...shared, id, note: flag("--note"), revoke: sub === "revoke" });
+    }
   } else if (command === "status") {
     await printStatus(presetsDirFlag);
   } else if (command === "doctor") {
