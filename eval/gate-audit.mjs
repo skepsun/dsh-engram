@@ -389,7 +389,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         // G6 cannot be derived from logs: it needs the paired A/B artifact. Read
         // it from `quality:ab run`'s runs.json — never from a hand-typed number.
         value: g6 === null || g6.deltaPp === null || g6.deltaPp === undefined ? "未测" : `${g6.deltaPp.toFixed(1)}pp`,
-        target: "≤ 2pp",
+        target: g6?.gate?.target ?? "Δ ≥ −2pp",
         verdict: g6 === null ? "未测" : (g6.gate?.verdict ?? "未测"),
         note: g6 === null
           ? "needs paired A/B runs (not derivable from logs) — pass --g6 <runs.json>"
