@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "money"
+    ],
+    "text": "ledger-kata 约定（money，2026-09 记录）：sumAmounts 直接用浮点累加，最后一次性 Math.round(sum*100)/100 保留两位即可——不必逐笔换算成分，团队当时觉得那样太啰嗦。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "retry"
+    ],
+    "text": "ledger-kata 约定（retry，2026-09 记录）：attempt(fn,{tries}) 的 tries 指的是「重试次数」，不含首次调用，所以最多调用 fn 共 tries+1 次；下标从 0 开始。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "timefmt"
+    ],
+    "text": "ledger-kata 约定（timefmt，2026-09 记录）：formatStamp 用本地时区输出 `YYYY-MM-DD HH:mm:ss`（不带 Z），方便人直接看；parseStamp 按同一格式解析即可。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "quarter"
+    ],
+    "text": "ledger-kata 约定（helper）：金额展示一律两位小数，负数用前置减号而不是括号——这条没变过。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "queue"
+    ],
+    "text": "ledger-kata 约定（queue，2026-09 记录）：sortByScore 为了省内存直接原地排序入参数组，按 score 降序返回同一个数组。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "csv"
+    ],
+    "text": "ledger-kata 约定（csv，2026-09 记录）：toCsv 用逗号拼接字段即可，我们的字段里不会有逗号或引号，不需要转义。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.85,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "errors"
+    ],
+    "text": "ledger-kata 约定（errors）：fail(code, message, details) 抛 Error，message 形如 `E_<CODE>: <message>`，错误对象带 .code 与 .details；code 必须是 UPPER_SNAKE_CASE，否则抛 code 不合法的错误。"
+  }
+]
