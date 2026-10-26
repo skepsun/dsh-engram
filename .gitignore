@@ -16,3 +16,6 @@ client/tsconfig.build.json
 # package manager is pnpm (see "packageManager" in package.json); pnpm-lock.yaml is committed.
 # keep guarding against accidental npm usage
 package-lock.json
+
+# generated DSH skills from `dsh-engram skill export` (runtime state)
+.dsh/

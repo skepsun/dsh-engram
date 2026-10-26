@@ -7,6 +7,9 @@
  *   npx dsh-engram enable    # re-run the boot-time web auto-wiring (usually a no-op)
  *   npx dsh-engram revert    # restore the stock compaction rows everywhere —
  *                            #   run BEFORE uninstalling dsh-engram
+ *   npx dsh-engram skill export [--workspace <dir>] [--dir <skills>] [--dry-run]
+ *                            # export evidence-backed procedures as DSH Skills
+ *                            #   (default: <workspace>/.dsh/skills)
  *
  * `status`/`doctor` read the durable snapshot the plugin writes at boot
  * (`$DSH_HOME/engram/context-gc.status.json`) and cross-check the live preset
@@ -30,6 +33,8 @@ import {
 } from "../lib/web-provision.js";
 import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../lib/status.js";
 import { readLedger } from "../lib/ledger.js";
+import { defaultSkillDir, exportSkills } from "../lib/skill-export.js";
+import { workspaceKey } from "../lib/util.js";
 import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -432,6 +437,31 @@ async function runEnableRevert(command, fileFlag, presetsDirFlag) {
   if (command === "revert" && changed > 0) log("  已全部还原为出厂 compaction 行——可以安全卸载 dsh-engram。");
 }
 
+/** Evidence gate defaults; mirrors lib/index.js (kept here so the CLI stays DSH-free). */
+const SKILL_GATE = { procedureMinEvidence: 3, procedureMaxAgeDays: 14, promoteHits: 3 };
+
+async function runSkillExport({ workspace, dir, home, dryRun }) {
+  const storage = join(home, "storages", "dsh_engram.json");
+  if (!(await exists(storage))) throw new Error(`找不到记忆库：${storage}（DSH 还没在这个机器上写过记忆？）`);
+  const unit = JSON.parse(await readFile(storage, "utf8"));
+  const table = unit?.tables?.memories ?? unit?.memories ?? {};
+  const all = Array.isArray(table) ? table : Object.values(table);
+  const key = workspaceKey(workspace);
+  const rows = all.filter((m) => m?.workspace === key);
+  const target = dir ?? defaultSkillDir(key);
+  const report = exportSkills(rows, { config: SKILL_GATE, dir: target, dryRun });
+  log(`skill export · workspace ${key} · ${rows.length} 条记忆 · 目标 ${target}${dryRun ? "（dry-run）" : ""}`);
+  if (report.written.length > 0) log(`  写入 ${report.written.length}: ${report.written.join(", ")}`);
+  if (report.unchanged.length > 0) log(`  未变 ${report.unchanged.length}: ${report.unchanged.join(", ")}`);
+  if (report.removed.length > 0) log(`  移除（证据不再成立）${report.removed.length}: ${report.removed.join(", ")}`);
+  for (const skip of report.skipped) log(`  跳过 ${skip}`);
+  for (const error of report.errors) log(`  失败 ${error}`);
+  if (report.written.length + report.unchanged.length + report.removed.length === 0 && report.skipped.length === 0) {
+    log("  没有 procedure 通过证据门（≥3 次验证、14 天内、未失效）——无导出。");
+  }
+  log("  下一步：DSH 从项目根的 .dsh/skills 发现技能，catalog 里出现名字即生效（新会话无需重启）。");
+}
+
 async function main() {
   const [, , rawCommand, ...rest] = process.argv;
   const command = rawCommand ?? "status";
@@ -439,7 +469,20 @@ async function main() {
   const fileFlag = fileFlagIndex >= 0 ? rest[fileFlagIndex + 1] : undefined;
   const presetsDirIndex = rest.indexOf("--presets-dir");
   const presetsDirFlag = presetsDirIndex >= 0 ? rest[presetsDirIndex + 1] : undefined;
-  if (command === "status") {
+  if (command === "skill") {
+    const sub = rest[0];
+    if (sub !== "export") throw new Error(`未知子命令 "skill ${sub ?? ""}"（用 skill export）`);
+    const flag = (name) => {
+      const at = rest.indexOf(name);
+      return at >= 0 ? rest[at + 1] : undefined;
+    };
+    await runSkillExport({
+      workspace: flag("--workspace") ?? process.cwd(),
+      dir: flag("--dir"),
+      home: flag("--home") ?? process.env.DSH_HOME ?? join(homedir(), ".dsh"),
+      dryRun: rest.includes("--dry-run"),
+    });
+  } else if (command === "status") {
     await printStatus(presetsDirFlag);
   } else if (command === "doctor") {
     await printDoctor(presetsDirFlag);

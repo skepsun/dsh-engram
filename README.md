@@ -1089,7 +1089,25 @@ verification younger than **14 days** (`procedureMinEvidence` /
 invalidated (`invalidatedBy` = the failing memory's id, signal → 0.2) and leaves
 the index immediately — a just-broken procedure is worse than none, because the
 next agent would copy it verbatim. Hand-written procedures with no evidence
-fields keep the older `hits >= promoteHits` path. One extra guard keeps the pipe
+fields keep the older `hits >= promoteHits` path.
+
+**Promoted procedures can become real Skills (v0.8-B).** An index line is a
+hint; a DSH Skill is an artifact the host discovers, advertises in the session
+catalog, and any agent (or subagent) can load in full:
+
+```bash
+npx dsh-engram skill export            # → <workspace>/.dsh/skills/<name>/SKILL.md
+npx dsh-engram skill export --dry-run  # show the plan, touch nothing
+```
+
+Only procedures that pass the evidence gate are exported (`≥3` verified
+successes, verified within 14 days, not invalidated). Each file carries a
+`generated-by` marker: the exporter rewrites and eventually **deletes** only its
+own files, so a hand-written skill sharing the root is never touched. When a
+procedure stops holding, its skill file disappears on the next export — the host
+catalog must not keep advertising a fix that just broke. `npm run skill:check`
+proves the seam end-to-end by loading DSH's own `dsh-skill-filesystem` provider
+and listing the exported skill through it. One extra guard keeps the pipe
 clean: auto-captured git command echoes — text that embeds a shell chain
 (`git push: cd … && …`) — stay out of the index even when above the signal
 threshold, until recall hits have promoted them. Everything else sits quietly in
