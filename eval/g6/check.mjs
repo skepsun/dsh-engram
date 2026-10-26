@@ -30,8 +30,13 @@ if (!fs.existsSync(oracle)) {
   process.exit(2);
 }
 fs.mkdirSync(path.join(ws, "test"), { recursive: true });
-fs.copyFileSync(oracle, path.join(ws, "test", `${task}.test.mjs`));
+const target = path.join(ws, "test", `${task}.test.mjs`);
+fs.copyFileSync(oracle, target);
 const res = spawnSync("node", ["--test", `test/${task}.test.mjs`], { cwd: ws, encoding: "utf8" });
+// The oracle must not outlive the grading: round 4 leaked it into the NEXT run's
+// reach through a previous run's workspace, and a control arm read the expected
+// values straight out of the copy. Grading artefacts are for the harness only.
+fs.rmSync(target, { force: true });
 process.stdout.write(res.stdout ?? "");
 process.stderr.write(res.stderr ?? "");
 process.exit(res.status ?? 1);

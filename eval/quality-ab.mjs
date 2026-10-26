@@ -403,7 +403,9 @@ function run(args) {
                 home: os.homedir(),
                 arm,
                 otherArm: arms.find((candidate) => candidate !== arm) ?? null,
-                artifacts: ["/tmp/g6"],
+                // Every earlier round's tree: solutions, oracle copies (before
+                // v0.8.6 deleted them), and check logs that quoted the answers.
+                artifacts: ["/tmp/g6", "/tmp/g6z", "/tmp/g6r4", "/tmp/g6-logs"],
               });
               const file = path.join(os.tmpdir(), `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
               fs.writeFileSync(file, buildProfile({ denyRead }));
@@ -434,7 +436,15 @@ function run(args) {
 
         const check = spawnSync("bash", ["-lc", task.check], { cwd: ws, encoding: "utf8", timeout: args.timeoutMs });
         const pass = check.status === 0;
-        fs.writeFileSync(path.join(dir, "check.log"), `${check.stdout ?? ""}\n--- stderr ---\n${check.stderr ?? ""}\n`);
+        // A check log carries the oracle's assertion messages ("expected 101,
+        // actual 100") — i.e. the answer. It leaves the run tree with the logs.
+        const checkLog = `${check.stdout ?? ""}\n--- stderr ---\n${check.stderr ?? ""}\n`;
+        if (args.logDir === undefined) {
+          fs.writeFileSync(path.join(dir, "check.log"), checkLog);
+        } else {
+          fs.mkdirSync(path.join(args.logDir, "checks", arm, task.id), { recursive: true });
+          fs.writeFileSync(path.join(args.logDir, "checks", arm, task.id, `seed-${seed}.log`), checkLog);
+        }
         // Contamination flag: a control run that mentions the memory store did
         // not run blind, whatever it scored.
         // A control run that mentions the store, the tool, or a SIBLING arm's
