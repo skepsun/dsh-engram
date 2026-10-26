@@ -294,7 +294,8 @@ test("notePrune: host prunes land in hostPrunedChars, never in the engram leg", 
   const row = readLedger({ home }).sessions.find((r) => r.sessionId === "s-host");
   assert.equal(row.hostPrunedChars, 49_964, "host leg recorded separately");
   assert.equal(row.prunedChars, 9_000, "engram leg untouched by host prunes");
-  assert.equal(row.rewriteCount, 2, "both prunes pay the rewrite cost");
+  assert.equal(row.rewriteCount, 1, "only the engram prune pays a rewrite cost");
+  assert.equal(row.rewriteChars, 12_000, "the host's rewrite cost is not ours");
 
   // Only the engram leg can reach avoidedChars (what NetTokens spends).
   ledger.noteInjection("s-host", ws, "index", 1_000);
