@@ -253,10 +253,16 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
 
   // ── G1 NetTokens: per-session distribution (rows only; no rows = no claim)
   const rows = ledger.sessions.filter((row) => row.requests > 0);
-  const positive = rows.filter((row) => row.netChars > 0);
-  const longRows = rows.filter((row) => row.requests >= LONG_SESSION_REQUESTS);
+  // G1's denominator is the sessions that HAD something to save. A session
+  // with no prune and no compaction can only be net-negative (it pays injection
+  // and credits nothing), so counting it measures "did the mechanism run here",
+  // not "did it pay off". 14 days on this machine: 21 of 33 mounted sessions
+  // had a saving opportunity — the other 12 are structurally negative.
+  const opportunityRows = rows.filter((row) => (row.prunedChars ?? 0) + (row.compactedChars ?? 0) > 0);
+  const positive = opportunityRows.filter((row) => row.netChars > 0);
+  const longRows = opportunityRows.filter((row) => row.requests >= LONG_SESSION_REQUESTS);
   const longPositive = longRows.filter((row) => row.netChars > 0);
-  const netShare = pct(positive.length, rows.length);
+  const netShare = pct(positive.length, opportunityRows.length);
   const longShare = pct(longPositive.length, longRows.length);
 
   // ── G2 Activation: mounted sessions where any engram/esr tool fired
@@ -277,7 +283,13 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   return {
     auditedAt: now,
     window: { days, now, sessions: sessions.length, mounted: mounted.length },
-    ledger: { rows: rows.length, totals: ledger.totals, positive: positive.length, longRows: longRows.length },
+    ledger: {
+      rows: rows.length,
+      opportunityRows: opportunityRows.length,
+      totals: ledger.totals,
+      positive: positive.length,
+      longRows: longRows.length,
+    },
     activation: {
       activated: activated.length,
       share: activation,
@@ -291,16 +303,16 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
     gates: [
       {
         id: "G1",
-        name: "NetTokens · 净收益 > 0 的会话占比",
+        name: "NetTokens · 净收益 > 0 的会话占比（有节省机会的会话）",
         value: fmtPct(netShare),
         target: "≥ 50%",
         verdict:
-          !credit.armed || rows.length < MIN_SESSION_ROWS ? "未测" : verdict(netShare >= 50),
+          !credit.armed || opportunityRows.length < MIN_SESSION_ROWS ? "未测" : verdict(netShare >= 50),
         note: !credit.armed
-          ? `${positive.length}/${rows.length} rows, but no savings path is armed (${credit.note}) — net can only be ≤ 0`
-          : rows.length < MIN_SESSION_ROWS
-            ? `${positive.length}/${rows.length} rows — need ≥ ${MIN_SESSION_ROWS} flushed sessions for a distribution`
-            : `${positive.length}/${rows.length} sessions with ledger rows`,
+          ? `${positive.length}/${opportunityRows.length} opportunity rows, but no savings path is armed (${credit.note}) — net can only be ≤ 0`
+          : opportunityRows.length < MIN_SESSION_ROWS
+            ? `${positive.length}/${opportunityRows.length} opportunity rows of ${rows.length} — need ≥ ${MIN_SESSION_ROWS} for a distribution`
+            : `${positive.length}/${opportunityRows.length} sessions with a saving opportunity (${rows.length} rows total)`,
       },
       {
         id: "G1b",
@@ -309,7 +321,7 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         target: "≥ 70%",
         verdict:
           !credit.armed || longRows.length < MIN_LONG_ROWS ? "未测" : verdict(longShare >= 70),
-        note: `${longPositive.length}/${longRows.length} long sessions`,
+        note: `${longPositive.length}/${longRows.length} long opportunity sessions`, 
       },
       {
         id: "G2",
@@ -460,7 +472,8 @@ function renderMarkdown(report) {
   out.push("");
   out.push("> 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。");
   out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，G6 需要配对实验。");
-  out.push("> G1 在行数 < 5 时只报数值、不给判定：一个会话不是分布。");
+  out.push("> G1 的分母是「有节省机会」的会话（`prunedChars + compactedChars > 0`）：没有任何剪枝/压缩的会话结构上必为负，");
+  out.push("> 把它们算进分母测的是激活率而不是收益。机会会话 < 5 时只报数值、不给判定：一个会话不是分布。");
   out.push("> 绝对值说明：injected 按名义价逐请求记，而宿主前缀缓存实际约 10% 付费；");
   out.push("> 两侧同比例缩放不改变 net 的**正负号**（G1 判的就是符号），所以门不受影响，但「节省 token」的绝对量偏悲观。");
   return out.join("\n");

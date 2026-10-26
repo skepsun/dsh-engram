@@ -575,6 +575,7 @@ adapters    DSH seams (storageDomain, tokenMeter, pruner, compaction, skill)
 | 指标 | 定义 | 用途 |
 |---|---|---|
 | NetTokens | avoided − injected − rewrites×cacheFactor | 唯一主指标 |
+| NetTokens 口径（2026-10-26 修订） | 分母只算**有节省机会**的会话（`prunedChars + compactedChars > 0`）。没有剪枝/压缩的会话结构上必为负（只有注入支出、没有节省入账），把它们算进分母测的是「机制有没有跑」，不是「省没省到」。本机 14 天：33 个挂载会话中 21 个有节省机会 | 防止 G1 被结构性负值拖死 |
 | Activation | fire 过的会话 / 挂载会话 | 机制是否真的跑 |
 | DrillRate | detail / recall-with-hits | 推送是否被采纳 |
 | Quality Δ | 配对任务成功率差 | 质量红线 |

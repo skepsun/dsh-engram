@@ -69,12 +69,18 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
       updatedAt: Date.now(),
       workspaces: {},
       sessions: {
-        s1: { sessionId: "s1", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 100, avoidedChars: 5000, rewriteCount: 0, rewriteChars: 0 },
-        s2: { sessionId: "s2", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 2, injectedChars: 900, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 },
-        s3: { sessionId: "s3", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 8, injectedChars: 100, avoidedChars: 4000, rewriteCount: 0, rewriteChars: 0 },
-        s4: { sessionId: "s4", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 6, injectedChars: 100, avoidedChars: 3000, rewriteCount: 0, rewriteChars: 0 },
-        s5: { sessionId: "s5", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 5, injectedChars: 100, avoidedChars: 2000, rewriteCount: 0, rewriteChars: 0 },
-        s6: { sessionId: "s6", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 4, injectedChars: 100, avoidedChars: 1000, rewriteCount: 0, rewriteChars: 0 },
+        // Six sessions WITH a saving opportunity (a prune or compaction ran).
+        s1: { sessionId: "s1", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 100, avoidedChars: 5000, prunedChars: 4000, rewriteCount: 0, rewriteChars: 0 },
+        s2: { sessionId: "s2", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 2, injectedChars: 900, avoidedChars: 0, prunedChars: 500, rewriteCount: 0, rewriteChars: 0 },
+        s3: { sessionId: "s3", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 8, injectedChars: 100, avoidedChars: 4000, prunedChars: 3000, rewriteCount: 0, rewriteChars: 0 },
+        s4: { sessionId: "s4", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 6, injectedChars: 100, avoidedChars: 3000, prunedChars: 2000, rewriteCount: 0, rewriteChars: 0 },
+        s5: { sessionId: "s5", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 5, injectedChars: 100, avoidedChars: 2000, prunedChars: 1000, rewriteCount: 0, rewriteChars: 0 },
+        s6: { sessionId: "s6", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 4, injectedChars: 100, avoidedChars: 1000, prunedChars: 800, rewriteCount: 0, rewriteChars: 0 },
+        // Two sessions with NO opportunity: nothing was pruned or compacted, so
+        // they can only be net-negative. Counting them would measure activation,
+        // not payoff — the G1 denominator must ignore them.
+        n1: { sessionId: "n1", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 700, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 },
+        n2: { sessionId: "n2", workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 800, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 },
       },
     }),
     "utf8",
@@ -98,8 +104,10 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
 
   const report = auditGates({ home, root, days: 14 });
   const byId = Object.fromEntries(report.gates.map((g) => [g.id, g]));
-  assert.equal(report.ledger.rows, 6);
-  assert.equal(byId.G1.value, "83.3%", "five of six sessions are net-positive");
+  assert.equal(report.ledger.rows, 8, "all flushed rows");
+  assert.equal(report.ledger.opportunityRows, 6, "only rows with a prune/compaction pay G1's denominator");
+  assert.equal(byId.G1.value, "83.3%", "five of six opportunity sessions are net-positive");
+  assert.match(byId.G1.note, /5\/6 sessions with a saving opportunity \(8 rows total\)/);
   assert.equal(byId.G1.verdict, "PASS", "83.3% meets the pre-declared floor");
   assert.equal(byId.G1b.verdict, "未测", "no ≥200-request session yet — not a pass");
   assert.equal(byId.G2.value, "50.0%");
@@ -116,7 +124,9 @@ test("G1 refuses to judge when neither savings path is armed — FAIL would blam
   const day = new Date().toISOString().slice(0, 10);
   const rows = {};
   for (let i = 1; i <= 6; i += 1) {
-    rows[`s${i}`] = { sessionId: `s${i}`, workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 900, avoidedChars: 0, rewriteCount: 0, rewriteChars: 0 };
+    // A prune happened (so the row is in G1's denominator) but nothing was
+    // credited — exactly the shape of "the savings path is not armed".
+    rows[`s${i}`] = { sessionId: `s${i}`, workspace: "/ws", firstDay: day, lastDay: day, updatedAt: Date.now(), requests: 10, injectedChars: 900, avoidedChars: 0, prunedChars: 500, rewriteCount: 0, rewriteChars: 0 };
   }
   fs.writeFileSync(ledgerFile(home), JSON.stringify({ version: 1, updatedAt: Date.now(), workspaces: {}, sessions: rows }), "utf8");
   // The live shape from a profile that reverted Context GC to opt-in: L1 off,
