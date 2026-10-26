@@ -11,20 +11,20 @@
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 45 recall-with-hits |
 | G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/400 memories (12 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 113 memories · 6 lines |
-| G6 | Quality Δ · 配对任务成功率差 | 0.0pp | ≤ 2pp | **PASS** | 12 对配对 · 6 任务 × 2 种子 · eval/g6/runs/g6-2026-10-26/runs.json |
+| G6 | Quality Δ · 配对任务成功率差 | 30.0pp | Δ ≥ −2pp | **PASS** | 10 对配对 · 5 任务 × 2 种子 · eval/g6/runs/hidden-b/runs.json |
 | G7 | 账本自身开销 | 0.0144% | < 0.5% 请求时延 | **PASS** | from `npm run bench:ledger` (worst op vs a 300ms request floor) |
 
 ## 账本合计
 
-- injected 11,174,792c（≈2,793,698 tok）· avoided 1,722,608,550c（≈430,652,138 tok）
+- injected 11,250,192c（≈2,812,548 tok）· avoided 1,749,291,670c（≈437,322,918 tok）
 - rewrites 17 次 / 4,024,426c（按 cacheDiscount 计罚 3,621,983c）
-- **net 1,707,811,775c ≈ 426,952,944 tok**；开源会话 7 条，其中净收益为正 3 条
+- **net 1,734,419,495c ≈ 433,604,874 tok**；开源会话 7 条，其中净收益为正 3 条
 
 ## 最近会话（按会话落行）
 
 | session | requests | injected | avoided | net | workspace |
 |---|---|---|---|---|---|
-| session-746c03… | 864 | 1,753,604c | 123,640,834c | 121,602,366c | dsh-loom |
+| session-746c03… | 904 | 1,829,004c | 150,323,954c | 148,210,086c | dsh-loom |
 | session-419cfc… | 320 | 933,735c | 143,007,626c | 142,073,891c | kototoro-parsers |
 | 91e9c39a-2231-… | 66 | 179,382c | 286,224c | 106,842c | kototoro-parsers |
 | session-775f51… | 220 | 609,289c | 0c | -1,711,542c | kototoro-parsers |
