@@ -12,7 +12,7 @@
 | G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/400 memories (12 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 113 memories · 6 lines |
 | G6 | Quality Δ · 配对任务成功率差 | 0.0pp | ≤ 2pp | **PASS** | 12 对配对 · 6 任务 × 2 种子 · eval/g6/runs/g6-2026-10-26/runs.json |
-| G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | run `npm run bench:ledger` and pass --g7 <pct> |
+| G7 | 账本自身开销 | 0.0144% | < 0.5% 请求时延 | **PASS** | from `npm run bench:ledger` (worst op vs a 300ms request floor) |
 
 ## 账本合计
 
