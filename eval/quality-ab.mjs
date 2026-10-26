@@ -50,6 +50,11 @@ function parseArgs(argv) {
     else if (arg === "--exclude") out.exclude = next().split(",").map((x) => x.trim()).filter(Boolean);
     else if (arg === "--log-dir") out.logDir = next();
     else if (arg === "--sandbox") out.sandbox = true;
+    // Resume a matrix that died mid-flight (round 4 hit ENOSPC after the whole
+    // control half): keep the rows already in <out>/runs.json, run only the
+    // missing pairs.
+    else if (arg === "--resume") out.resume = true;
+    else if (arg === "--only-arm") out.onlyArm = next();
     // One task is not a quality measurement — same discipline as G1's row floor.
     else if (arg === "--min-pairs") out.minPairs = Number(next()) || 10;
     else if (arg === "--arm") {
@@ -346,6 +351,20 @@ function run(args) {
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
+  let priorRows = [];
+  if (args.resume) {
+    try {
+      const previous = JSON.parse(fs.readFileSync(path.join(args.out, "runs.json"), "utf8"));
+      priorRows = previous.rows ?? [];
+      const done = new Set(priorRows.map((row) => `${row.task}|${row.seed}|${row.arm}`));
+      for (let i = plan.length - 1; i >= 0; i -= 1) {
+        if (done.has(`${plan[i].task.id}|${plan[i].seed}|${plan[i].arm}`)) plan.splice(i, 1);
+      }
+      console.log(`resume: ${priorRows.length} rows kept, ${plan.length} runs to do`);
+    } catch {
+      console.log(`resume: no runs.json to resume from (${args.out}) — running the whole matrix`);
+    }
+  }
 
   // Run ORDER is part of the isolation. A control run that happens after a
   // treatment run can read the treatment's `run.log` (a real control arm did
@@ -358,6 +377,10 @@ function run(args) {
     for (let seed = 0; seed < args.seeds; seed += 1) {
       for (const arm of arms) plan.push({ task, seed, arm });
     }
+  }
+  if (args.onlyArm !== void 0) {
+    const keep = new Set([args.onlyArm]);
+    for (let i = plan.length - 1; i >= 0; i -= 1) if (!keep.has(plan[i].arm)) plan.splice(i, 1);
   }
   if (args.controlFirst) {
     const control = arms[1];
@@ -457,7 +480,8 @@ function run(args) {
     }
   }
 
-  const { summary, pairs, deltaPp, gate } = analyze({ rows, tasks, seeds: args.seeds, arms, minPairs: args.minPairs });
+  const allRows = [...priorRows, ...rows];
+  const { summary, pairs, deltaPp, gate } = analyze({ rows: allRows, tasks, seeds: args.seeds, arms, minPairs: args.minPairs });
 
   const report = {
     startedAt,
@@ -468,11 +492,11 @@ function run(args) {
     arms,
     summary,
     hideStoreFor: args.hideStoreFor ?? null,
-    contaminated: rows.filter((row) => row.contaminated === true).length,
+    contaminated: allRows.filter((row) => row.contaminated === true).length,
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,
     gate,
-    rows,
+    rows: allRows,
   };
   writeArtifacts(args.out, report, args.minPairs);
   console.log(`\nG6 ${report.gate.verdict} (${report.gate.target}) — ${report.gate.note}`);

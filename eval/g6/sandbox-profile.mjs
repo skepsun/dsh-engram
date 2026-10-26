@@ -13,6 +13,8 @@
  * comes back as EPERM, which is exactly what the contamination check wants to
  * be able to say.
  */
+import fs from "node:fs";
+
 export const CHANNELS = {
   /** The repo: fixtures, oracles, seed memories, docs, git history. */
   repo: (repo) => [repo],
@@ -28,8 +30,26 @@ export const CHANNELS = {
   abDocs: (home, arm) => [`${home}/.dsh/quality-ab/profiles/${arm}/node_modules/dsh-engram/docs`],
 };
 
+/**
+ * macOS resolves `/tmp` to `/private/tmp` before the profile is matched, so a
+ * deny entry spelled `/tmp/g6z` does NOT cover `/private/tmp/g6z/...`. Round 4
+ * leaked the oracle through exactly that gap (`/tmp` vs `/private/tmp`), which is
+ * why every entry is emitted both as given and as its realpath.
+ */
+function variants(entry) {
+  const out = new Set([entry]);
+  try {
+    out.add(fs.realpathSync(entry));
+  } catch {
+    // Not on disk any more — the spelled path is all there is.
+  }
+  if (entry.startsWith("/tmp/")) out.add(`/private${entry}`);
+  if (entry.startsWith("/private/tmp/")) out.add(entry.slice("/private".length));
+  return [...out];
+}
+
 export function buildProfile({ denyRead }) {
-  const flat = [...new Set(denyRead.filter((p) => typeof p === "string" && p.length > 0))];
+  const flat = [...new Set(denyRead.filter((p) => typeof p === "string" && p.length > 0).flatMap(variants))];
   return ["(version 1)", "(allow default)", `(deny file-read* ${flat.map((p) => `(subpath ${JSON.stringify(p)})`).join(" ")} fit)`.replace(" fit", ""), ""].join("\n");
 }
 
