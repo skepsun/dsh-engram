@@ -197,11 +197,24 @@ function seedStore(home, ws, memories) {
   const file = path.join(dir, "dsh_engram.json");
   const now = Date.now();
   const rows = {};
+  // The workspace key must be spelled the way the ARM will compute it, or the
+  // treatment runs blind while the harness believes it seeded. The plugin keys
+  // every memory by `path.resolve(cwd)`, and the host reports cwd from
+  // getcwd(2) — on macOS that is the RESOLVED path, so a run started under
+  // `/tmp/x` sees `/private/tmp/x`. Round 6's smoke caught this the expensive
+  // way: seeds keyed `/tmp/…` never matched, and the "treatment" scored 0.
+  let key = ws;
+  try {
+    key = fs.realpathSync(ws);
+  } catch {
+    // Not on disk (shouldn't happen after the copy) — the literal spelling is
+    // the only thing left to try.
+  }
   memories.forEach((memory, index) => {
     const id = `seed-${String(index).padStart(2, "0")}`;
     rows[id] = {
       id,
-      workspace: ws,
+      workspace: key,
       kind: memory.kind ?? "fact",
       text: memory.text,
       tags: memory.tags ?? ["seeded"],

@@ -126,3 +126,31 @@ test("below the pair floor the gate refuses to judge — a tie on 2 runs is not 
   assert.equal(report.gate.verdict, "未测");
   assert.match(fs.readFileSync(path.join(out, "REPORT.md"), "utf8"), /not a quality measurement/);
 });
+
+test("seeded rows carry the RESOLVED workspace, or the treatment runs blind", () => {
+  // macOS resolves `/tmp` to `/private/tmp`: the arm's cwd (getcwd) is the
+  // resolved spelling, and the plugin keys memories by path.resolve(cwd). Seeds
+  // written with the literal spelling never matched, so the "treatment" ran with
+  // an empty index and scored like the control — while the harness reported that
+  // it had seeded. Round 6's smoke caught it; this pins the fixed spelling.
+  const base = process.platform === "darwin" ? "/tmp" : os.tmpdir();
+  const out = fs.mkdtempSync(path.join(base, "ab-out-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "ab-home-"));
+  const seedFile = path.join(home, "seed.json");
+  fs.writeFileSync(seedFile, JSON.stringify([{ kind: "fact", text: "team convention: x" }]));
+  const { workspace, tasks } = fixture();
+  const res = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off",
+      "--seeds", "1", "--out", out, "--home", home, "--seed-memory", seedFile, "--min-pairs", "1"],
+    { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") } },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  const store = JSON.parse(fs.readFileSync(path.join(home, "storages", "dsh_engram.json"), "utf8"));
+  const rows = Object.values(store.tables.memories);
+  assert.ok(rows.length > 0, "the seed file reached the store");
+  for (const row of rows) {
+    assert.equal(row.workspace, fs.realpathSync(row.workspace), "workspace key is spelled the way the arm computes it");
+    assert.ok(fs.existsSync(row.workspace) && path.basename(row.workspace) === "ws", "key points at a real run workspace");
+  }
+});
