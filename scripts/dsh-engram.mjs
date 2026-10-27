@@ -38,7 +38,7 @@ import { defaultSkillDir, exportSkills, skillDescription, skillName, planSkillEx
 import { approvedIds, isApproved, loadApprovals, recordApproval, revokeApproval } from "../lib/approvals.js";
 import { isProvenProcedure, invalidatedProcedure } from "../lib/status-insights.js";
 import { workspaceKey } from "../lib/util.js";
-import { ENGRAM_PRUNE_ROW_NAME } from "../lib/web-provision.js";
+import { ENGRAM_PRUNE_ROW_NAME, swapCompactionRow } from "../lib/web-provision.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -309,7 +309,14 @@ async function printStatus(presetsDirFlag) {
       const note = cs === "wired"
         ? `已接管（dsh-engram/compaction 行${hasPrune ? " + dsh-engram/prune 行" : " · 缺 prune 行：L1 在这个预设里看不见边界，重跑 enable 补齐"}）`
         : cs === "stock"
-          ? "出厂布局，重启 dsh web 后自动接管"
+          ? swapCompactionRow(text) === null
+            // "stock" only says the stock row is present; it does not promise
+            // the swap will take. `minimal` ships a compaction group without
+            // the result pruner, so the swap refuses to guess and the preset
+            // stays stock forever — saying "重启后自动接管" there would be a
+            // status line that lies.
+            ? "出厂布局但与标准形状不同（行不全），自动接管不会发生；要 Context GC 请手工接线或改用 standard"
+            : "出厂布局，重启 dsh web 后自动接管"
           : "自定义/无 compaction，插件不碰";
       log(`  ${preset.id}: ${cs} — ${note}`);
     }
