@@ -241,8 +241,9 @@ async function printStatus(presetsDirFlag) {
   // Printed from data, not from startup logs — a dormant leg must be visible
   // without the terminal that printed the warning.
   try {
-    const home = process.env.DSH_HOME ?? join(homedir(), ".dsh");
-    log(`  ${describePushLegs(readPushLegsHealth(home))}`);
+    // `readLedger` above already resolves the same way: `<dsh home>/engram`.
+    const engramDir = join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "engram");
+    log(`  ${describePushLegs(readPushLegsHealth(engramDir))}`);
     log("");
   } catch {}
 

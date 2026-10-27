@@ -264,7 +264,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market compatibility block — keep labels bilingual and in sync with
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
-- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.8.7`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.8.8`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
 - **最后验证日期 / Last verified**: 2026-10-27 — DSH `0.2.1-rc.2` (`dsh --version`), web profile live composition; npm test 483/483
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
@@ -294,7 +294,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.8.3`–`0.8.4` | 本地 | 同 `0.5.0` — 审批门（v0.8-D）+ 其 GUI；G6 门槛改单边（Δ ≥ −2pp）+ 隐藏规格语料 | 同 `0.5.0` |
 | `0.8.5` | 本地 | 同 `0.5.0` — 记忆行文件信号（`⚠file-changed` / `⚠file-missing`），G6 第三/四轮（撤回 +30pp，Δ=+58.3pp） | 同 `0.5.0` |
 | `0.8.6` (npm) | published | 同 `0.5.0` — 修 issue #9：宿主没有 `sessionQuery`/`snapshotEvents` 时退回 `seq`+`eventAt` 逐条读，四项注入特性不再静默休眠；warn 报出宿主 surface；G6 第五轮 Δ=+90.0pp | 同 `0.5.0` |
-| `0.8.7` (本期 / this release) | 本地 | 同 `0.5.0` — 推送腿落盘（`$DSH_HOME/engram/push-legs.jsonl`）+ `status` 打印事件日志读法；`minimal` 预设不再承诺永远不会发生的自动接管 | 同 `0.5.0` |
+| `0.8.7` (npm) | published | 同 `0.5.0` — 推送腿落盘（`$DSH_HOME/engram/push-legs.jsonl`）+ `status` 打印事件日志读法；`minimal` 预设不再承诺永远不会发生的自动接管 | 同 `0.5.0` |
+| `0.8.8` (本期 / this release) | 本地 | 同 `0.5.0` — 修推送腿遥测写错目录（`engram/engram/`）导致状态显示「还没记录」；`pushLegsPath` 契约写死在一处 | 同 `0.5.0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 
