@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { describePushLegs, readPushLegsHealth } from "../lib/push-legs.js";
 import {
   compactionWireStatus,
   discoverPresetsDir,
@@ -234,6 +235,15 @@ async function printStatus(presetsDirFlag) {
         log("");
       }
     }
+  } catch {}
+
+  // Push legs (issue #9): which session-event read path the live process took.
+  // Printed from data, not from startup logs — a dormant leg must be visible
+  // without the terminal that printed the warning.
+  try {
+    const home = process.env.DSH_HOME ?? join(homedir(), ".dsh");
+    log(`  ${describePushLegs(readPushLegsHealth(home))}`);
+    log("");
   } catch {}
 
   if (status === undefined) {

@@ -1035,6 +1035,12 @@ and silence when there is nothing relevant to point at:
 > session object does offer — that line is the thing to paste into a bug report.
 > Known case: the **desktop runtime** (`@deepseek-ai/dsh-desktop-runtime`) on
 > Windows, tracked as issue #9.
+>
+> `dsh-engram status` also prints a **push-legs** line — `推送腿：事件日志读法
+> sessionQuery · 最近 …` — the read path the live process actually took, written
+> to `$DSH_HOME/engram/push-legs.jsonl`. A dormant host shows
+> `事件日志不可读（none）… 休眠中` there, so the four features can be checked
+> without hunting a startup log.
 
 ### Entity pages + entity cards (v0.7-B)
 
