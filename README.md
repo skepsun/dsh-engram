@@ -264,8 +264,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market compatibility block — keep labels bilingual and in sync with
      docs/RELEASE-NOTES.TEMPLATE.md (market README convention) -->
 
-- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.7.2`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
-- **最后验证日期 / Last verified**: 2026-10-20 — DSH `0.2.0` live composition (`dsh-context` + `dshmarket` + `dsh-engram`) arms L1 boundary prune; npm test 406/406
+- **DSH 版本 / DSH versions**: `>=0.1.2-alpha.2 <0.3.0-0` (本版 `0.8.6`; 已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` — 见下方矩阵)
+- **最后验证日期 / Last verified**: 2026-10-27 — DSH `0.2.1-rc.2` (`dsh --version`), web profile live composition; npm test 483/483
 - **安装方式已验证 / Verified install**: `dsh plugin --profile web add dsh-engram`
 
 > **Short version.** Every **published** release (`0.2.0` … `0.3.6`) supports
@@ -289,7 +289,11 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.7.4` (npm) | published | 同 `0.5.0` — 修「推送腿」在 DSH `0.2.x` 上整条静默失效（`[RECALL]` 启动召回、JIT 推送） | 同 `0.5.0` |
 | `0.7.5`–`0.7.9` | 本地 | 同 `0.5.0` — 账本按会话落行 + `gate-audit`；L1 三个真机 bug：还款闸门工作区键（`Users-x-proj` vs `/Users/x/proj`）、`session.append` 重入、归因不对称；L1 从「自己剪」转成「记账 + 归因」 | 同 `0.5.0` |
 | `0.7.10`–`0.7.12` | 本地 | 同 `0.5.0` — 归因对称（宿主剪枝不进我们的 rewrite 账）、`boundaryPrune` 默认关闭改 opt-in、`status` 打印「账本两条腿」让开关判断可复核 | 同 `0.5.0` |
-| `0.7.13` (本期 / this release) | 本地 | 同 `0.5.0` — 压缩入账读真实事件形状（`event.data`，此前 82 个 GC checkpoint 全部未入账 + 29.6M 字符）、会话计数重启不再清零（delta 累加）、CLI 尊重 `DSH_HOME` | 同 `0.5.0` |
+| `0.7.13` | 本地 | 同 `0.5.0` — 压缩入账读真实事件形状（`event.data`，此前 82 个 GC checkpoint 全部未入账 + 29.6M 字符）、会话计数重启不再清零（delta 累加）、CLI 尊重 `DSH_HOME` | 同 `0.5.0` |
+| `0.8.0`–`0.8.2` | 本地 | 同 `0.5.0` — 证据化 procedure（v0.8-A）、导出为 DSH Skill（v0.8-B）、subagent 交接胶囊（v0.8-C） | 同 `0.5.0` |
+| `0.8.3`–`0.8.4` | 本地 | 同 `0.5.0` — 审批门（v0.8-D）+ 其 GUI；G6 门槛改单边（Δ ≥ −2pp）+ 隐藏规格语料 | 同 `0.5.0` |
+| `0.8.5` | 本地 | 同 `0.5.0` — 记忆行文件信号（`⚠file-changed` / `⚠file-missing`），G6 第三/四轮（撤回 +30pp，Δ=+58.3pp） | 同 `0.5.0` |
+| `0.8.6` (本期 / this release) | 本地 | 同 `0.5.0` — 修 issue #9：宿主没有 `sessionQuery`/`snapshotEvents` 时退回 `seq`+`eventAt` 逐条读，四项注入特性不再静默休眠；warn 报出宿主 surface；G6 第五轮 Δ=+90.0pp | 同 `0.5.0` |
 
 ### Where the API family broke — `0.1.2-alpha.2`
 

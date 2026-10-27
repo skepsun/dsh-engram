@@ -167,7 +167,7 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 <!-- dsh-market 兼容信息块 —— 与 docs/RELEASE-NOTES.TEMPLATE.md 的市场 README 公约保持一致 -->
 
 - **DSH 版本**：`>=0.1.2-alpha.2 <0.3.0-0`（本版 `0.7.2`；已发布的 `0.3.7`、`0.4.0` 仍声明旧的 `0.1.x` 范围 `>=0.1.2-alpha.2 <0.2.0-0` —— 见下文矩阵）
-- **最后验证日期**：2026-10-20 —— DSH `0.2.0` 实机组合（`dsh-context` + `dshmarket` + `dsh-engram`）验证 L1 边界剪枝武装；npm test 406/406 通过
+- **最后验证日期**：2026-10-27 —— DSH `0.2.1-rc.2`（`dsh --version`）+ web profile 实机组合；npm test 483/483 通过
 - **安装方式已验证**：`dsh plugin --profile web add dsh-engram`
 
 > **一句话结论**：所有**已真正发布**的版本（`0.2.0` … `0.3.6`）**只支持旧版
@@ -184,7 +184,11 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.6.0` | 已发布 | 同 `0.5.0` —— Context Ledger、BoundaryPrune/ResultPack 默认开 + 账本否决、JIT 推送、Context GC 改 opt-in | 同 `0.5.0` |
 | `0.7.0` | 已发布 | 同 `0.5.0` —— 会话 episode、恢复简报、实体页/实体卡、可重验证锚点 + 分层 TTL | 同 `0.5.0` |
 | `0.7.1`（npm） | 已发布 | 同 `0.5.0` —— web 平面 Context GC 适配 DSH `0.2.0` 声明式预设（14 空格缩进）、bundle patch 重新启用 host 平面 `tool-result-pruner`、压缩节省接入 Context Ledger | 同 `0.5.0` |
-| `0.7.2`（本期 / this release） | 待发布 | 同 `0.5.0` —— L1 边界剪枝改经 `ctx.inject` 武装，修掉「pruner 行比插件晚激活一帧就永久休眠」的启动时序竞态 | 同 `0.5.0` |
+| `0.7.2` | 已发布 | 同 `0.5.0` —— L1 边界剪枝改经 `ctx.inject` 武装，修掉「pruner 行比插件晚激活一帧就永久休眠」的启动时序竞态 | 同 `0.5.0` |
+| `0.7.3`–`0.7.4`（npm `latest`） | 已发布 | 同 `0.5.0` —— 设置卡迁到「Engram 记忆 → 设置」tab（DSH `0.2.1` 删了旧 section）；修 DSH `0.2.x` 上「推送腿」整条静默失效（`[RECALL]` 启动召回、JIT 推送） | 同 `0.5.0` |
+| `0.7.5`–`0.7.13` | 本地 | 同 `0.5.0` —— 账本按会话落行 + `gate-audit`；L1 从「自己剪」转成「记账 + 归因」；压缩入账读真实事件形状；会话计数重启不清零；CLI 尊重 `DSH_HOME` | 同 `0.5.0` |
+| `0.8.0`–`0.8.5` | 本地 | 同 `0.5.0` —— 证据化 procedure、导出 DSH Skill、subagent 交接胶囊、审批门 + GUI、记忆行文件信号（`⚠file-changed`/`⚠file-missing`）、G6 门改单边 + 隐藏规格语料（Δ=+58.3pp） | 同 `0.5.0` |
+| `0.8.6`（本期 / this release） | 本地 | 同 `0.5.0` —— 修 issue #9：宿主不暴露 `sessionQuery`/`snapshotEvents` 时退回 `seq`+`eventAt` 逐条读，四项注入特性不再静默休眠；warn 报出宿主 surface；G6 第五轮 Δ=+90.0pp | 同 `0.5.0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
