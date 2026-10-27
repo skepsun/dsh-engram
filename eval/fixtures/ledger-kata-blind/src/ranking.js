@@ -1,3 +1,3 @@
-export function sortByScore(rows) {
+export function rankRows(rows) {
   throw new Error("not implemented");
 }

@@ -19,9 +19,9 @@
       "timeoutMs": 900000
     },
     {
-      "id": "ordering",
-      "prompt": "实现 src/ordering.js 里的 sortByScore(rows)，按团队约定的排序口径。改完自己验证一下。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs ordering --dir oracle-blind",
+      "id": "ranking",
+      "prompt": "实现 src/ranking.js 里的 rankRows(rows)，按团队约定的排序口径。改完自己验证一下。",
+      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs ranking --dir oracle-blind",
       "timeoutMs": 900000
     }
   ]

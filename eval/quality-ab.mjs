@@ -73,6 +73,24 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * Prior run trees on this machine: every `/tmp` entry named `g6*` except the
+ * current round's root and log dir. Cheap, and it cannot go stale the way a
+ * hand-written list did.
+ */
+function discoverPriorTrees(ownRoot, ownLogs) {
+  const own = new Set([path.basename(ownRoot)]);
+  if (ownLogs !== undefined) own.add(path.basename(path.resolve(ownLogs)));
+  try {
+    return fs
+      .readdirSync("/tmp")
+      .filter((name) => name.startsWith("g6") && !own.has(name))
+      .map((name) => path.join("/tmp", name));
+  } catch {
+    return ["/tmp/g6"];
+  }
+}
+
 function dsh(args, { cwd, env, timeoutMs } = {}) {
   return spawnSync(DSH_BIN, args, {
     cwd,
@@ -426,9 +444,11 @@ function run(args) {
                 home: os.homedir(),
                 arm,
                 otherArm: arms.find((candidate) => candidate !== arm) ?? null,
-                // Every earlier round's tree: solutions, oracle copies (before
-                // v0.8.6 deleted them), and check logs that quoted the answers.
-                artifacts: ["/tmp/g6", "/tmp/g6z", "/tmp/g6r4", "/tmp/g6-logs"],
+                // Every earlier round's tree, discovered rather than listed: any
+                // /tmp entry starting with `g6` except this round's own root and
+                // log dir. A hardcoded list already missed one round (round 4 read
+                // round 4a's oracle copy).
+                artifacts: discoverPriorTrees(path.resolve(args.out), args.logDir),
               });
               const file = path.join(os.tmpdir(), `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
               fs.writeFileSync(file, buildProfile({ denyRead }));

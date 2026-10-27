@@ -35,9 +35,9 @@
     "tags": [
       "seeded",
       "ledger-kata",
-      "ordering"
+      "ranking"
     ],
-    "text": "ledger-kata 约定（ordering）：sortByScore(rows) 返回新数组，按 score 降序，分数相同保持入参顺序（稳定）；不得原地改动入参。"
+    "text": "ledger-kata 约定（ranking）：rankRows(rows) 返回新数组，不改动入参；先按 score 升序；score 相同则 id 更长的排前面；id 长度也相同则按入参逆序（后进先出）。"
   },
   {
     "kind": "fact",
