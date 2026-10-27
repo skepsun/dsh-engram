@@ -25,7 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildProfile, denyFor } from "./g6/sandbox-profile.mjs";
+import { buildConfinedProfile } from "./g6/sandbox-profile.mjs";
 
 /** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -453,19 +453,20 @@ function run(args) {
         // honest claim; with it, Δ is a measurement.
         const sandboxFile = args.sandbox
           ? (() => {
-              const denyRead = denyFor({
-                repo: path.resolve(ROOT),
-                home: os.homedir(),
-                arm,
-                otherArm: arms.find((candidate) => candidate !== arm) ?? null,
-                // Every earlier round's tree, discovered rather than listed: any
-                // /tmp entry starting with `g6` except this round's own root and
-                // log dir. A hardcoded list already missed one round (round 4 read
-                // round 4a's oracle copy).
-                artifacts: discoverPriorTrees(path.resolve(args.out), args.logDir),
-              });
-              const file = path.join(os.tmpdir(), `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
-              fs.writeFileSync(file, buildProfile({ denyRead }));
+              const otherArm = arms.find((candidate) => candidate !== arm) ?? null;
+              const file = path.join("/tmp", `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
+              fs.writeFileSync(
+                file,
+                buildConfinedProfile({
+                  home: os.homedir(),
+                  nodeDir: path.dirname(path.dirname(process.execPath)),
+                  dshHome: path.join(home, "profiles", arm),
+                  ws,
+                  otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(home, "profiles", otherArm),
+                  sessionsDir: path.join(home, "sessions"),
+                  credentials: path.join(os.homedir(), ".dsh", ".credentials.yaml"),
+                }),
+              );
               return file;
             })()
           : null;

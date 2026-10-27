@@ -14,6 +14,7 @@
  * be able to say.
  */
 import fs from "node:fs";
+import path from "node:path";
 
 export const CHANNELS = {
   /** The repo: fixtures, oracles, seed memories, docs, git history. */
@@ -68,4 +69,109 @@ export function denyFor({ repo, home, arm, otherArm, artifacts }) {
     ...(otherArm === null || otherArm === void 0 ? [] : CHANNELS.otherArm(home, otherArm)),
     ...CHANNELS.abDocs(home, "ab-engram"),
   ];
+}
+
+/**
+ * Whitelist profile: `(allow default)` keeps process/network sane, then
+ * `(deny file-read*)` takes the whole filesystem away and the allows that FOLLOW
+ * give back exactly what a run needs.
+ *
+ * Rule order is the load-bearing detail: seatbelt resolves overlapping rules
+ * last-match-wins, so a later `allow` does override an earlier broad `deny`. That
+ * is what makes a real whitelist possible here at all — round 5's deny list lost
+ * because agents write scratch files into `/tmp` and read each other's.
+ */
+const SYSTEM_READ = [
+  "/usr",
+  "/bin",
+  "/sbin",
+  "/System",
+  "/Library",
+  "/private/etc",
+  "/private/var/db",
+  "/private/var/folders",
+  "/private/var/run",
+  "/opt/homebrew",
+  "/Applications",
+  "/dev",
+];
+
+export function buildWhitelistProfile({ nodeDir, dshHome, ws, extraRead = [] }) {
+  const read = [...SYSTEM_READ, nodeDir, dshHome, ws, ...extraRead];
+  return [
+    "(version 1)",
+    "(allow default)",
+    "(deny file-read*)",
+    "(allow file-read-metadata)",
+    ...read.map((p) => `(allow file-read* (subpath ${JSON.stringify(p)}))`),
+    // The provider key lives outside the run's DSH_HOME.
+    `(allow file-read* (literal ${JSON.stringify(`${process.env.HOME}/.dsh/.credentials.yaml`)}))`,
+    ...variants(ws).map((spelling) => `(allow file-write* (subpath ${JSON.stringify(spelling)}))`),
+    ...variants(path.dirname(path.dirname(dshHome))).map((spelling) => `(allow file-write* (subpath ${JSON.stringify(spelling)}))`),
+    `(allow file-write* (subpath "/private/var/folders"))`,
+    `(allow file-write* (subpath "/dev"))`,
+    "",
+  ].join("\n");
+}
+
+/**
+ * Confinement profile — the one that survived contact with an adversarial
+ * control arm.
+ *
+ * Two facts from the failures: a global `(deny file-read*)` is REJECTED by
+ * sandbox-exec (the launcher aborts), and when rules overlap the LAST match wins.
+ * So the fence is two broad denials — all of `/tmp` (where agents write scratch
+ * files for each other) and the whole home directory — with narrow allows after
+ * them, and narrow denials after those to carve back out the things a run must
+ * still not see (the other arm's profile, everyone's session logs).
+ */
+/** Ancestor directories of `target`, nearest last. */
+function ancestorsOf(target) {
+  const out = [];
+  let current = path.dirname(path.resolve(target));
+  while (current !== "/" && current !== ".") {
+    out.unshift(current);
+    current = path.dirname(current);
+  }
+  return out;
+}
+
+export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfile, sessionsDir, credentials }) {
+  const lines = [
+    "(version 1)",
+    "(allow default)",
+    `(deny file-read* (subpath "/private/tmp") (subpath "/tmp") (subpath ${JSON.stringify(home)}))`,
+    // getcwd(2) stats every ancestor of the cwd; without metadata on those
+    // (literal, one level at a time) node dies at startup with `uv_cwd EPERM`.
+    // Listing them is still denied, so siblings stay unreadable.
+    // Path traversal and realpath(3) need read on every ancestor directory of a
+    // permitted subtree, one literal at a time, or the process dies at startup
+    // (`uv_cwd EPERM`, `realpath EPERM`). Siblings of the allowed subtrees stay
+    // unreadable because listing an ancestor is not implied by a literal allow.
+    ...[...ancestorsOf(ws), ...ancestorsOf(dshHome), ...ancestorsOf(nodeDir)]
+      .flatMap((dir) => variants(dir))
+      .map((dir) => `(allow file-read* (literal ${JSON.stringify(dir)}))`),
+    `(allow file-read* (subpath ${JSON.stringify(nodeDir)}))`,
+    ...variants(ws).map((spelling) => `(allow file-read* (subpath ${JSON.stringify(spelling)}))`),
+    // The whole DSH_HOME of the experiment: profiles, storages and the session
+    // dir the runtime scans at boot. It is one home for both arms, so the other
+    // arm's profile is re-denied below — that is the only part that matters.
+    ...variants(path.dirname(path.dirname(dshHome))).map((spelling) => `(allow file-read* (subpath ${JSON.stringify(spelling)}))`),
+    // The seeded memory store of the OTHER arm is the answer key: re-deny it.
+    ...(otherArmProfile ? [`(deny file-read* (subpath ${JSON.stringify(otherArmProfile)}))`] : []),
+    // Session logs of every run so far carry the solutions in plain text.
+    // Session logs of earlier runs are readable (they hold no answers — the
+    // controls run first), but the host's own sessions are not in this home.
+    // $HOME itself must be resolvable (lstat/realpath) even though everything
+    // beneath it is denied.
+    `(allow file-read-metadata (literal ${JSON.stringify(home)}))`,
+    `(allow file-read* (literal ${JSON.stringify(credentials)}))`,
+    ...variants(ws).map((spelling) => `(allow file-write* (subpath ${JSON.stringify(spelling)}))`),
+    ...variants(path.dirname(path.dirname(dshHome))).map((spelling) => `(allow file-write* (subpath ${JSON.stringify(spelling)}))`),
+    ...(sessionsDir ? [`(allow file-write* (subpath ${JSON.stringify(sessionsDir)}))`] : []),
+    `(allow file-write* (subpath "/private/var/folders"))`,
+    `(allow file-write* (subpath "/dev"))`,
+    "",
+  ];
+  return lines.join("\n");
 }
