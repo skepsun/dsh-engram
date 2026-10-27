@@ -109,9 +109,11 @@ test("when both arms fail everywhere the gate is a tie, not a fake pass on 0/0",
 test("the harness writes every run log so a verdict can be audited", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
   runHarness("gap", out);
-  const log = path.join(out, "on", "t1", "seed-0", "run.log");
-  assert.ok(fs.existsSync(log), "run.log kept per arm/task/seed");
-  assert.ok(fs.existsSync(path.join(out, "on", "t1", "seed-0", "check.log")), "oracle output kept");
+  // Directories are named by a neutral label, never by the arm: a control that
+  // could read `ab-bare` in its own cwd went looking for the memory it lacked.
+  const log = path.join(out, "arm-a", "t1", "seed-0", "run.log");
+  assert.ok(fs.existsSync(log), "run.log kept per label/task/seed");
+  assert.ok(fs.existsSync(path.join(out, "arm-a", "t1", "seed-0", "check.log")), "oracle output kept");
   assert.ok(fs.existsSync(path.join(out, "REPORT.md")));
 });
 

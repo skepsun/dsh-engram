@@ -422,7 +422,11 @@ function run(args) {
   for (const { task, seed, arm } of plan) {
     {
       {
-        const dir = path.join(args.out, arm, task.id, `seed-${seed}`);
+        // Neutral directory names: the arm used to appear in the run's own cwd
+        // (`.../ab-bare/...`) and a control read it and started hunting for the
+        // "team memory" it had been denied. The mapping lives in runs.json.
+        const label = arm === arms[0] ? "arm-a" : "arm-b";
+        const dir = path.join(args.out, label, task.id, `seed-${seed}`);
         const ws = path.join(dir, "ws");
         fs.rmSync(dir, { recursive: true, force: true });
         fs.mkdirSync(dir, { recursive: true });
@@ -532,6 +536,7 @@ function run(args) {
     deltaPp,
     gate,
     rows: allRows,
+    armLabels: { "arm-a": arms[0], "arm-b": arms[1] },
   };
   writeArtifacts(args.out, report, args.minPairs);
   console.log(`\nG6 ${report.gate.verdict} (${report.gate.target}) — ${report.gate.note}`);

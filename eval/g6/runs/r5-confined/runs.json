@@ -1,0 +1,375 @@
+{
+  "startedAt": 1793076507453,
+  "seedMemory": "eval/g6/seed-memory-blind.json",
+  "finishedAt": 1793083868939,
+  "seeds": 5,
+  "tasks": [
+    "codec",
+    "errcode",
+    "money",
+    "ranking"
+  ],
+  "arms": [
+    "ab-engram",
+    "ab-bare"
+  ],
+  "summary": {
+    "ab-engram": {
+      "runs": 20,
+      "passes": 20,
+      "rate": 1,
+      "meanWallMs": 147679
+    },
+    "ab-bare": {
+      "runs": 20,
+      "passes": 2,
+      "rate": 0.1,
+      "meanWallMs": 219718
+    }
+  },
+  "hideStoreFor": "ab-bare",
+  "contaminated": 8,
+  "paired": {
+    "pairs": 20,
+    "onlyA": 18,
+    "onlyB": 0
+  },
+  "deltaPp": 90,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "ab-engram 高 90.0pp — 记忆带去了可用的信息"
+  },
+  "rows": [
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 94634,
+      "contaminated": true
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 161014,
+      "contaminated": true
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 208952
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 45928
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 45268
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 51829
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 387885,
+      "contaminated": true
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 323386,
+      "contaminated": true
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 172260
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 96250
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 121605
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 377880
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 370702,
+      "contaminated": true
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "ab-bare",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 298303
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 369912
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 484606,
+      "contaminated": true
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 43827
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 268400,
+      "contaminated": true
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 326242,
+      "contaminated": true
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "ab-bare",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 145471
+    },
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 217423
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 94738
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 101035
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 83223
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 108274
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 128947
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 124255
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 198967
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 99010
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 155884
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 304355
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 179241
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 177240
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 190412
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 173359
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 118564
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 140536
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 125785
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 114030
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "ab-engram",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 118296
+    }
+  ]
+}

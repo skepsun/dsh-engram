@@ -11,7 +11,7 @@
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 45 recall-with-hits |
 | G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/406 memories (13 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 119 memories · 6 lines |
-| G6 | Quality Δ · 配对任务成功率差 | 58.3pp | Δ ≥ −2pp | **PASS** | 12 对配对 · 4 任务 × 3 种子 · eval/g6/runs/r4-blind/runs.json |
+| G6 | Quality Δ · 配对任务成功率差 | 90.0pp | Δ ≥ −2pp | **PASS** | 20 对配对 · 4 任务 × 5 种子 · eval/g6/runs/r5-confined/runs.json（臂名泄漏已修未复跑，见 §12） |
 | G7 | 账本自身开销 | 0.0144% | < 0.5% 请求时延 | **PASS** | from `npm run bench:ledger` (worst op vs a 300ms request floor) |
 
 ## 账本合计
