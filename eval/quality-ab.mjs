@@ -369,6 +369,20 @@ function run(args) {
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
+  if (args.sandbox && args.logDir !== undefined) {
+    // Check logs quote expected values ("expected 101, actual 100"), so they are
+    // only safe if the sandbox denies the whole directory above them. Round 5
+    // lost a matrix to exactly this: the log dir was this round's own dir, hence
+    // excluded from the deny list, hence readable, hence an answer key.
+    const ancestors = discoverPriorTrees(path.resolve(args.out), args.logDir).map((entry) => path.resolve(entry));
+    const logDir = path.resolve(args.logDir);
+    const covered = ancestors.some((entry) => logDir === entry || logDir.startsWith(`${entry}${path.sep}`));
+    if (!covered) {
+      throw new Error(
+        `--log-dir ${args.logDir} is readable inside the sandbox; put it under a /tmp/g6* directory that is NOT this round's root`,
+      );
+    }
+  }
   let priorRows = [];
   if (args.resume) {
     try {
