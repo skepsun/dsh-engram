@@ -361,11 +361,16 @@ function run(args) {
     fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
   }
   const env = { ...process.env, DSH_HOME: home };
+  // `AB_DSH_BIN` swaps in a stub host: the unit tests drive the whole run/grade
+  // pipeline against one, and a stub never talks to a model. Only a real arm
+  // spawn needs a credential, so only that mode fails fast — otherwise CI (no
+  // ~/.dsh/.credentials.yaml) cannot run the harness tests at all.
+  const stubHost = process.env.AB_DSH_BIN !== undefined;
   const credential = liftCredential(env);
-  if (!credential) {
+  if (!credential && !stubHost) {
     throw new Error("no DEEPSEEK_API_KEY in env or ~/.dsh/.credentials.yaml — headless runs would fail with MISSING_CREDENTIAL");
   }
-  console.log(`credential: ${credential}`);
+  console.log(`credential: ${credential ?? "(none — AB_DSH_BIN stub host, no model calls)"}`);
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
