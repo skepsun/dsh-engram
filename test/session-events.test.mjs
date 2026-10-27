@@ -16,7 +16,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { readSessionEvents, sessionEventsSource, sessionSeq } from "../lib/session-events.js";
+import { describeSessionSurface, readSessionEvents, sessionEventsSource, sessionSeq } from "../lib/session-events.js";
 import { firstUserMessageText } from "../lib/index-block.js";
 import { buildEpisode } from "../lib/episode.js";
 import { pendingTodosFromSession } from "../lib/todo-sink.js";
@@ -61,6 +61,27 @@ test("readSessionEvents: legacy hosts still read session.events as-is", () => {
   const legacy = { header: { cwd: "/ws" }, events };
   assert.equal(readSessionEvents(legacy), events, "identity, no copy");
   assert.equal(sessionEventsSource(legacy), "legacy");
+});
+
+test("readSessionEvents: host that dropped the bulk readers still answers eventAt", () => {
+  // Windows desktop runtime 0.2.1-rc.2 (issue #9): Session exposes seq/eventAt
+  // but neither snapshotEvents nor ctx.sessionQuery. Before this hand existed,
+  // three features slept on that host and nothing said why.
+  const events = [userMessage("first"), call("write", { path: "/ws/src/a.js" }, "c1"), result("c1", false)];
+  const session = { id: "s9", header: { cwd: "/ws" }, seq: events.length, eventAt: (seq) => events[seq] };
+
+  assert.equal(sessionEventsSource(session), "eventAt");
+  assert.deepEqual([...readSessionEvents(session)], events);
+  assert.equal(sessionSeq(session), 3);
+  assert.equal(firstUserMessageText(session), "first");
+  assert.equal(buildEpisode(session).summary.files.length >= 1, true);
+});
+
+test("readSessionEvents: a session with no readable surface says none, and says what it has", () => {
+  const session = { id: "s10", header: { cwd: "/ws" }, append: () => {} };
+  assert.equal(sessionEventsSource(session), "none");
+  assert.equal(readSessionEvents(session).length, 0);
+  assert.deepEqual(describeSessionSurface(session), ["append", "header", "id"]);
 });
 
 test("readSessionEvents: ≥0.2.x session with only snapshotEvents is readable", () => {

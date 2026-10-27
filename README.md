@@ -1020,6 +1020,18 @@ and silence when there is nothing relevant to point at:
 - Settings: `episodeEnabled`, `resumeBriefEnabled` (both default on), plus
   `episodeMaxPerWorkspace` / `resumeBriefMaxAgeDays` / `resumeBriefMaxChars`.
 
+> **Host requirement (silent-dormancy warning).** Episode, resume brief, `[RECALL]`
+> and the session-end todo sink all read the session's event log. On ≥0.2.x hosts
+> the log arrives through `ctx.sessionQuery.live()`, `session.snapshotEvents()` or,
+> as a last resort, `session.seq` + `session.eventAt(seq)`. A host that exposes
+> **none** of these keeps the three features dormant: memory storage, `engram_recall`
+> and `engram_detail` still work, but nothing is injected at session start and no
+> episode is written. The plugin logs one `engram: this host exposes no readable
+> session event log … Session surface: …` warning per session naming what the
+> session object does offer — that line is the thing to paste into a bug report.
+> Known case: the **desktop runtime** (`@deepseek-ai/dsh-desktop-runtime`) on
+> Windows, tracked as issue #9.
+
 ### Entity pages + entity cards (v0.7-B)
 
 `esr_node` grows from a dot on the graph into a readable **page**: current
