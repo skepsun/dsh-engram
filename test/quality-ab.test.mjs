@@ -71,7 +71,9 @@ function runHarness(mode, out, minPairs = 2, extra = []) {
   const { workspace, tasks } = fixture();
   return spawnSync(
     process.execPath,
-    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", String(minPairs), ...extra],
+    // `--home` is explicit: without it a test run writes into the operator's real
+    // experiment home (~/.dsh/quality-ab), which is where round 7 is prepared.
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--home", path.join(out, "home"), "--min-pairs", String(minPairs), ...extra],
     { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir(mode), "dsh") } },
   );
 }
@@ -252,9 +254,14 @@ test("seeded rows carry the RESOLVED workspace, or the treatment runs blind", ()
     { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") } },
   );
   assert.equal(res.status, 0, res.stderr);
-  const store = JSON.parse(fs.readFileSync(path.join(home, "storages", "dsh_engram.json"), "utf8"));
+  // The seeds go into the TREATMENT arm's own home — that separation is the point.
+  const store = JSON.parse(fs.readFileSync(path.join(home, "arms", "on", "storages", "dsh_engram.json"), "utf8"));
   const rows = Object.values(store.tables.memories);
   assert.ok(rows.length > 0, "the seed file reached the store");
+  assert.ok(
+    !fs.existsSync(path.join(home, "arms", "off", "storages", "dsh_engram.json")),
+    "and the control's own home has no store to find — no hiding trick required",
+  );
   for (const row of rows) {
     assert.equal(row.workspace, fs.realpathSync(row.workspace), "workspace key is spelled the way the arm computes it");
     assert.ok(fs.existsSync(row.workspace) && path.basename(row.workspace) === "ws", "key points at a real run workspace");
@@ -323,10 +330,15 @@ test("an arm inherits DSH_HOME and nothing else about whoever launched the matri
     },
   );
   assert.equal(res.status, 0, res.stderr);
+  const homes = new Map();
   for (const arm of ["on", "off"]) {
     const line = fs.readFileSync(path.join(dump, `${arm}.txt`), "utf8").trim();
-    assert.match(line, /^profile= session= shell= home=\/.*home$/, `arm ${arm} saw: ${line}`);
+    assert.match(line, /^profile= session= shell= home=\/.*home\/arms\/(on|off)$/, `arm ${arm} saw: ${line}`);
+    homes.set(arm, line.slice(line.indexOf("home=") + 5));
   }
+  // Two arms, two homes: sharing one was the structural leak that let a control
+  // read the treatment's ledger, injections and session logs in the same matrix.
+  assert.notEqual(homes.get("on"), homes.get("off"), "each arm boots in its own DSH_HOME");
 });
 
 test("--control-first runs every control before any treatment run", () => {

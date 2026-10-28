@@ -562,7 +562,7 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 | 日志 | `--log-dir`：run.log 与 check 输出一起移出 run 树，且整个目录对臂不可读 |
 | 判据 | 预注册留一法 `Δ ≥ −2pp`（工具内置），配对下限 10 |
 
-### 13.2 为了让"无泄漏"成立，修掉的十二道缝
+### 13.2 为了让"无泄漏"成立，修掉的十三道缝
 
 每道都有证据，都不是"顺手优化"。
 
@@ -581,6 +581,8 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 | 10 | **`--control-first` 的比较器永不返回 `-1`**：`sort((a,b) => (a是控制?0:1) - (b是控制?0:1))` | 读代码：这个比较器只说"不小于"，排序结果取决于引擎实现；而顺序**就是**隔离本身（控制跑在治疗之后就能读到治疗的 session） | 改成显式分区（`filter` 两遍拼起来）。测试断言 20 行里控制臂全部排在前 |
 | 11 | **仓库"恰好"被藏住**：产物目录在 `$HOME` 下，于是被 home 那条规则连带挂掉——换个 checkout 位置就漏 | 移植时把 checkout 换到 `$HOME` 之外，读 `buildBwrapArgs` 发现没有针对 repo 的规则 | `repo` 与会话目录一样显式挂空（在 `$HOME` 内则不重复挂）。测试钉住"外层挂空里必须有 checkout" |
 | 12 | **两臂可能指向不同的模型端点**：官方端点跑到一半没钱，最自然的"补救"是把剩下 7 行换到本地 vLLM 补齐——那样 40 行产物里的 Δ 一半是插件、一半是服务栈，而产物、日志、报表里**看不出来** | 自己想补跑时发现的：配对比较只在端点内部成立 | `assertSameTarget()`：`run` 开头对两臂各跑一次 `--dump-config`，把 `agent-default-model` 的 `provider`/`model` 比出来，不同就拒绝开跑；产物里记 `target`（`run` 自己写，`classify --target` 只在补写历史产物时人工声明，**不从当前 profile 猜**——profile 会被改，猜出来的是今天的端点配昨天的行） |
+
+| 13 | **一臂一个 home 只是"重命名"**：两臂共用 `DSH_HOME`，`--hide-store-for` 把 store 在同目录里改名（试点控制臂 `ls storages/` 直接读到 `.g6-hidden` 后缀），围栏再补一刀把 `storages/` 挂空；`recall-injections.json`/`ledger.json` 仍写着另一臂的 workspace | 控制臂日志（`lastWorkspace`、`injectedChars`）+ 第七轮读代码复盘：缝 #6 的 `scrubSharedHome` 只能清**上一轮**痕迹，同一轮里共享的记账文件永远清不掉 | `armHome(home, arm)`：每臂一个 `DSH_HOME`（`arms/<arm>/{profiles,storages,sessions,engram}`），store 只种进治疗臂自己的 home，控制臂的 home 里根本没有可读的东西；围栏只 bind 本臂 home；`--hide-store-for` 保留为兼容参数但会打印"已无必要"。测试断言两臂 `DSH_HOME` 不同、且控制臂 home 里不存在 `dsh_engram.json` |
 
 前四道会让数字**看起来**比实际好看或直接丢数据，后两道才真的把"臂知道自己是哪一臂"这条路堵死。
 值得记下来的是它们的发现方式：**没有一道是靠读代码发现的，全是控制臂自己在日志里说出来的**。
@@ -674,11 +676,14 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 
 ### 13.5 还剩什么缝（诚实清单）
 
-- 控制臂仍能**看见**两项 profile 存在、能看见 run 树的兄弟目录名（`arm-a`/`arm-b`）——
-  它知道"有另一个臂"，但不知道哪个臂有什么，也读不到任何东西（围栏测试钉住了这一点）。
-- 单模型、单语料、4 任务；Δ 的量级受任务选择影响极大，方向可靠，幅度别外推。
+- ~~控制臂能看见 run 树的兄弟目录名~~（第七轮前修掉）：run 根现在是 `runs/<sha1(task|seed|arm)[0:8]>`，
+  臂自己的 cwd 里不再出现臂名、任务名、seed 编号，也不再透露"这是一个矩阵"；映射记在
+  `runs.json` 的每一行（`runKey`）里，人能查、臂读不到。围栏再把 run 根整个挂空、只挂回
+  `ws`，连本行自己的 `run.log` 都读不到。
 - 控制臂仍能**看见**本臂 profile 里那个 `docs/` 曾被删掉这件事的痕迹（目录不存在），
-  以及 `storages/` 是个空挂载（缝 #7/#8 的代价是"空"而不是"无"）。
+  以及能推断出"本机的实验目录存在"（`DSH_HOME` 的祖先路径）——但内容一律读不到。
+  缝 #7 的代价从"`storages/` 是个空挂载"降级成"这一臂的 home 里压根没有 `storages/`"（缝 #13）。
+- 单模型、9 任务；Δ 的量级受任务选择影响极大，方向可靠，幅度别外推。
 - 语料 migration 只做到"换机器能跑"：`${REPO}` 之外，产物里的 `wallMs` 仍受端点抖动
   影响（本轮见过 52s–814s），**不能**当质量证据。
 
@@ -731,7 +736,7 @@ node eval/quality-ab.mjs run \
   --arm p-a,p-b --seeds 5 \
   --out "$PWD/eval/g6/runs/r6-local" --home "$HOME/.dsh/quality-ab" \
   --seed-memory "$PWD/eval/g6/seed-memory-blind.json" \
-  --hide-store-for p-b --sandbox --control-first \
+  --sandbox --control-first \
   --log-dir "$HOME/.dsh/quality-ab-logs/r6-local"
 
 # 中断/余额不足之后：--resume 复用已完成的行，只重跑 infra 行（并按 task|seed|arm 去重）
@@ -739,6 +744,9 @@ node eval/quality-ab.mjs run \
 node eval/quality-ab.mjs classify --out "$PWD/eval/g6/runs/r6-local" \
   --log-dir "$HOME/.dsh/quality-ab-logs/r6-local"
 ```
+
+第七轮起 `--home` 下是 `arms/<arm>/`（一臂一个 `DSH_HOME`，见 §13.2 缝 #13），
+`--hide-store-for` 不再需要（参数仍接受，会打印"已无必要"）。
 
 臂的端点由各自的 `~/.dsh/quality-ab/profiles/<arm>/cordis.patch.yml` 决定（`llm-pi-ai` 的
 `providers` + `agent-default-model`）；两臂必须指向同一个 `provider`/`model`，否则整批数字作废。

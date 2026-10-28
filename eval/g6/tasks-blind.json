@@ -23,6 +23,36 @@
       "prompt": "实现 src/ranking.js 里的 rankRows(rows)，按团队约定的排序口径。改完自己验证一下。",
       "check": "node ${REPO}/eval/g6/check.mjs ranking --dir oracle-blind",
       "timeoutMs": 900000
+    },
+    {
+      "id": "pad",
+      "prompt": "实现 src/pad.js 里的 formatId(n)：按团队约定生成账本 id（正数、0、超过 5 位、以及冲正数各有形状）。改完自己验证一下。",
+      "check": "node ${REPO}/eval/g6/check.mjs pad --dir oracle-blind",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "window",
+      "prompt": "实现 src/window.js 里的 billingDate(iso)，按团队约定的账期分界把 ISO 时间换算成所属账期日期。改完自己验证一下。",
+      "check": "node ${REPO}/eval/g6/check.mjs window --dir oracle-blind",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "dedupe",
+      "prompt": "实现 src/dedupe.js 里的 mergeRows(rows)：同一 id 重复出现时按团队约定合并，不要改动入参。改完自己验证一下。",
+      "check": "node ${REPO}/eval/g6/check.mjs dedupe --dir oracle-blind",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "quote",
+      "prompt": "实现 src/quote.js 里的 formatAmount(cents)，按团队约定输出报价单金额（含负数与 0）。改完自己验证一下。",
+      "check": "node ${REPO}/eval/g6/check.mjs quote --dir oracle-blind",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "retry",
+      "prompt": "实现 src/retry.js 里的 shouldRetry(status, code, attempt)，按团队约定的重试策略判断是否重试。改完自己验证一下。",
+      "check": "node ${REPO}/eval/g6/check.mjs retry --dir oracle-blind",
+      "timeoutMs": 600000
     }
   ]
 }

@@ -225,15 +225,15 @@ export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfi
  *            tmpfs is stronger than a deny list: the arm keeps a writable /tmp
  *            and still cannot name anything in the host's.
  *
- * What it gets back: its own workspace (rw), the experiment DSH_HOME (rw — dsh
- * cannot boot without it: profiles and sessions live there), the credential file
- * (ro), the node/dsh install if it happens to sit under $HOME, and a fresh
- * /dev + /proc.
+ * What it gets back: its own workspace (rw), its own DSH_HOME (rw — dsh cannot
+ * boot without it: profiles and sessions live there), the credential file (ro),
+ * the node/dsh install if it happens to sit under $HOME, and a fresh
+ * /dev + /proc. Nothing else, and the run root around `ws` is taken away too
+ * (`hideRunsRoot`), so even this run's own log is unreadable from inside.
  *
- * Residual, and stated rather than fixed (see docs/G6-quality-ab.zh.md §13.5):
- * the file paths it can see — `<out>/arm-a/<task>/seed-0/ws` — still reveal the
- * neutral arm label and that a matrix is running. It reveals nothing about the
- * other arm's contents.
+ * The path string is now opaque as well: a run lives at `runs/<sha1>/ws`, so the
+ * cwd no longer spells the arm, the task, the seed, or that a matrix is running
+ * (docs/G6-quality-ab.zh.md §13.5 — this was the last residue of round 6).
  */
 export function buildBwrapArgs({
   home = os.homedir(),

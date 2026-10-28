@@ -48,5 +48,55 @@
       "misc"
     ],
     "text": "ledger-kata 约定（misc）：提交信息用中文一句话，结尾不加句号。这条跟本次改动无关，仅供参考。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "pad"
+    ],
+    "text": "ledger-kata 约定（pad）：formatId(n) 返回 `L-` + 5 位零填充（42→`L-00042`、0→`L-00000`）；超过 5 位不截断也不补零（123456→`L-123456`）；负数表示冲正，形状相同但尾部加 `C`（-42→`L-00042C`）。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "window"
+    ],
+    "text": "ledger-kata 约定（window）：账期以 Asia/Shanghai 的 04:00 为分界，billingDate(iso) 返回该时刻所属账期的 `YYYY-MM-DD`；本地 04:00 之前的入账算前一天（例：2026-02-28T19:59:00Z = 本地 03:59 → 2026-02-28；2026-02-28T20:00:00Z = 本地 04:00 → 2026-03-01）。按 UTC 零点切是错的。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "dedupe"
+    ],
+    "text": "ledger-kata 约定（dedupe）：mergeRows(rows) 同一 id 出现多次时保留**最后一条**内容，但该 id 的位置取**第一次出现**的位置；返回新数组且不改动入参。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "quote"
+    ],
+    "text": "ledger-kata 约定（quote）：报价单金额 formatAmount(cents) 固定两位小数，千分位用撇号 `'` 分隔（123456→`1'234.56`）；负数用括号包裹而不是负号（-123456→`(1'234.56)`）；0→`0.00`。"
+  },
+  {
+    "kind": "fact",
+    "signal": 0.9,
+    "tags": [
+      "seeded",
+      "ledger-kata",
+      "retry"
+    ],
+    "text": "ledger-kata 约定（retry）：shouldRetry(status,code,attempt) 重试 5xx、429 和 `E_LEDGER_LOCKED`(409)；其余 4xx 一律不重试，`E_VALIDATION` 永远不重试；最多 3 次，attempt 从 1 起算（attempt=3 不再重试）。"
   }
 ]

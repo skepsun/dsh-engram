@@ -60,7 +60,10 @@ function parseArgs(argv) {
     else if (arg === "--workspace") out.workspace = next();
     else if (arg === "--seeds") out.seeds = Number(next()) || 1;
     else if (arg === "--out") out.out = next();
-    else if (arg === "--home") out.home = next();
+    else if (arg === "--home") {
+      out.home = next();
+      out.homeExplicit = true;
+    }
     else if (arg === "--timeout-ms") out.timeoutMs = Number(next()) || out.timeoutMs;
     else if (arg === "--seed-memory") out.seedMemory = next();
     else if (arg === "--hide-store-for") out.hideStoreFor = next();
@@ -150,10 +153,10 @@ function parseArmTarget(dump) {
  * produced a 40-row artifact whose Δ was part plugin, part vendor — invisible in
  * every number and in every log. So: ask, compare, refuse.
  */
-function assertSameTarget({ dshBin, home, arms, env }) {
+function assertSameTarget({ dshBin, arms, envFor }) {
   const targets = {};
   for (const arm of arms) {
-    const dumped = spawnSync(dshBin, ["--profile", arm, "--dump-config"], { env: { ...env, DSH_HOME: home }, encoding: "utf8", timeout: 120000 });
+    const dumped = spawnSync(dshBin, ["--profile", arm, "--dump-config"], { env: envFor(arm), encoding: "utf8", timeout: 120000 });
     targets[arm] = parseArmTarget(`${dumped.stdout ?? ""}${dumped.stderr ?? ""}`);
   }
   const [first, second] = arms.map((arm) => targets[arm]);
@@ -210,7 +213,7 @@ function linkCredentials(home) {
  * the experiment's arm names and layout straight out of the file. The memory
  * store is not affected: `seedStore` re-seeds it before every treatment run.
  */
-function scrubSharedHome(home) {
+function scrubArmHome(home) {
   fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
   // The ledger is keyed by absolute workspace path (`…/ab-engram/csv/seed-0/ws`)
   // and records `injectedChars` — a control that reads it learns both the arm
@@ -222,23 +225,26 @@ function scrubSharedHome(home) {
 
 function prepare(args) {
   const home = args.home;
-  if (args.sandbox) scrubSharedHome(home);
   fs.mkdirSync(home, { recursive: true });
   const profiles = Object.entries(args.arm);
   if (profiles.length !== 2) throw new Error("prepare needs --arm on=<profile>,off=<profile>");
 
   for (const [name, profile] of profiles) {
-    const env = armEnv(home);
-    fs.mkdirSync(path.join(home, "profiles"), { recursive: true });
+    // Each arm gets its own home; its profile lives inside it, so `--profile`
+    // resolves only when that arm's home is the DSH_HOME in force.
+    const homeForArm = armHome(home, profile);
+    if (args.sandbox) scrubArmHome(homeForArm);
+    const env = armEnv(homeForArm);
+    fs.mkdirSync(path.join(homeForArm, "profiles"), { recursive: true });
     // Instantiate the one-shot headless template under this profile name.
     const created = dsh(["--profile", profile, "--from-default-profile", "headless", "--dump-config"], { env });
     if (created.status !== 0) {
       throw new Error(`could not create profile ${profile}: ${(created.stderr || created.stdout || "").trim().slice(0, 400)}`);
     }
-    console.log(`profile ${profile} ready (${home}/profiles/${profile}) ${name === "on" ? "" : ""}`.trim());
+    console.log(`profile ${profile} ready (${homeForArm}/profiles/${profile}) ${name === "on" ? "" : ""}`.trim());
+    const linked = linkCredentials(homeForArm);
+    console.log(`credentials for ${profile}: ${linked ? "linked from ~/.dsh/.credentials.yaml" : "NOT FOUND — headless runs will fail with MISSING_CREDENTIAL"}`);
   }
-  const shared = linkCredentials(home);
-  console.log(`credentials: ${shared ? "linked from ~/.dsh/.credentials.yaml" : "NOT FOUND — headless runs will fail with MISSING_CREDENTIAL"}`);
   console.log(`next: dsh plugin --profile ${args.arm.on} add ${path.join(os.homedir(), ".dsh", "vendor")}/dsh-engram-<version>.tgz`);
   console.log("      dsh plugin --profile off add (nothing) — the control arm stays bare");
 }
@@ -525,8 +531,28 @@ const MIN_FREE_MB = Number(process.env.AB_MIN_FREE_MB) > 0 ? Number(process.env.
  * policy. Both arms get exactly DSH_HOME, so the run does not depend on who
  * launched the matrix (round 6, seam #10).
  */
-function armEnv(home) {
-  const env = { ...process.env };
+/**
+ * One DSH_HOME per arm.
+ *
+ * The shared home was a structural leak, not an oversight we could scrub away:
+ * dsh needs a home to boot, both arms needed the SAME one, so whatever the
+ * treatment's plugin wrote there — `recall-injections.json` names the workspace
+ * and the arm, `ledger.json` is keyed by the run path and records injectedChars —
+ * was readable by the control in the same matrix, and `scrubSharedHome` could
+ * only delete LAST round's traces. `--hide-store-for` renamed the store inside a
+ * directory the control could still list; the fence had to mount it empty as a
+ * second line of defence.
+ *
+ * Separate homes make all of that structural: the control's home has no store to
+ * find, no ledger of the treatment's work, no session logs from the other arm —
+ * and the fence binds only the arm's own home.
+ */
+function armHome(home, arm) {
+  return path.join(home, "arms", arm);
+}
+
+function armEnv(home, base = process.env) {
+  const env = { ...base };
   for (const key of ["DSH_PROFILE", "DSH_PROFILE_DIR", "DSH_SESSION_ID", "DSH_WEB_URL", "DSH_SHELL", "DSH_ATTACH"]) delete env[key];
   env.DSH_HOME = home;
   return env;
@@ -595,6 +621,11 @@ function artifactPath(args) {
 
 function run(args) {
   if (!args.out) throw new Error("run needs --out <dir>");
+  // A stub host never touches a model, so it is almost always a test or a dry
+  // run; it must not write into the operator's real experiment home. Round 7's
+  // home holds the installed plugin, and a stray `prepare` there costs a
+  // reinstall (and pollutes the arm that is about to be measured).
+  if (process.env.AB_DSH_BIN !== undefined && args.homeExplicit !== true) args.home = path.join(args.out, "home");
   if (!args.workspace) throw new Error("run needs --workspace <fixture dir>");
   // `--exclude <task,…>`: a corpus task whose ORACLE is wrong is not a data
   // point, it is a bug. Excluding it here keeps the exclusion in the tool (and
@@ -609,8 +640,22 @@ function run(args) {
   if (!assertFreeSpace(args.out)) return;
 
   const home = args.home;
-  if (args.sandbox) scrubSharedHome(home);
-  const env = armEnv(home);
+  if (args.hideStoreFor !== undefined) {
+    console.log("note: --hide-store-for is unnecessary now — each arm has its own DSH_HOME, so the store is never in the control's home");
+  }
+  for (const arm of arms) {
+    const homeForArm = armHome(home, arm);
+    fs.mkdirSync(homeForArm, { recursive: true });
+    linkCredentials(homeForArm);
+    if (args.sandbox) scrubArmHome(homeForArm);
+  }
+  // One base env for credential lifting (the keys are process-wide); each run
+  // still gets its own DSH_HOME below. `armEnv` must be seeded with THIS object
+  // and not `process.env`: the lifted `*_API_KEY`s live only in the copy (a local
+  // vLLM route needs `LOCAL_VLLM_61_API_KEY`, not DEEPSEEK_API_KEY), and building
+  // a fresh env from process.env dropped them — every arm then died in 1.5s with
+  // MISSING_CREDENTIAL and the rows were (correctly) reported as infra.
+  const env = { ...process.env };
   // `AB_DSH_BIN` swaps in a stub host: the unit tests drive the whole run/grade
   // pipeline against one, and a stub never talks to a model. Only a real arm
   // spawn needs a credential, so only that mode fails fast — otherwise CI (no
@@ -623,7 +668,7 @@ function run(args) {
   console.log(`credential: ${credential ?? "(none — AB_DSH_BIN stub host, no model calls)"}`);
   // Cost of asking: two `--dump-config` boots. Cost of not asking: a matrix that
   // is not a paired comparison.
-  const targets = assertSameTarget({ dshBin: DSH_BIN, home, arms, env });
+  const targets = assertSameTarget({ dshBin: DSH_BIN, arms, envFor: (arm) => armEnv(armHome(home, arm), env) });
   const [targetProvider, targetModel] = [targets[arms[0]].provider, targets[arms[0]].model];
   console.log(`model target: ${targetProvider ?? "?"}/${targetModel ?? "?"} (both arms must agree — checked)`);
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
@@ -750,26 +795,21 @@ function run(args) {
         fs.mkdirSync(dir, { recursive: true });
         fs.cpSync(args.workspace, ws, { recursive: true, dereference: true });
 
+        const homeForArm = armHome(home, arm);
+        // Fresh state per run, per arm: the treatment's store is re-seeded, and
+        // the control's home simply never has one.
+        if (args.sandbox) scrubArmHome(homeForArm);
         if (task.setup) spawnSync("bash", ["-lc", task.setup], { cwd: ws, encoding: "utf8", timeout: args.timeoutMs });
-        if (seedMemories !== null && arm === arms[0]) seedStore(home, ws, seedMemories);
+        if (seedMemories !== null && arm === arms[0]) seedStore(homeForArm, ws, seedMemories);
         // Same seed for both arms: the prompt is the seed-sensitive part, so we
         // pin it verbatim and keep the arm the only difference.
         const prompt = task.prompt;
         const runStarted = Date.now();
-        // A control arm must not be able to read what the treatment arm was
-        // given. Both arms share one DSH_HOME, so the seeded store is physically
-        // moved aside for the control's run (a pilot proved a bare agent will
-        // `cat` the store if it is reachable — fair only if we make it
-        // unreachable).
-        const storeFile = path.join(home, "storages", "dsh_engram.json");
-        // A renamed file in the same directory is not hiding (a pilot's control
-        // arm listed `storages/` and read `dsh_engram.json.g6-hidden`), and
-        // moving it to /tmp is not portable: on Linux /tmp is a separate
-        // filesystem and the rename dies with EXDEV. So the rename stays inside
-        // `storages/` and the FENCE hides that whole directory for this arm.
-        const hiddenFile = `${storeFile}.g6-hidden-${process.pid}`;
-        const hideStore = args.hideStoreFor === arm && fs.existsSync(storeFile);
-        if (hideStore) fs.renameSync(storeFile, hiddenFile);
+        // Nothing to hide any more: the control's home has no store because the
+        // store is seeded into the OTHER home. `--hide-store-for` is accepted for
+        // old command lines and reported as unnecessary rather than silently
+        // ignored.
+        const hideStore = false;
         let res;
         // OS-level fence: the arm's shell cannot read the repo, earlier rounds,
         // the host store, its own session logs, or the OTHER arm's profile —
@@ -784,10 +824,10 @@ function run(args) {
           ? fenceCommand({
               home: os.homedir(),
               nodeDir: path.dirname(path.dirname(process.execPath)),
-              dshHome: path.join(home, "profiles", arm),
+              dshHome: path.join(homeForArm, "profiles", arm),
               ws,
-              otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(home, "profiles", otherArm),
-              sessionsDir: path.join(home, "sessions"),
+              otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(armHome(home, otherArm), "profiles", otherArm),
+              sessionsDir: path.join(homeForArm, "sessions"),
               credentials: path.join(os.homedir(), ".dsh", ".credentials.yaml"),
               repo: ROOT,
               toolPaths: toolReadPaths({ dshBin: DSH_EXEC }),
@@ -795,17 +835,17 @@ function run(args) {
               hideRunsRoot: dir,
               docsToHide: [arm, otherArm]
                 .filter((name) => typeof name === "string")
-                .map((name) => path.join(home, "profiles", name, "node_modules", "dsh-engram", "docs")),
+                .map((name) => path.join(armHome(home, name), "profiles", name, "node_modules", "dsh-engram", "docs")),
               cmd: DSH_EXEC,
               argv: ["--profile", arm, prompt],
             })
           : null;
         try {
           res = fence === null
-            ? dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs })
+            ? dsh(["--profile", arm, prompt], { cwd: ws, env: armEnv(homeForArm, env), timeoutMs: args.timeoutMs })
             : spawnSync(fence.cmd, fence.argv, {
                 cwd: ws,
-                env,
+                env: armEnv(homeForArm, env),
                 encoding: "utf8",
                 timeout: args.timeoutMs,
                 maxBuffer: 32 * 1024 * 1024,
@@ -815,15 +855,6 @@ function run(args) {
             fence?.cleanup();
           } catch {
             // a stale /tmp profile is not worth losing the row over
-          }
-          if (hideStore) {
-            try {
-              fs.renameSync(hiddenFile, storeFile);
-            } catch (error) {
-              // ENOSPC here used to take the whole matrix down with it (round 6).
-              // The row is still worth keeping; say where the store went instead.
-              console.error(`G6: could not restore the store (${error.code ?? error.message}) — left at ${hiddenFile}`);
-            }
           }
         }
         const wallMs = Date.now() - runStarted;
