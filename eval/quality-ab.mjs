@@ -377,6 +377,21 @@ function assertFreeSpace(out) {
   return true;
 }
 
+/**
+ * Where the in-flight artifact lives while the matrix runs.
+ *
+ * Outside the run tree when `--log-dir` is given. A `runs.json` sitting in the
+ * round root is *listable* by the arm (ancestor dirs are readable so `getcwd(2)`
+ * works), and in round 6 the control arms found it: 10 of 20 mentioned
+ * `runs.json` — one wrote "this is harness metadata that might contain the eval's
+ * rubric", several went hunting for the experiment around it. They could not
+ * read it (the fence denies /tmp), but the NAME alone told them this was an A/B
+ * matrix. The log dir is already denied to the arms, so the artifact goes there.
+ */
+function artifactPath(args) {
+  return args.logDir === undefined ? path.join(args.out, "runs.json") : path.join(args.logDir, "runs.json");
+}
+
 function run(args) {
   if (!args.out) throw new Error("run needs --out <dir>");
   if (!args.workspace) throw new Error("run needs --workspace <fixture dir>");
@@ -417,7 +432,8 @@ function run(args) {
   // round 6) or one Ctrl-C discards the whole thing and `--resume` finds nothing
   // to resume. Each finished row lands in runs.json immediately.
   const snapshotRows = () => {
-    const file = path.join(args.out, "runs.json");
+    const file = artifactPath(args);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     const payload = {
       startedAt,
       seedMemory: args.seedMemory ?? null,
@@ -474,7 +490,10 @@ function run(args) {
   let priorRows = [];
   if (args.resume) {
     try {
-      const previous = JSON.parse(fs.readFileSync(path.join(args.out, "runs.json"), "utf8"));
+      const live = artifactPath(args);
+      // Older artifacts (and stub-host matrices with no --log-dir) live in --out.
+      const file = fs.existsSync(live) ? live : path.join(args.out, "runs.json");
+      const previous = JSON.parse(fs.readFileSync(file, "utf8"));
       priorRows = previous.rows ?? [];
       const done = new Set(priorRows.map((row) => `${row.task}|${row.seed}|${row.arm}`));
       const before = plan.length;

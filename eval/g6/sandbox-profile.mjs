@@ -141,16 +141,19 @@ export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfi
     "(version 1)",
     "(allow default)",
     `(deny file-read* (subpath "/private/tmp") (subpath "/tmp") (subpath ${JSON.stringify(home)}))`,
-    // getcwd(2) stats every ancestor of the cwd; without metadata on those
-    // (literal, one level at a time) node dies at startup with `uv_cwd EPERM`.
-    // Listing them is still denied, so siblings stay unreadable.
-    // Path traversal and realpath(3) need read on every ancestor directory of a
-    // permitted subtree, one literal at a time, or the process dies at startup
-    // (`uv_cwd EPERM`, `realpath EPERM`). Siblings of the allowed subtrees stay
-    // unreadable because listing an ancestor is not implied by a literal allow.
+    // getcwd(2) and realpath(3) stat every ancestor of the cwd; without metadata
+    // on those (literal, one level at a time) node dies at startup with
+    // `uv_cwd EPERM` / `realpath EPERM`.
+    //
+    // METADATA only, deliberately: `file-read*` on a directory literal also lets
+    // the arm LIST it, and round 6's controls did exactly that — `ls
+    // /private/tmp/g6r14` showed them `runs.json`, `arm-a` and `arm-b`, and 10 of
+    // 20 reasoned about the evaluation matrix they had just discovered (they
+    // could not read any of it; the fence held). Siblings stay unreadable because
+    // metadata on the directory is not permission to enumerate or open entries.
     ...[...ancestorsOf(ws), ...ancestorsOf(dshHome), ...ancestorsOf(nodeDir)]
       .flatMap((dir) => variants(dir))
-      .map((dir) => `(allow file-read* (literal ${JSON.stringify(dir)}))`),
+      .map((dir) => `(allow file-read-metadata (literal ${JSON.stringify(dir)}))`),
     `(allow file-read* (subpath ${JSON.stringify(nodeDir)}))`,
     ...variants(ws).map((spelling) => `(allow file-read* (subpath ${JSON.stringify(spelling)}))`),
     // The whole DSH_HOME of the experiment: profiles, storages and the session
