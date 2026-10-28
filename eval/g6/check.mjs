@@ -32,7 +32,15 @@ if (!fs.existsSync(oracle)) {
 fs.mkdirSync(path.join(ws, "test"), { recursive: true });
 const target = path.join(ws, "test", `${task}.test.mjs`);
 fs.copyFileSync(oracle, target);
-const res = spawnSync("node", ["--test", `test/${task}.test.mjs`], { cwd: ws, encoding: "utf8" });
+// Grade in a clean child. If the harness itself runs under a test runner, the
+// environment carries NODE_TEST_CONTEXT, and a nested `node --test` then starts
+// as a test child and runs NOTHING — exiting 0, which would grade every stub as
+// a pass. Caught by test/g6-corpus.test.mjs, which grades the naive
+// implementation and expects it to fail.
+const env = { ...process.env };
+delete env.NODE_TEST_CONTEXT;
+delete env.NODE_OPTIONS;
+const res = spawnSync("node", ["--test", `test/${task}.test.mjs`], { cwd: ws, encoding: "utf8", env });
 // The oracle must not outlive the grading: round 4 leaked it into the NEXT run's
 // reach through a previous run's workspace, and a control arm read the expected
 // values straight out of the copy. Grading artefacts are for the harness only.
