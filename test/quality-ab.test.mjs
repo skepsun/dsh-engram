@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const HARNESS = new URL("../eval/quality-ab.mjs", import.meta.url).pathname;
 
@@ -147,6 +147,72 @@ test("--resume reuses finished rows instead of paying for the matrix twice", () 
   const after = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
   assert.equal(after.rows.length, 4, "the dropped pair was re-run, not dropped from the artifact");
   assert.equal(after.paired.pairs, 2);
+});
+
+test("refuses to start a matrix with no disk left", () => {
+  // Round 4 and round 6 both died to ENOSPC with most of the matrix paid for.
+  // Failing before the first model call is cheap; failing at 40% is hours.
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const { workspace, tasks } = fixture();
+  const res = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out],
+    {
+      encoding: "utf8",
+      env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh"), AB_MIN_FREE_MB: "999999999" },
+    },
+  );
+  assert.equal(res.status, 2);
+  assert.match(res.stderr, /only \d+ MB free/);
+});
+
+test("rows land in runs.json as they finish — a dead matrix still resumes", async () => {
+  // `--resume` is only worth fixing if there is something to resume FROM: the
+  // artifact used to be written once, after the last run, so a crash at 40%
+  // (round 6) left nothing behind.
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), "ab-ws-rows-"));
+  fs.writeFileSync(path.join(ws, "README.md"), "fixture\n");
+  const tasks = path.join(ws, "tasks.json");
+  fs.writeFileSync(
+    tasks,
+    JSON.stringify({
+      tasks: [
+        { id: "t1", prompt: "produce ok.txt", check: "test -f ok.txt" },
+        { id: "t2", prompt: "produce ok.txt", check: "test -f ok.txt" },
+        // The matrix parks here long enough for the test to read the artifact
+        // while the process is still alive — i.e. the "crash" is simulated by
+        // looking, then killing.
+        { id: "t3", prompt: "produce ok.txt", check: "sleep 30" },
+      ],
+    }),
+  );
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const child = spawn(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", ws, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "1"],
+    { env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") }, stdio: "ignore" },
+  );
+  const file = path.join(out, "runs.json");
+  let seen = null;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(file)) {
+      try {
+        const report = JSON.parse(fs.readFileSync(file, "utf8"));
+        if ((report.rows?.length ?? 0) >= 4) {
+          seen = report;
+          break;
+        }
+      } catch {
+        // mid-rename: the next poll sees a complete file
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  child.kill("SIGKILL");
+  assert.ok(seen, "runs.json already held the finished rows while the matrix was still running");
+  assert.equal(seen.partial, true, "the in-flight artifact says so");
+  assert.equal(seen.rows.length, 4, "task t1 and t2 × both arms, before t3's check parked");
 });
 
 test("seeded rows carry the RESOLVED workspace, or the treatment runs blind", () => {

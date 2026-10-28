@@ -353,6 +353,30 @@ function republish(args) {
   return report;
 }
 
+/** Below this the matrix is not worth starting: the rows are cheap next to the
+ *  model time, but a disk that fills mid-run throws them all away. Round 4 died
+ *  to ENOSPC with ~40% of the matrix paid for; round 6 died the same way at 40%
+ *  (16 of 40 rows) and the artifact had never been written. */
+const MIN_FREE_MB = Number(process.env.AB_MIN_FREE_MB) > 0 ? Number(process.env.AB_MIN_FREE_MB) : 512;
+
+function assertFreeSpace(out) {
+  try {
+    const stat = fs.statfsSync(out);
+    const freeMb = Math.round((stat.bavail * stat.bsize) / (1024 * 1024));
+    if (freeMb < MIN_FREE_MB) {
+      console.error(
+        `G6: only ${freeMb} MB free at ${out}, need ≥ ${MIN_FREE_MB} MB — a matrix that runs the disk out loses every row it already paid for. Free space (or set AB_MIN_FREE_MB) and re-run.`,
+      );
+      process.exitCode = 2;
+      return false;
+    }
+    console.log(`free space: ${freeMb} MB`);
+  } catch {
+    // statfs is best-effort: a filesystem that cannot answer is not a reason to refuse.
+  }
+  return true;
+}
+
 function run(args) {
   if (!args.out) throw new Error("run needs --out <dir>");
   if (!args.workspace) throw new Error("run needs --workspace <fixture dir>");
@@ -366,6 +390,7 @@ function run(args) {
   args.arms = arms;
   if (arms.length !== 2) throw new Error("run needs exactly two arms: --arm on,off");
   fs.mkdirSync(args.out, { recursive: true });
+  if (!assertFreeSpace(args.out)) return;
 
   const home = args.home;
   if (args.sandbox) {
@@ -387,6 +412,26 @@ function run(args) {
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
+  // Write the artifact as we go, not at the end. A matrix is hours of model time;
+  // holding every row in memory until the last run means one ENOSPC (round 4,
+  // round 6) or one Ctrl-C discards the whole thing and `--resume` finds nothing
+  // to resume. Each finished row lands in runs.json immediately.
+  const snapshotRows = () => {
+    const file = path.join(args.out, "runs.json");
+    const payload = {
+      startedAt,
+      seedMemory: args.seedMemory ?? null,
+      seeds: args.seeds,
+      tasks: tasks.map((task) => task.id),
+      arms,
+      hideStoreFor: args.hideStoreFor ?? null,
+      partial: true,
+      rows: [...priorRows, ...rows],
+      armLabels: { "arm-a": arms[0], "arm-b": arms[1] },
+    };
+    fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(payload, null, 1)}\n`);
+    fs.renameSync(`${file}.tmp`, file);
+  };
   if (args.sandbox && args.logDir !== undefined) {
     // Check logs quote expected values ("expected 101, actual 100"), so they are
     // only safe if the sandbox denies the whole directory above them. Round 5
@@ -508,7 +553,15 @@ function run(args) {
                 maxBuffer: 32 * 1024 * 1024,
               });
         } finally {
-          if (hideStore) fs.renameSync(hiddenFile, storeFile);
+          if (hideStore) {
+            try {
+              fs.renameSync(hiddenFile, storeFile);
+            } catch (error) {
+              // ENOSPC here used to take the whole matrix down with it (round 6).
+              // The row is still worth keeping; say where the store went instead.
+              console.error(`G6: could not restore the store (${error.code ?? error.message}) — left at ${hiddenFile}`);
+            }
+          }
         }
         const wallMs = Date.now() - runStarted;
         const log = `${res.stdout ?? ""}\n--- stderr ---\n${res.stderr ?? ""}\n`;
@@ -537,6 +590,7 @@ function run(args) {
         // run.log for the very same task).
         const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md/.test(log);
         rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}) });
+        snapshotRows();
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }
     }
