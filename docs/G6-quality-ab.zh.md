@@ -556,12 +556,13 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 | 种子记忆 | `eval/g6/seed-memory-blind.json`（含一条**过期**的 `[stale:ranking]`，门第二句要它） |
 | 配对 | 4 任务 × 5 种子 = **20 对**，`--control-first` |
 | 两臂 | `p-a`（带记忆）/ `p-b`（裸）。目录名 `arm-a`/`arm-b`，映射只写在 artifact 的 `armLabels` |
-| 隐藏 | `--hide-store-for p-b`：控制臂运行时 store 被移到 `$TMPDIR`（不是同目录改名） |
-| 围栏 | `--sandbox`（seatbelt，默认收禁）：`/tmp`、`~` 全禁，只放行本臂 ws / 本臂 profile / node / 凭据；另一臂 profile 再禁一次 |
+| 隐藏 | `--hide-store-for p-b`：控制臂运行时 store 改名后**由围栏把 `storages/` 整个挂空**（同目录改名不是隐藏；移到 `$TMPDIR` 在 Linux 上跨设备 `EXDEV`） |
+| 围栏 | `--sandbox`：按平台选机制——macOS seatbelt（默认收禁 + 放行白名单）、Linux bubblewrap（`--ro-bind / /` + 挂空 + 放行白名单）。两侧都禁 `/tmp`、`$HOME`、本仓库，只放行本臂 ws / 本臂 profile / 启动器 / 凭据；另一臂 profile 再禁一次。见 §13.6 |
+| 环境 | Linux Ubuntu（内核 6.8）、node v22.22.0、`dsh` 0.2.1-rc.2、`dsh-engram` **0.8.8**（与第五轮的 0.8.2 不同代，见 §13.4 的"不能说"） |
 | 日志 | `--log-dir`：run.log 与 check 输出一起移出 run 树，且整个目录对臂不可读 |
 | 判据 | 预注册留一法 `Δ ≥ −2pp`（工具内置），配对下限 10 |
 
-### 13.2 为了让"无泄漏"成立，这一天修掉的六道缝
+### 13.2 为了让"无泄漏"成立，修掉的十一道缝
 
 每道都有证据，都不是"顺手优化"。
 
@@ -574,14 +575,33 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 | 5 | **臂能 `ls` 实验根**：祖先目录给的是 `file-read*`，在目录上就是"可枚举" | 第二次的控制日志：`ls /private/tmp/g6r14` 看到 `runs.json`/`arm-a`/`arm-b`，10/20 开始推理"这是评测矩阵" | 祖先只给 `file-read-metadata`（getcwd/realpath 仍活）；产物搬到 `--log-dir` |
 | 6 | **共享 home 泄漏**：两臂共用 `DSH_HOME`，插件自己的记账文件写着另一臂 | 第三次：`recall-injections.json` 里 `lastWorkspace: /private/tmp/g6-smoke3/arm-a/…`；`ledger.json` 按 workspace 路径记 `injectedChars`；7/7 控制日志引用了 `profiles/ab-engram` | `scrubSharedHome()`：矩阵开始前清 sessions / injections / context-gc / ledger；profile 改中性名 |
 
+| 7 | **插件包自带 `docs/`**：`dsh-engram` 的 tarball 把这一轮的评测文档一起装进治疗臂自己的 `node_modules`，而 `docs/G6-quality-ab.zh.md` 第 403 行**原文写着 codec 的公式** | 移植时读安装树：`profiles/p-a/node_modules/dsh-engram/docs/G6-quality-ab.zh.md:403` | 装完即删；并把两侧围栏都加一条"本臂包内 `docs/` 挂空"（重装也不会悄悄开口）。测试钉住"自己包里的语料文档读不到" |
+| 8 | **语料写死上一台机器的绝对路径**：4 条 `check` 全是 `node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs …` | 移植后第一次冒烟：两臂 `fail`，`MODULE_NOT_FOUND`；换成无围栏跑也会这样，因为问题在判分器不在臂 | 语料改用 `${REPO}` 占位符，工具展开成当前 checkout；并加一条**拒绝**规则：`check` 里出现 oracle 文件却不带占位符就拒绝开跑（否则两臂全 0 → 闸门判"两臂持平 PASS"，是静默假结论，不是报错） |
+| 9 | **臂继承了调用者的身份**：矩阵本身由一个 dsh 会话启动，`process.env` 里带着 `DSH_PROFILE_DIR`/`DSH_SESSION_ID`/`DSH_PROFILE=web`/`DSH_SHELL=1` | 起跑前 `env \| grep DSH_`：臂 `env` 一敲就知道自己在别人 `web` profile 的会话里，且 `DSH_SHELL`/`DSH_PROFILE_DIR` 会影响 dsh 怎么解析自己的 profile 与策略 | `armEnv()`：两臂只拿到 `DSH_HOME`，其余 `DSH_*` 全部剔除。测试断言臂看到的 `profile=/session=/shell=` 都是空 |
+| 10 | **`--control-first` 的比较器永不返回 `-1`**：`sort((a,b) => (a是控制?0:1) - (b是控制?0:1))` | 读代码：这个比较器只说"不小于"，排序结果取决于引擎实现；而顺序**就是**隔离本身（控制跑在治疗之后就能读到治疗的 session） | 改成显式分区（`filter` 两遍拼起来）。测试断言 20 行里控制臂全部排在前 |
+| 11 | **仓库"恰好"被藏住**：产物目录在 `$HOME` 下，于是被 home 那条规则连带挂掉——换个 checkout 位置就漏 | 移植时把 checkout 换到 `$HOME` 之外，读 `buildBwrapArgs` 发现没有针对 repo 的规则 | `repo` 与会话目录一样显式挂空（在 `$HOME` 内则不重复挂）。测试钉住"外层挂空里必须有 checkout" |
+
 前四道会让数字**看起来**比实际好看或直接丢数据，后两道才真的把"臂知道自己是哪一臂"这条路堵死。
 值得记下来的是它们的发现方式：**没有一道是靠读代码发现的，全是控制臂自己在日志里说出来的**。
 这个评测的每一次进步，都是被自己的对照组教出来的。
 
-### 13.3 两次环境事故
+### 13.3 环境事故
 
 - **上游 502**：12:00 前后 DeepSeek endpoint 连续返回 502，第一批治疗的 run 全部 `exit 1`。
   处理：等 + 冒烟确认恢复；判据是"check 为真"而不是"模型说完成"，所以这只会浪费时间，不会污染数字。
+- **移植当天的三次环境事故（都是工具自己的问题）**：
+  1. **pnpm 起不来**：`dsh plugin add` 报 `[ERR_SQLITE_ERROR] unable to open database file`，
+     连 `pnpm --version` 都失败。原因不是 pnpm 坏了，是**文件沙箱**：pnpm 的状态库在
+     `~/.local/state/pnpm`，当时不可写。把 `XDG_STATE_HOME` 指到工作区后立刻正常；
+     提权之后默认路径也能用。
+  2. **`bwrap: execvp …/bin/dsh: No such file or directory`**：启动器是**符号链接**
+     （`~/.npm-global/bin/dsh` → `~/.npm-global/lib/node_modules/@deepseek-ai/dsh/lib/bin.js`），
+     围栏只放行了 `bin/`，链接指向的包不在里面。修复：`toolReadPaths()` 先 `realpath`，
+     放行**那一个包**（不是整个全局前缀——全局前缀是一堆别人的 `docs/`）。
+  3. **`EXDEV: cross-device link not permitted`**：`--hide-store-for` 把 store 改名到
+     `$TMPDIR`，macOS 上同盘，Linux 上 `/tmp` 是 tmpfs → 不同设备。改成同目录改名 +
+     围栏把 `storages/` 挂空（缝 #6 的教训仍然成立：同目录改名本身不算隐藏）。
+
 - **磁盘满（ENOSPC）**：12:30 那次在 16/40 行时炸掉，产物一个字没落盘。原因与本项目无关
   （`$TMPDIR` 里一个 2.5GB 的 Instruments trace，外部进程写的），但它暴露了 #4。
   清理后 7.3GB 可用，本轮产物总共 1.7MB——**评测数据从来不是磁盘问题的成因**。
@@ -595,3 +615,43 @@ artifact：`eval/g6/runs/r5-confined/runs.json`（40 行，含每行 `pass/exit/
 - 控制臂仍能**看见**两项 profile 存在、能看见 run 树的兄弟目录名（`arm-a`/`arm-b`）——
   它知道"有另一个臂"，但不知道哪个臂有什么，也读不到任何东西（围栏测试钉住了这一点）。
 - 单模型、单语料、4 任务；Δ 的量级受任务选择影响极大，方向可靠，幅度别外推。
+- 控制臂仍能**看见**本臂 profile 里那个 `docs/` 曾被删掉这件事的痕迹（目录不存在），
+  以及 `storages/` 是个空挂载（缝 #7/#8 的代价是"空"而不是"无"）。
+- 语料 migration 只做到"换机器能跑"：`${REPO}` 之外，产物里的 `wallMs` 仍受端点抖动
+  影响（本轮见过 52s–814s），**不能**当质量证据。
+
+### 13.6 围栏换了机制：seatbelt → bubblewrap（同一份契约，两套实现）
+
+第五轮的围栏是 macOS 的 `sandbox-exec`（seatbelt）：**默认收禁 + 白名单放行**，规则
+最后一条匹配者生效。这一轮在 Linux 上没有 seatbelt，换成 `bwrap`（bubblewrap）：
+**先 `--ro-bind / /` 得到一整棵只读树，再逐条"挂空/挂回"**，规则第一个挂载者生效。
+两种机制方向相反，所以不能照抄规则，只能照抄**契约**：
+
+| 契约（围栏要保证的事） | seatbelt 写法 | bubblewrap 写法 |
+|---|---|---|
+| 本臂 ws 可读可写 | `(allow file-read* / file-write* (subpath ws))` | `--bind ws ws` |
+| 本臂 profile 可读 | 放行实验 home，再把另一臂 profile 禁掉 | `--bind <实验 home>`，`--tmpfs <另一臂 profile>` |
+| `$HOME`、`/tmp`、本仓库不可读 | `(deny file-read* (subpath …))` | `--tmpfs $HOME`、`--tmpfs /tmp`、`--tmpfs <repo>` |
+| 祖先目录可 lstat 但不可枚举 | `(allow file-read-metadata (literal …))` | 由 `--ro-bind / /` 天然满足 |
+| 凭据可读（否则 `MISSING_CREDENTIAL`） | `(allow file-read* (literal credentials))` | `--ro-bind credentials credentials` |
+| 本臂包内 `docs/`、被隐藏的 `storages/` 不可读 | 末尾再 `(deny …)`（最后匹配者生效） | `--tmpfs <那两处>`（挂载后写） |
+
+还有一条不属于"两套写法"，是两者的共同边界：`fenceCommand()` 在既不是 darwin 也不是
+linux 的平台上**抛错**
+（`G6 has no OS-level fence for <platform>`），而不是"没有围栏也照跑"。没有围栏的 Δ
+只是下界（§10 的教训），工具不该让人有机会搞混这两件事。
+
+回归测试 `test/g6-sandbox.test.mjs` 两套实现共用：搭一个真实的目录布局（本臂 ws 在
+`root/out/arm-b/…/ws`，兄弟 `arm-a`、`logs/runs.json`、另一臂 `seeded-store.json`、
+`creds/.credentials.yaml`），然后在围栏里断言——
+
+- 能读能写本臂 ws、`process.cwd()` 就是 ws 的 realpath、凭据可读、本臂 profile 可读；
+- 读不到：`logs/runs.json`、兄弟臂的 `answer.txt`、另一臂的 `seeded-store.json`、
+  `~/.dsh`、`<ws>/package.json` 之外的本仓库文件、**本臂包里的语料文档**；
+- `ls` 实验根时**看不到** `runs.json` / `arm-a` / `logs` 这些名字（bwrap 会为 bind 造出
+  父目录骨架，所以断言的是"名字集合"，不是"目录不存在"）。
+
+**变异检验**（这一条决定了测试是否真的在测围栏）：把 `--tmpfs /tmp` 注释掉，测试立刻
+变红，并且打印出它看见的名字：`saw creds, home, logs, out, arm-a, arm-b, codec, runs.json`。
+还原后重新变绿。换句话说，这条测试不是"跑通了"，是"该红的时候会红"。
+

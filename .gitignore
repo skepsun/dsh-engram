@@ -20,3 +20,6 @@ package-lock.json
 # generated DSH skills from `dsh-engram skill export` (runtime state)
 .dsh/
 eval/g6/runs/**/ws/
+
+# G6 experiment home (DSH_HOME for the two arms; dsh state, never commit)
+.g6/

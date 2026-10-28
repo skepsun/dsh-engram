@@ -3,37 +3,37 @@
     {
       "id": "money",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/money.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs money",
+      "check": "node ${REPO}/eval/g6/check.mjs money",
       "timeoutMs": 900000
     },
     {
       "id": "retry",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/retry.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs retry",
+      "check": "node ${REPO}/eval/g6/check.mjs retry",
       "timeoutMs": 900000
     },
     {
       "id": "timefmt",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/timefmt.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs timefmt",
+      "check": "node ${REPO}/eval/g6/check.mjs timefmt",
       "timeoutMs": 900000
     },
     {
       "id": "queue",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/queue.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs queue",
+      "check": "node ${REPO}/eval/g6/check.mjs queue",
       "timeoutMs": 900000
     },
     {
       "id": "errors",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/errors.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs errors",
+      "check": "node ${REPO}/eval/g6/check.mjs errors",
       "timeoutMs": 900000
     },
     {
       "id": "csv",
       "prompt": "工作目录是一个小型 JS 仓库（ledger-kata）的受限视图：只有 src/，没有测试（测试在仓库外的 CI 里跑）。src/csv.js 的行为不符合团队约定。请按团队约定修好它。修完自己写个临时脚本验证，然后删掉临时文件。",
-      "check": "node /Users/sunchuxiong/dsh-loom/eval/g6/check.mjs csv",
+      "check": "node ${REPO}/eval/g6/check.mjs csv",
       "timeoutMs": 900000
     }
   ]

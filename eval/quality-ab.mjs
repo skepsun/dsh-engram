@@ -25,12 +25,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildConfinedProfile } from "./g6/sandbox-profile.mjs";
+import { fenceCommand, toolReadPaths } from "./g6/sandbox-profile.mjs";
 
 /** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 
+/** First hit for `name` on PATH, so the fence can bind its install root by path. */
+function resolveOnPath(name) {
+  if (path.isAbsolute(name)) return fs.existsSync(name) ? name : name;
+  for (const dir of (process.env.PATH ?? "").split(":")) {
+    if (dir === "") continue;
+    const candidate = path.join(dir, name);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // keep looking
+    }
+  }
+  return name;
+}
+
 const DSH_BIN = process.env.AB_DSH_BIN || "dsh";
+const DSH_EXEC = resolveOnPath(DSH_BIN);
 const defaultHome = path.join(os.homedir(), ".dsh", "quality-ab");
 
 function parseArgs(argv) {
@@ -169,7 +186,7 @@ function prepare(args) {
   if (profiles.length !== 2) throw new Error("prepare needs --arm on=<profile>,off=<profile>");
 
   for (const [name, profile] of profiles) {
-    const env = { ...process.env, DSH_HOME: home };
+    const env = armEnv(home);
     fs.mkdirSync(path.join(home, "profiles"), { recursive: true });
     // Instantiate the one-shot headless template under this profile name.
     const created = dsh(["--profile", profile, "--from-default-profile", "headless", "--dump-config"], { env });
@@ -191,6 +208,18 @@ function loadTasks(file) {
   for (const task of tasks) {
     if (!task.id || !task.prompt) throw new Error(`${file}: every task needs id + prompt`);
     if (!task.check) throw new Error(`${file}: task ${task.id} needs a check command (oracle)`);
+    // `${REPO}` keeps the corpus portable. It used to spell the author's checkout
+    // (`node /Users/…/eval/g6/check.mjs codec`), so on any other machine every
+    // check exits non-zero, BOTH arms score 0, and the gate reports "两臂持平 —
+    // PASS": a silent fake verdict, not an error message (round 6, seam #9).
+    for (const field of ["check", "setup"]) {
+      if (typeof task[field] === "string") task[field] = task[field].replaceAll("${REPO}", ROOT);
+    }
+    if (!task.check.includes(ROOT) && /check\.mjs|gate-audit/.test(task.check)) {
+      throw new Error(
+        `${file}: task ${task.id} names a harness file without ${"${REPO}"} — an absolute checkout path makes every arm fail on another machine`,
+      );
+    }
   }
   return tasks;
 }
@@ -375,6 +404,22 @@ function republish(args) {
  *  (16 of 40 rows) and the artifact had never been written. */
 const MIN_FREE_MB = Number(process.env.AB_MIN_FREE_MB) > 0 ? Number(process.env.AB_MIN_FREE_MB) : 512;
 
+/**
+ * The environment an arm runs in: this machine's real env, minus the caller's
+ * identity. The harness is itself launched by a DSH session, so `process.env`
+ * carries `DSH_PROFILE_DIR`, `DSH_SESSION_ID`, `DSH_SHELL`… — an arm that dumps
+ * `env` would learn it is one of two arms inside someone's `web` profile, and
+ * `DSH_SHELL=1`/`DSH_PROFILE_DIR` can change how dsh resolves its own profile and
+ * policy. Both arms get exactly DSH_HOME, so the run does not depend on who
+ * launched the matrix (round 6, seam #10).
+ */
+function armEnv(home) {
+  const env = { ...process.env };
+  for (const key of ["DSH_PROFILE", "DSH_PROFILE_DIR", "DSH_SESSION_ID", "DSH_WEB_URL", "DSH_SHELL", "DSH_ATTACH"]) delete env[key];
+  env.DSH_HOME = home;
+  return env;
+}
+
 function assertFreeSpace(out) {
   try {
     const stat = fs.statfsSync(out);
@@ -425,7 +470,7 @@ function run(args) {
 
   const home = args.home;
   if (args.sandbox) scrubSharedHome(home);
-  const env = { ...process.env, DSH_HOME: home };
+  const env = armEnv(home);
   // `AB_DSH_BIN` swaps in a stub host: the unit tests drive the whole run/grade
   // pipeline against one, and a stub never talks to a model. Only a real arm
   // spawn needs a credential, so only that mode fails fast — otherwise CI (no
@@ -465,13 +510,28 @@ function run(args) {
     // only safe if the sandbox denies the whole directory above them. Round 5
     // lost a matrix to exactly this: the log dir was this round's own dir, hence
     // excluded from the deny list, hence readable, hence an answer key.
-    const ancestors = discoverPriorTrees(path.resolve(args.out), args.logDir).map((entry) => path.resolve(entry));
+    //
+    // Seatbelt only. Linux's fence does not deny paths, it mounts a private empty
+    // /tmp and hides the checkout, so EVERY directory outside the arm's own
+    // workspace and DSH_HOME is already gone — there is nothing to place "under a
+    // /tmp/g6* tree", and on this host /tmp does not even survive a process.
+    if (process.platform === "darwin") {
+      const ancestors = discoverPriorTrees(path.resolve(args.out), args.logDir).map((entry) => path.resolve(entry));
+      const logDir = path.resolve(args.logDir);
+      const covered = ancestors.some((entry) => logDir === entry || logDir.startsWith(`${entry}${path.sep}`));
+      if (!covered) {
+        throw new Error(
+          `--log-dir ${args.logDir} is readable inside the sandbox; put it under a /tmp/g6* directory that is NOT this round's root`,
+        );
+      }
+    }
+    // Either way the log dir must stay outside the run tree: under bwrap a
+    // sibling directory is invisible, but a log dir INSIDE the arm's own path
+    // would be created by the workspace bind and readable.
     const logDir = path.resolve(args.logDir);
-    const covered = ancestors.some((entry) => logDir === entry || logDir.startsWith(`${entry}${path.sep}`));
-    if (!covered) {
-      throw new Error(
-        `--log-dir ${args.logDir} is readable inside the sandbox; put it under a /tmp/g6* directory that is NOT this round's root`,
-      );
+    const outRoot = path.resolve(args.out);
+    if (logDir === outRoot || logDir.startsWith(`${outRoot}${path.sep}`)) {
+      throw new Error(`--log-dir ${args.logDir} is inside the run tree (${outRoot}); put it beside it, not in it`);
     }
   }
   // Run ORDER is part of the isolation. A control run that happens after a
@@ -492,7 +552,15 @@ function run(args) {
   }
   if (args.controlFirst) {
     const control = arms[1];
-    plan.sort((a, b) => (a.arm === control ? 0 : 1) - (b.arm === control ? 0 : 1));
+    // An explicit partition, not `sort` with a 0/1 comparator: the ordering IS
+    // the isolation (no treatment session exists while a control runs), so it
+    // must not depend on how a particular engine implements an ill-formed
+    // comparison.
+    const ordered = [
+      ...plan.filter((run) => run.arm === control),
+      ...plan.filter((run) => run.arm !== control),
+    ];
+    plan.splice(0, plan.length, ...ordered);
   }
 
   // `--resume` keeps the rows a dead matrix already paid for. It MUST run after
@@ -543,10 +611,12 @@ function run(args) {
         // `cat` the store if it is reachable — fair only if we make it
         // unreachable).
         const storeFile = path.join(home, "storages", "dsh_engram.json");
-        // Move it OUT of DSH_HOME: renaming inside the same directory is not
-        // hiding — a pilot's control arm listed `storages/` and read the file
-        // anyway (it was named `dsh_engram.json.g6-hidden`).
-        const hiddenFile = path.join(os.tmpdir(), `dsh_engram.json.g6-hidden-${process.pid}`);
+        // A renamed file in the same directory is not hiding (a pilot's control
+        // arm listed `storages/` and read `dsh_engram.json.g6-hidden`), and
+        // moving it to /tmp is not portable: on Linux /tmp is a separate
+        // filesystem and the rename dies with EXDEV. So the rename stays inside
+        // `storages/` and the FENCE hides that whole directory for this arm.
+        const hiddenFile = `${storeFile}.g6-hidden-${process.pid}`;
         const hideStore = args.hideStoreFor === arm && fs.existsSync(storeFile);
         if (hideStore) fs.renameSync(storeFile, hiddenFile);
         let res;
@@ -554,29 +624,34 @@ function run(args) {
         // the host store, its own session logs, or the OTHER arm's profile —
         // whatever it thinks of next. Without this, "Δ is a lower bound" was the
         // honest claim; with it, Δ is a measurement.
-        const sandboxFile = args.sandbox
-          ? (() => {
-              const otherArm = arms.find((candidate) => candidate !== arm) ?? null;
-              const file = path.join("/tmp", `g6-sandbox-${process.pid}-${arm}-${task.id}-${seed}.sb`);
-              fs.writeFileSync(
-                file,
-                buildConfinedProfile({
-                  home: os.homedir(),
-                  nodeDir: path.dirname(path.dirname(process.execPath)),
-                  dshHome: path.join(home, "profiles", arm),
-                  ws,
-                  otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(home, "profiles", otherArm),
-                  sessionsDir: path.join(home, "sessions"),
-                  credentials: path.join(os.homedir(), ".dsh", ".credentials.yaml"),
-                }),
-              );
-              return file;
-            })()
+        //
+        // The mechanism is the platform's (seatbelt on macOS, bubblewrap on
+        // Linux) but both come out of fenceCommand(), so the profile a run gets
+        // is the same one the fence test asserts against.
+        const otherArm = arms.find((candidate) => candidate !== arm) ?? null;
+        const fence = args.sandbox
+          ? fenceCommand({
+              home: os.homedir(),
+              nodeDir: path.dirname(path.dirname(process.execPath)),
+              dshHome: path.join(home, "profiles", arm),
+              ws,
+              otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(home, "profiles", otherArm),
+              sessionsDir: path.join(home, "sessions"),
+              credentials: path.join(os.homedir(), ".dsh", ".credentials.yaml"),
+              repo: ROOT,
+              toolPaths: toolReadPaths({ dshBin: DSH_EXEC }),
+              hideStore,
+              docsToHide: [arm, otherArm]
+                .filter((name) => typeof name === "string")
+                .map((name) => path.join(home, "profiles", name, "node_modules", "dsh-engram", "docs")),
+              cmd: DSH_EXEC,
+              argv: ["--profile", arm, prompt],
+            })
           : null;
         try {
-          res = sandboxFile === null
+          res = fence === null
             ? dsh(["--profile", arm, prompt], { cwd: ws, env, timeoutMs: args.timeoutMs })
-            : spawnSync("/usr/bin/sandbox-exec", ["-f", sandboxFile, DSH_BIN, "--profile", arm, prompt], {
+            : spawnSync(fence.cmd, fence.argv, {
                 cwd: ws,
                 env,
                 encoding: "utf8",
@@ -584,6 +659,11 @@ function run(args) {
                 maxBuffer: 32 * 1024 * 1024,
               });
         } finally {
+          try {
+            fence?.cleanup();
+          } catch {
+            // a stale /tmp profile is not worth losing the row over
+          }
           if (hideStore) {
             try {
               fs.renameSync(hiddenFile, storeFile);

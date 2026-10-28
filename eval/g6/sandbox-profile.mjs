@@ -1,5 +1,6 @@
 /**
- * macOS seatbelt profile for one G6 run.
+ * macOS seatbelt profile — and, since round 6 could not be finished on macOS,
+ * the same fence in bubblewrap for Linux.
  *
  * Three isolation bugs in a row (renamed store, sibling run.log, harness docs
  * inside the plugin package) had the same shape: the control arm has a shell and
@@ -12,8 +13,17 @@
  * `sandbox-exec` is deprecated but present and enforcing on macOS: a denied read
  * comes back as EPERM, which is exactly what the contamination check wants to
  * be able to say.
+ *
+ * Two mechanisms, one contract: whatever the OS, an arm can read its own
+ * workspace and its own profile, and nothing of the experiment around it. The
+ * seatbelt side is a rule list resolved last-match-wins; the bwrap side is a
+ * mount list resolved first-mount-wins (a later `--tmpfs` is what makes a path
+ * disappear, a later `--bind` is what gives it back). They are not the same
+ * code, so `test/g6-sandbox.test.mjs` runs the SAME assertions against `fenceCommand()`
+ * on either platform — the claim under test is the fence, not the syscall.
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const CHANNELS = {
@@ -136,11 +146,11 @@ function ancestorsOf(target) {
   return out;
 }
 
-export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfile, sessionsDir, credentials }) {
+export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfile, sessionsDir, credentials, repo = null, docsToHide = [], hideStore = false }) {
   const lines = [
     "(version 1)",
     "(allow default)",
-    `(deny file-read* (subpath "/private/tmp") (subpath "/tmp") (subpath ${JSON.stringify(home)}))`,
+    `(deny file-read* (subpath "/private/tmp") (subpath "/tmp") (subpath ${JSON.stringify(home)})${repo !== null ? ` (subpath ${JSON.stringify(repo)})` : ""})`,
     // getcwd(2) and realpath(3) stat every ancestor of the cwd; without metadata
     // on those (literal, one level at a time) node dies at startup with
     // `uv_cwd EPERM` / `realpath EPERM`.
@@ -174,7 +184,179 @@ export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfi
     ...(sessionsDir ? [`(allow file-write* (subpath ${JSON.stringify(sessionsDir)}))`] : []),
     `(allow file-write* (subpath "/private/var/folders"))`,
     `(allow file-write* (subpath "/dev"))`,
+    // Last-match-wins: a docs/ shipped inside an arm's own package states the
+    // corpus outright, so it goes after every allow (round 6, seam #7).
+    ...(docsToHide ?? []).map((docs) => `(deny file-read* (subpath ${JSON.stringify(docs)}))`),
+    ...(hideStore
+      ? [`(deny file-read* (subpath ${JSON.stringify(path.join(path.dirname(path.dirname(dshHome)), "storages"))}))`]
+      : []),
     "",
   ];
   return lines.join("\n");
+}
+
+/* ------------------------------------------------------------------------- *
+ * Linux: the same fence, expressed as mounts
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Bubblewrap fence for one run.
+ *
+ * The seatbelt profile above is a DENY list evaluated last-match-wins. bwrap has
+ * no rule language, so the same contract becomes a mount list evaluated
+ * first-mount-wins: start from the whole filesystem read-only, cover the two
+ * channels that were the actual bugs with an empty tmpfs (they cease to exist
+ * rather than being denied one path at a time), then bind back exactly what a
+ * blind arm needs.
+ *
+ * Why start from `--ro-bind / /` and not `--unshare-all`: an arm is a coding
+ * agent with a shell — it needs /usr, /bin, the toolchain and the network, and
+ * the fence that survived contact with a real control arm is the one that hides
+ * what the ANSWER is, not the one that hides the machine. What it must not see:
+ *
+ *   $HOME  — host store, host sessions (this very conversation), the live
+ *            profiles, and the repo itself (fixtures, oracles, seed memories,
+ *            git history) whenever the checkout lives under $HOME.
+ *   /tmp   — scratch space agents write into for each other, plus this round's
+ *            log dir and every previous round's artifacts. A private empty
+ *            tmpfs is stronger than a deny list: the arm keeps a writable /tmp
+ *            and still cannot name anything in the host's.
+ *
+ * What it gets back: its own workspace (rw), the experiment DSH_HOME (rw — dsh
+ * cannot boot without it: profiles and sessions live there), the credential file
+ * (ro), the node/dsh install if it happens to sit under $HOME, and a fresh
+ * /dev + /proc.
+ *
+ * Residual, and stated rather than fixed (see docs/G6-quality-ab.zh.md §13.5):
+ * the file paths it can see — `<out>/arm-a/<task>/seed-0/ws` — still reveal the
+ * neutral arm label and that a matrix is running. It reveals nothing about the
+ * other arm's contents.
+ */
+export function buildBwrapArgs({
+  home = os.homedir(),
+  nodeDir,
+  dshHome,
+  ws,
+  otherArmProfile = null,
+  sessionsDir = null,
+  credentials = null,
+  toolPaths = [],
+  repo = null,
+  docsToHide = [],
+  hideStore = false,
+}) {
+  const experimentHome = path.dirname(path.dirname(dshHome));
+  const exists = (entry) => entry !== null && entry !== undefined && entry !== "" && fs.existsSync(entry);
+  const args = [
+    // The host, read-only. Nothing is writable until a later mount says so.
+    "--ro-bind", "/", "/",
+    // A fresh device tree (an arm needs /dev/null) and its own pids.
+    "--dev", "/dev",
+    "--proc", "/proc",
+    // The fences. Order matters: whatever is tmpfs'd here disappears, and only
+    // the explicit binds below can bring a path back.
+    "--tmpfs", home,
+    "--tmpfs", "/tmp",
+    // The checkout, spelled out rather than inferred from where it happens to
+    // live: on this host it sits under $HOME and the home tmpfs covers it, but a
+    // checkout at /srv/… would otherwise be readable read-only through `--ro-bind / /` —
+    // fixtures, oracles and seed memories included.
+    ...(exists(repo) && !repo.startsWith(`${home}${path.sep}`) && repo !== home ? ["--tmpfs", repo] : []),
+  ];
+  // Give back what the run legitimately needs, most specific last.
+  if (exists(nodeDir)) args.push("--ro-bind", nodeDir, nodeDir);
+  for (const tool of toolPaths) if (exists(tool)) args.push("--ro-bind", tool, tool);
+  // dsh boots out of this home: profiles/ (the mounted plugin) and sessions/.
+  args.push("--bind", experimentHome, experimentHome);
+  // The workspace is the only tree the arm may also WRITE, besides its tmp.
+  args.push("--bind", ws, ws);
+  if (exists(sessionsDir) && !sessionsDir.startsWith(`${experimentHome}${path.sep}`)) args.push("--bind", sessionsDir, sessionsDir);
+  // The provider key lives outside the run's DSH_HOME; bind the file, not the dir.
+  if (exists(credentials)) args.push("--ro-bind", credentials, credentials);
+  // Re-deny inside the allowed home: the other arm's profile carries the seed.
+  if (exists(otherArmProfile)) args.push("--tmpfs", otherArmProfile);
+  // Every `docs/` shipped inside an arm's own plugin package. The package ships
+  // this round's write-up with it, and that file states the codec formula
+  // outright — a treatment arm that reads its own package could solve a task
+  // without the memory the run is supposed to measure (round 6, seam #7).
+  for (const docs of [CHANNELS.abDocs(home, "ab-engram")[0], ...(docsToHide ?? [])]) if (exists(docs)) args.push("--tmpfs", docs);
+  // The seeded store, when this arm must not have it: the rename that hides it
+  // stays on the same filesystem, so the fence has to make the directory itself
+  // unreachable (an empty mount, not a missing one).
+  if (hideStore) args.push("--tmpfs", path.join(experimentHome, "storages"));
+  args.push("--unshare-pid", "--unshare-ipc", "--die-with-parent", "--chdir", ws);
+  return args;
+}
+
+/**
+ * The install roots an arm needs on PATH when they happen to live under $HOME —
+ * `~/.npm-global/bin/dsh` is the normal case on a dev box, and the home tmpfs
+ * would otherwise take the launcher with it.
+ *
+ * Nothing here can carry an answer: it is the toolchain, not the experiment. The
+ * rule is mechanical (PATH + the resolved launcher's package root), so it cannot
+ * drift into "just allow this one directory" the way a hand-written list does.
+ */
+export function toolReadPaths({ home = os.homedir(), dshBin = "dsh", searchPath = process.env.PATH ?? "" } = {}) {
+  const out = new Set();
+  const add = (entry) => {
+    if (typeof entry !== "string" || entry === "") return;
+    const real = path.resolve(entry);
+    if (real === home || real.startsWith(`${home}${path.sep}`)) out.add(real);
+  };
+  for (const entry of searchPath.split(":")) add(entry);
+  if (path.isAbsolute(dshBin)) {
+    add(path.dirname(dshBin));
+    // The launcher is usually a SYMLINK into the package (`…/bin/dsh` →
+    // `…/lib/node_modules/@scope/pkg/lib/bin.js`), so binding the bin directory
+    // alone leaves execvp with a dangling link ("bwrap: execvp …: No such file").
+    let real = dshBin;
+    try {
+      real = fs.realpathSync(dshBin);
+    } catch {
+      // not on disk: the spelled path is all there is
+    }
+    add(path.dirname(real));
+    // …/lib/node_modules/@scope/pkg/lib/bin.js → allow THAT package, not the whole
+    // global prefix: a global prefix is a directory full of other people's docs,
+    // and one of them only has to mention the corpus once.
+    const marker = `${path.sep}node_modules${path.sep}`;
+    const at = real.indexOf(marker);
+    if (at !== -1) {
+      const rest = real.slice(at + marker.length).split(path.sep);
+      const name = rest.slice(0, rest[0].startsWith("@") ? 2 : 1).join(path.sep);
+      add(`${real.slice(0, at)}${marker}${name}`);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * The one entry point the harness and the fence test both call.
+ *
+ * Keeping this in one place is the point: a test that builds its own profile
+ * tests the profile, not the fence a run actually gets.
+ */
+export function fenceCommand({ platform = process.platform, cmd, argv, ...dims }) {
+  if (platform === "darwin") {
+    const file = path.join(os.tmpdir(), `g6-sandbox-${process.pid}-${Math.random().toString(36).slice(2, 8)}.sb`);
+    fs.writeFileSync(file, buildConfinedProfile(dims));
+    return {
+      cmd: "/usr/bin/sandbox-exec",
+      argv: ["-f", file, cmd, ...argv],
+      cleanup: () => fs.rmSync(file, { force: true }),
+    };
+  }
+  if (platform === "linux") {
+    const bwrap = ["/usr/bin/bwrap", "/bin/bwrap"].find((candidate) => fs.existsSync(candidate));
+    if (bwrap === undefined) {
+      throw new Error(
+        "G6 needs an OS-level fence: install bubblewrap (apt install bubblewrap) or run on macOS with sandbox-exec. A matrix without it measures nothing (docs/G6-quality-ab.zh.md §10).",
+      );
+    }
+    return { cmd: bwrap, argv: [...buildBwrapArgs(dims), "--", cmd, ...argv], cleanup: () => {} };
+  }
+  throw new Error(
+    `G6 has no OS-level fence for ${platform}: the two implemented mechanisms are macOS seatbelt and Linux bubblewrap. Do not run the matrix unfenced — say so instead.`,
+  );
 }

@@ -242,3 +242,85 @@ test("seeded rows carry the RESOLVED workspace, or the treatment runs blind", ()
     assert.ok(fs.existsSync(row.workspace) && path.basename(row.workspace) === "ws", "key points at a real run workspace");
   }
 });
+
+/** A tasks file of our own, so `check` can be the thing under test. */
+function customTask(check, out, extra = []) {
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), "ab-ws-"));
+  fs.writeFileSync(path.join(ws, "README.md"), "fixture\n");
+  const tasks = path.join(ws, "tasks.json");
+  fs.writeFileSync(tasks, JSON.stringify({ tasks: [{ id: "t1", prompt: "nothing", check }] }));
+  return spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", ws, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "1", ...extra],
+    { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") } },
+  );
+}
+
+test("${REPO} in a check is expanded, so a corpus can move between machines", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  // Passes only if the placeholder became this checkout's absolute path.
+  const res = customTask('test -f "${REPO}/eval/quality-ab.mjs"', out);
+  assert.equal(res.status, 0, res.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(report.summary.on.rate, 1, "both arms pass when the check can find the oracle");
+});
+
+test("a check that names the oracle by absolute path is refused, not scored", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  // The shape of the bug: the corpus spelled the author's checkout, so every arm
+  // failed on any other machine and the gate reported a tie as a PASS.
+  const res = customTask("node /Users/someone/dsh-loom/eval/g6/check.mjs codec", out);
+  assert.notEqual(res.status, 0, "the matrix must refuse to start");
+  assert.match(res.stderr, /\$\{REPO\}/, "and say what to write instead");
+});
+
+/** Stub that records what the arm was told about its own environment. */
+function envStub(dumpDir) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ab-stub-"));
+  fs.writeFileSync(
+    path.join(dir, "dsh"),
+    `#!/bin/bash
+# args: --profile <arm> <prompt>
+arm="$2"
+printf 'profile=%s session=%s shell=%s home=%s\\n' "$DSH_PROFILE" "$DSH_SESSION_ID" "$DSH_SHELL" "$DSH_HOME" > "${dumpDir}/$arm.txt"
+exit 0
+`,
+    { mode: 0o755 },
+  );
+  return dir;
+}
+
+test("an arm inherits DSH_HOME and nothing else about whoever launched the matrix", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const dump = fs.mkdtempSync(path.join(os.tmpdir(), "ab-dump-"));
+  const { workspace, tasks } = fixture();
+  const res = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "2", "--home", path.join(out, "home")],
+    {
+      encoding: "utf8",
+      // The harness is normally launched BY a dsh session, so this is the real case:
+      // the caller's identity sits in process.env and must not reach the arm.
+      env: { ...process.env, DSH_PROFILE: "web", DSH_SESSION_ID: "session-abc", DSH_SHELL: "1", AB_DSH_BIN: path.join(envStub(dump), "dsh") },
+    },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  for (const arm of ["on", "off"]) {
+    const line = fs.readFileSync(path.join(dump, `${arm}.txt`), "utf8").trim();
+    assert.match(line, /^profile= session= shell= home=\/.*home$/, `arm ${arm} saw: ${line}`);
+  }
+});
+
+test("--control-first runs every control before any treatment run", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const { workspace, tasks } = fixture();
+  const res = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "2", "--control-first"],
+    { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") } },
+  );
+  assert.equal(res.status, 0, res.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  const order = report.rows.map((row) => row.arm);
+  assert.deepEqual(order, ["off", "off", "on", "on"], "controls first: no treatment session exists while a control runs");
+});
