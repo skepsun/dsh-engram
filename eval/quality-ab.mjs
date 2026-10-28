@@ -141,13 +141,29 @@ function linkCredentials(home) {
   return true;
 }
 
+/**
+ * Remove what the previous run left in the SHARED experiment home.
+ *
+ * Every arm can read this home (dsh cannot boot without it), so anything the
+ * plugin keeps there is common knowledge. Session logs hold solved tasks in
+ * plain text; `recall-injections.json` names the arm it last ran in — round 6's
+ * controls found `lastWorkspace: /private/tmp/g6-smoke3/arm-a/…` there and read
+ * the experiment's arm names and layout straight out of the file. The memory
+ * store is not affected: `seedStore` re-seeds it before every treatment run.
+ */
+function scrubSharedHome(home) {
+  fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
+  // The ledger is keyed by absolute workspace path (`…/ab-engram/csv/seed-0/ws`)
+  // and records `injectedChars` — a control that reads it learns both the arm
+  // names and that one arm injects memory. It holds no state a run needs.
+  for (const stale of ["recall-injections.json", "context-gc.status.json", "ledger.json"]) {
+    fs.rmSync(path.join(home, "engram", stale), { force: true });
+  }
+}
+
 function prepare(args) {
   const home = args.home;
-  if (args.sandbox) {
-    // Prior runs' session logs live here and would be readable by the next run.
-    // `--control-first` means only control sessions can exist at this point.
-    fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
-  }
+  if (args.sandbox) scrubSharedHome(home);
   fs.mkdirSync(home, { recursive: true });
   const profiles = Object.entries(args.arm);
   if (profiles.length !== 2) throw new Error("prepare needs --arm on=<profile>,off=<profile>");
@@ -408,11 +424,7 @@ function run(args) {
   if (!assertFreeSpace(args.out)) return;
 
   const home = args.home;
-  if (args.sandbox) {
-    // Prior runs' session logs live here and would be readable by the next run.
-    // `--control-first` means only control sessions can exist at this point.
-    fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
-  }
+  if (args.sandbox) scrubSharedHome(home);
   const env = { ...process.env, DSH_HOME: home };
   // `AB_DSH_BIN` swaps in a stub host: the unit tests drive the whole run/grade
   // pipeline against one, and a stub never talks to a model. Only a real arm
