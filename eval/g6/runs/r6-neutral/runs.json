@@ -379,6 +379,10 @@
     "changed": 0
   },
   "infraRows": 7,
-  "recomputedAt": 1793175815276,
-  "contaminated": 0
+  "recomputedAt": 1793183413390,
+  "contaminated": 0,
+  "target": {
+    "provider": "deepseek-official",
+    "model": "deepseek-flash"
+  }
 }

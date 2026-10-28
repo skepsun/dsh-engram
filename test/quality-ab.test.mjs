@@ -23,6 +23,19 @@ function stubDir(mode) {
     `#!/bin/bash
 # args: --profile <arm> <prompt>
 arm="$2"
+# --dump-config: answer the way a real host would, so the same-endpoint check has
+# something to read. AB_STUB_MIX=1 makes the two arms disagree (the failure the
+# check exists for).
+if [ "$3" = "--dump-config" ]; then
+  target="local-vllm-61"
+  [ "$AB_STUB_MIX" = "1" ] && target="local-vllm-$arm"
+  echo "- id: agent-default-model"
+  echo "  name: '@deepseek-ai/dsh-agent-default-model'"
+  echo "  config:"
+  echo "    provider: $target"
+  echo "    model: deepseek-v4.1-flash-1017"
+  exit 0
+fi
 case "${mode}" in
   perfect)   [ "$arm" = "on" ] && echo ok > ok.txt; [ "$arm" = "off" ] && echo ok > ok.txt ;;
   gap)       [ "$arm" = "on" ] && echo ok > ok.txt ;;
@@ -363,4 +376,20 @@ test("--resume retries a row that never got a model, and does not double-count i
   assert.equal(after.summary.on.runs, 2);
   assert.equal(after.summary.on.passes, 2);
   assert.equal(after.infraRows, 0);
+});
+
+test("two arms resolving different model targets are refused, not averaged", () => {
+  // The 40-row artifact this prevents: 33 rows on one endpoint, 7 on another,
+  // one Δ that blends the plugin with the serving stack.
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const { workspace, tasks } = fixture();
+  const res = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "2"],
+    { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh"), AB_STUB_MIX: "1" } },
+  );
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /resolve different model targets/);
+  assert.match(res.stderr, /serving stack, not the plugin/);
+  assert.equal(fs.existsSync(path.join(out, "runs.json")), false, "nothing was measured, so nothing is recorded");
 });

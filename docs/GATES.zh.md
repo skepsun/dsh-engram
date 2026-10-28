@@ -11,7 +11,7 @@
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 45 recall-with-hits |
 | G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/406 memories (13 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 119 memories · 6 lines |
-| G6 | Quality Δ · 配对任务成功率差 | 95.0pp | Δ ≥ −2pp | **PASS** | 2026-10-28 重测 · 4 任务 × 5 种子 · **13/20 对有效** · `eval/g6/runs/r6-neutral/runs.json` · 另有 7 行治疗臂因 `QUOTA: Insufficient Balance` 未跑，已标记 `infra` 并排除（不排除、当失败算的保守口径是 **+60.0pp**，同样 PASS） |
+| G6 | Quality Δ · 配对任务成功率差 | 90.0pp | Δ ≥ −2pp | **PASS** | 2026-10-28 · 4 任务 × 5 种子 · **20/20 对** · `eval/g6/runs/r6-local/runs.json`（本地 vLLM `deepseek-v4.1-flash-1017`）· 官方端点那次 13/20 对、+95.0pp 作独立复现留在 `r6-neutral`（7 行因余额不足标 `infra` 排除） |
 | G7 | 账本自身开销 | 0.0236% | < 0.5% 请求时延 | **PASS** | `npm run bench:ledger`（本机 2026-10-28：最坏 op = p50 步长的 0.0236%，或 300ms 预算的 0.3022%） |
 
 ## 账本合计

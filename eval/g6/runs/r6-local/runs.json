@@ -1,0 +1,381 @@
+{
+  "startedAt": 1793177586890,
+  "seedMemory": "/d1/chuxiong/code/dsh-loom/eval/g6/seed-memory-blind.json",
+  "finishedAt": 1793183294803,
+  "seeds": 5,
+  "tasks": [
+    "codec",
+    "errcode",
+    "money",
+    "ranking"
+  ],
+  "arms": [
+    "p-a",
+    "p-b"
+  ],
+  "summary": {
+    "p-a": {
+      "runs": 20,
+      "passes": 20,
+      "rate": 1,
+      "meanWallMs": 85248
+    },
+    "p-b": {
+      "runs": 20,
+      "passes": 2,
+      "rate": 0.1,
+      "meanWallMs": 199784
+    }
+  },
+  "hideStoreFor": "p-b",
+  "contaminated": 0,
+  "infraRows": 0,
+  "paired": {
+    "pairs": 20,
+    "onlyA": 18,
+    "onlyB": 0
+  },
+  "deltaPp": 90,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "p-a 高 90.0pp — 记忆带去了可用的信息"
+  },
+  "rows": [
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 162371
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 212137
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 164877
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 413949
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 251383
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 53972
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 79970
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 111834
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 115542
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 88578
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 90741
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 158696
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 153558
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 228048
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 251750
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 44655
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 710002
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 172292
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 156522
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 374805
+    },
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 57505
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 62319
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 126921
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 50483
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 66994
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 53626
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 68500
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 82712
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 52833
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 37341
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 95795
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 136221
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 261794
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 150690
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 139773
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 42001
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 57030
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 30728
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 59738
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 71961
+    }
+  ],
+  "armLabels": {
+    "arm-a": "p-a",
+    "arm-b": "p-b"
+  },
+  "classes": {
+    "infra": 0,
+    "changed": 0
+  },
+  "target": {
+    "provider": "local-vllm-61",
+    "model": "deepseek-v4.1-flash-1017"
+  },
+  "recomputedAt": 1793183405406
+}

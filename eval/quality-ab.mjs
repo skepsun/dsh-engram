@@ -67,6 +67,8 @@ function parseArgs(argv) {
     else if (arg === "--exclude") out.exclude = next().split(",").map((x) => x.trim()).filter(Boolean);
     else if (arg === "--log-dir") out.logDir = next();
     else if (arg === "--sandbox") out.sandbox = true;
+    // Provenance for an artifact written before `run` recorded it (see classify).
+    else if (arg === "--target") out.target = next();
     // Resume a matrix that died mid-flight (round 4 hit ENOSPC after the whole
     // control half): keep the rows already in <out>/runs.json, run only the
     // missing pairs.
@@ -123,6 +125,45 @@ function dsh(args, { cwd, env, timeoutMs } = {}) {
  * key from the environment. Lift it from the host's credential store into the
  * child env — never printed, never written to the report.
  */
+/**
+ * Which model did an arm actually resolve?
+ *
+ * `--dump-config` prints the composed profile, so this asks the host instead of
+ * trusting a doc: the answer includes bundle layers, not just the patch file.
+ */
+function parseArmTarget(dump) {
+  const block = /^- id: agent-default-model[\s\S]*?(?=^- id: |\s*\z)/m.exec(dump);
+  const text = block === null ? dump : block[0];
+  return {
+    provider: /^\s+provider:\s*(\S+)/m.exec(text)?.[1] ?? null,
+    model: /^\s+model:\s*(\S+)/m.exec(text)?.[1] ?? null,
+  };
+}
+
+/**
+ * Both arms must resolve the SAME provider/model.
+ *
+ * A paired run is only a comparison of arms while the serving stack is a
+ * constant. Round 6 spent 33 rows on the paid API before the account ran dry and
+ * the natural "just finish the last seven rows somewhere else" fix would have
+ * produced a 40-row artifact whose Δ was part plugin, part vendor — invisible in
+ * every number and in every log. So: ask, compare, refuse.
+ */
+function assertSameTarget({ dshBin, home, arms, env }) {
+  const targets = {};
+  for (const arm of arms) {
+    const dumped = spawnSync(dshBin, ["--profile", arm, "--dump-config"], { env: { ...env, DSH_HOME: home }, encoding: "utf8", timeout: 120000 });
+    targets[arm] = parseArmTarget(`${dumped.stdout ?? ""}${dumped.stderr ?? ""}`);
+  }
+  const [first, second] = arms.map((arm) => targets[arm]);
+  if (first.provider !== null && second.provider !== null && (first.provider !== second.provider || first.model !== second.model)) {
+    throw new Error(
+      `the two arms resolve different model targets (${arms[0]}: ${first.provider}/${first.model}, ${arms[1]}: ${second.provider}/${second.model}) — Δ would measure the serving stack, not the plugin`,
+    );
+  }
+  return targets;
+}
+
 function liftCredential(env) {
   // A local deployment routes through vLLM, so the key that matters is whatever
   // the arm's provider row names in `apiKeyEnv` (LOCAL_VLLM_61_API_KEY here),
@@ -437,6 +478,14 @@ function reclassify(args) {
     return next;
   });
   const { summary, pairs, deltaPp, gate } = analyze({ rows, tasks: previous.tasks.map((id) => ({ id })), seeds: previous.seeds, arms: previous.arms, minPairs: args.minPairs });
+  // Provenance for an artifact written before the run recorded it. NOT inferred
+  // from the profiles: those get edited (round 6 pointed them at a different
+  // endpoint between two matrices), so asking them today would stamp the CURRENT
+  // route onto rows produced by an older one — a false fact, which is worse than
+  // a missing one. This is an operator statement, verbatim or absent.
+  const target = args.target === undefined
+    ? previous.target ?? null
+    : { provider: args.target.split("/")[0], model: args.target.split("/")[1] ?? null };
   const report = {
     ...previous,
     summary,
@@ -450,6 +499,7 @@ function reclassify(args) {
     partial: undefined,
     contaminated: rows.filter((row) => row.contaminated === true).length,
     infraRows: rows.filter((row) => row.infra !== undefined).length,
+    ...(target === null ? {} : { target }),
     recomputedAt: Date.now(),
     rows,
   };
@@ -570,6 +620,11 @@ function run(args) {
     throw new Error("no DEEPSEEK_API_KEY in env or ~/.dsh/.credentials.yaml — headless runs would fail with MISSING_CREDENTIAL");
   }
   console.log(`credential: ${credential ?? "(none — AB_DSH_BIN stub host, no model calls)"}`);
+  // Cost of asking: two `--dump-config` boots. Cost of not asking: a matrix that
+  // is not a paired comparison.
+  const targets = assertSameTarget({ dshBin: DSH_BIN, home, arms, env });
+  const [targetProvider, targetModel] = [targets[arms[0]].provider, targets[arms[0]].model];
+  console.log(`model target: ${targetProvider ?? "?"}/${targetModel ?? "?"} (both arms must agree — checked)`);
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
@@ -822,6 +877,9 @@ function run(args) {
     gate,
     rows: allRows,
     armLabels: { "arm-a": arms[0], "arm-b": arms[1] },
+    // Provenance: which model produced these numbers. An artifact that does not
+    // say cannot be compared to anything later, including to itself.
+    target: { provider: targetProvider, model: targetModel },
   };
   writeArtifacts(args.out, report, args.minPairs);
   console.log(`\nG6 ${report.gate.verdict} (${report.gate.target}) — ${report.gate.note}`);
