@@ -52,11 +52,11 @@ function fixture() {
   return { workspace: dir, tasks };
 }
 
-function runHarness(mode, out, minPairs = 2) {
+function runHarness(mode, out, minPairs = 2, extra = []) {
   const { workspace, tasks } = fixture();
   return spawnSync(
     process.execPath,
-    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", String(minPairs)],
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", String(minPairs), ...extra],
     { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir(mode), "dsh") } },
   );
 }
@@ -125,6 +125,28 @@ test("below the pair floor the gate refuses to judge — a tie on 2 runs is not 
   assert.equal(report.paired.pairs, 2);
   assert.equal(report.gate.verdict, "未测");
   assert.match(fs.readFileSync(path.join(out, "REPORT.md"), "utf8"), /not a quality measurement/);
+});
+
+test("--resume reuses finished rows instead of paying for the matrix twice", () => {
+  // Round 4 died to ENOSPC with most of the matrix already paid for. `--resume`
+  // is the way back in — and it once did nothing: the block ran above `plan`'s
+  // declaration, the TDZ ReferenceError was swallowed by its own catch, and the
+  // "no runs.json" line made a full re-run look like a resume.
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  assert.equal(runHarness("gap", out).status, 0);
+  const before = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(before.rows.length, 4);
+  // Drop one row — what a matrix that died mid-run leaves behind.
+  fs.writeFileSync(
+    path.join(out, "runs.json"),
+    JSON.stringify({ ...before, rows: before.rows.filter((_, i) => i !== 3) }),
+  );
+  const second = runHarness("gap", out, 2, ["--resume"]);
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stdout, /resume: 3 runs reused from .*, 1 to do/, "three pairs were not re-run");
+  const after = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(after.rows.length, 4, "the dropped pair was re-run, not dropped from the artifact");
+  assert.equal(after.paired.pairs, 2);
 });
 
 test("seeded rows carry the RESOLVED workspace, or the treatment runs blind", () => {

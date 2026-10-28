@@ -401,21 +401,6 @@ function run(args) {
       );
     }
   }
-  let priorRows = [];
-  if (args.resume) {
-    try {
-      const previous = JSON.parse(fs.readFileSync(path.join(args.out, "runs.json"), "utf8"));
-      priorRows = previous.rows ?? [];
-      const done = new Set(priorRows.map((row) => `${row.task}|${row.seed}|${row.arm}`));
-      for (let i = plan.length - 1; i >= 0; i -= 1) {
-        if (done.has(`${plan[i].task.id}|${plan[i].seed}|${plan[i].arm}`)) plan.splice(i, 1);
-      }
-      console.log(`resume: ${priorRows.length} rows kept, ${plan.length} runs to do`);
-    } catch {
-      console.log(`resume: no runs.json to resume from (${args.out}) — running the whole matrix`);
-    }
-  }
-
   // Run ORDER is part of the isolation. A control run that happens after a
   // treatment run can read the treatment's `run.log` (a real control arm did
   // exactly that in round 2: it walked to `ab-engram/<task>/seed-0/run.log` and
@@ -435,6 +420,26 @@ function run(args) {
   if (args.controlFirst) {
     const control = arms[1];
     plan.sort((a, b) => (a.arm === control ? 0 : 1) - (b.arm === control ? 0 : 1));
+  }
+
+  // `--resume` keeps the rows a dead matrix already paid for. It MUST run after
+  // `plan` exists: this block used to sit above the declaration, where the TDZ
+  // ReferenceError was swallowed by the catch below and printed as the harmless
+  // "no runs.json" line — so `--resume` silently re-ran every pair at full cost.
+  let priorRows = [];
+  if (args.resume) {
+    try {
+      const previous = JSON.parse(fs.readFileSync(path.join(args.out, "runs.json"), "utf8"));
+      priorRows = previous.rows ?? [];
+      const done = new Set(priorRows.map((row) => `${row.task}|${row.seed}|${row.arm}`));
+      const before = plan.length;
+      for (let i = plan.length - 1; i >= 0; i -= 1) {
+        if (done.has(`${plan[i].task.id}|${plan[i].seed}|${plan[i].arm}`)) plan.splice(i, 1);
+      }
+      console.log(`resume: ${before - plan.length} runs reused from ${args.out}, ${plan.length} to do`);
+    } catch {
+      console.log(`resume: no runs.json to resume from (${args.out}) — running the whole matrix`);
+    }
   }
 
   for (const { task, seed, arm } of plan) {
