@@ -25,6 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fenceCommand, toolReadPaths } from "./g6/sandbox-profile.mjs";
 
 /** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
@@ -735,11 +736,15 @@ function run(args) {
   for (const { task, seed, arm } of plan) {
     {
       {
-        // Neutral directory names: the arm used to appear in the run's own cwd
-        // (`.../ab-bare/...`) and a control read it and started hunting for the
-        // "team memory" it had been denied. The mapping lives in runs.json.
-        const label = arm === arms[0] ? "arm-a" : "arm-b";
-        const dir = path.join(args.out, label, task.id, `seed-${seed}`);
+        // Opaque run root. Two rounds of this: first the arm's own name appeared
+        // in its cwd (`.../ab-bare/...`) and a control read it and went hunting
+        // for the "team memory" it had been denied; then `arm-a/<task>/seed-3`
+        // told the arm which arm it was, which task it was on, which seed, and
+        // that a matrix was running — the last residues in §13.5. A hash of the
+        // triple carries none of that, and the mapping stays in runs.json (each
+        // row records its runKey), so a human can still find any run.
+        const runKey = createHash("sha1").update(`${task.id}|${seed}|${arm}`).digest("hex").slice(0, 8);
+        const dir = path.join(args.out, "runs", runKey);
         const ws = path.join(dir, "ws");
         fs.rmSync(dir, { recursive: true, force: true });
         fs.mkdirSync(dir, { recursive: true });
@@ -787,6 +792,7 @@ function run(args) {
               repo: ROOT,
               toolPaths: toolReadPaths({ dshBin: DSH_EXEC }),
               hideStore,
+              hideRunsRoot: dir,
               docsToHide: [arm, otherArm]
                 .filter((name) => typeof name === "string")
                 .map((name) => path.join(home, "profiles", name, "node_modules", "dsh-engram", "docs")),
@@ -847,7 +853,7 @@ function run(args) {
         // run.log for the very same task).
         const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md/.test(log);
         const infra = infraReason(log, wallMs, pass);
-        rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}), ...(infra === null ? {} : { infra }) });
+        rows.push({ task: task.id, seed, arm, runKey, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}), ...(infra === null ? {} : { infra }) });
         snapshotRows();
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }

@@ -124,11 +124,14 @@ test("when both arms fail everywhere the gate is a tie, not a fake pass on 0/0",
 test("the harness writes every run log so a verdict can be audited", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
   runHarness("gap", out);
-  // Directories are named by a neutral label, never by the arm: a control that
-  // could read `ab-bare` in its own cwd went looking for the memory it lacked.
-  const log = path.join(out, "arm-a", "t1", "seed-0", "run.log");
-  assert.ok(fs.existsSync(log), "run.log kept per label/task/seed");
-  assert.ok(fs.existsSync(path.join(out, "arm-a", "t1", "seed-0", "check.log")), "oracle output kept");
+  // The directory is named by a hash of (task, seed, arm) — neither the arm nor
+  // the task is spelled out anywhere the arm can read. runs.json carries the
+  // mapping, so the log is still findable by a human.
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  const row = report.rows.find((candidate) => candidate.task === "t1" && candidate.arm === "on");
+  const dir = path.join(out, "runs", row.runKey);
+  assert.ok(fs.existsSync(path.join(dir, "run.log")), "run.log kept per run");
+  assert.ok(fs.existsSync(path.join(dir, "check.log")), "oracle output kept");
   assert.ok(fs.existsSync(path.join(out, "REPORT.md")));
 });
 
@@ -392,4 +395,27 @@ test("two arms resolving different model targets are refused, not averaged", () 
   assert.match(res.stderr, /resolve different model targets/);
   assert.match(res.stderr, /serving stack, not the plugin/);
   assert.equal(fs.existsSync(path.join(out, "runs.json")), false, "nothing was measured, so nothing is recorded");
+});
+
+test("a run's own path does not name its arm, its task or its seed", () => {
+  // §13.5's last residue: `arm-a/codec/seed-3/ws` told an arm which arm it was
+  // in, what the task was called, and that a matrix was running. The run root is
+  // a hash now; the mapping lives in runs.json.
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const res = runHarness("perfect", out);
+  assert.equal(res.status, 0, res.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  const runsDir = path.join(out, "runs");
+  const dirs = fs.readdirSync(runsDir);
+  assert.equal(dirs.length, 4, "two tasks × two arms");
+  for (const dir of dirs) {
+    assert.match(dir, /^[0-9a-f]{8}$/, `run root ${dir} is opaque`);
+    assert.ok(fs.existsSync(path.join(runsDir, dir, "ws")), "and still holds the workspace");
+  }
+  for (const row of report.rows) {
+    assert.ok(dirs.includes(row.runKey), `row ${row.task}/${row.seed}/${row.arm} names its run dir`);
+  }
+  for (const forbidden of ["arm-a", "arm-b", "t1", "t2", "seed-0"]) {
+    assert.ok(!dirs.includes(forbidden), `${forbidden} must not be a directory name`);
+  }
 });

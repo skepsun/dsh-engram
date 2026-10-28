@@ -146,7 +146,7 @@ function ancestorsOf(target) {
   return out;
 }
 
-export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfile, sessionsDir, credentials, repo = null, docsToHide = [], hideStore = false }) {
+export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfile, sessionsDir, credentials, repo = null, docsToHide = [], hideStore = false, hideRunsRoot = null }) {
   const lines = [
     "(version 1)",
     "(allow default)",
@@ -165,6 +165,9 @@ export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfi
       .flatMap((dir) => variants(dir))
       .map((dir) => `(allow file-read-metadata (literal ${JSON.stringify(dir)}))`),
     `(allow file-read* (subpath ${JSON.stringify(nodeDir)}))`,
+    // The run root (which holds this run's logs and, one level up, other runs)
+    // is denied first so the ws allow below wins for the workspace alone.
+    ...(hideRunsRoot === null ? [] : variants(hideRunsRoot).map((spelling) => `(deny file-read* (subpath ${JSON.stringify(spelling)}))`)),
     ...variants(ws).map((spelling) => `(allow file-read* (subpath ${JSON.stringify(spelling)}))`),
     // The whole DSH_HOME of the experiment: profiles, storages and the session
     // dir the runtime scans at boot. It is one home for both arms, so the other
@@ -244,6 +247,7 @@ export function buildBwrapArgs({
   repo = null,
   docsToHide = [],
   hideStore = false,
+  hideRunsRoot = null,
 }) {
   const experimentHome = path.dirname(path.dirname(dshHome));
   const exists = (entry) => entry !== null && entry !== undefined && entry !== "" && fs.existsSync(entry);
@@ -268,6 +272,10 @@ export function buildBwrapArgs({
   for (const tool of toolPaths) if (exists(tool)) args.push("--ro-bind", tool, tool);
   // dsh boots out of this home: profiles/ (the mounted plugin) and sessions/.
   args.push("--bind", experimentHome, experimentHome);
+  // The run's own root holds `ws` plus that run's logs. Take the root away and
+  // give back only the workspace: an arm then cannot read its own run.log, and a
+  // layout change that put siblings one level up cannot silently expose them.
+  if (exists(hideRunsRoot) && hideRunsRoot !== ws) args.push("--tmpfs", hideRunsRoot);
   // The workspace is the only tree the arm may also WRITE, besides its tmp.
   args.push("--bind", ws, ws);
   if (exists(sessionsDir) && !sessionsDir.startsWith(`${experimentHome}${path.sep}`)) args.push("--bind", sessionsDir, sessionsDir);

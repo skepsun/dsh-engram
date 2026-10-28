@@ -48,7 +48,7 @@ test("gates read 未测 when nothing has run — never a fake PASS", () => {
   assert.equal(byId.G6.verdict, "未测", "quality delta is never derivable from logs");
 });
 
-test("G1 counts net-positive sessions from ledger rows; G2 counts activated mounted sessions", () => {
+test("G1 counts net-positive sessions from ledger rows; G2 counts activated INSTALLED sessions", () => {
   const home = tmpDir("engram-home-");
   const root = tmpDir("engram-sessions-");
   // An armed savings path: without one, nothing can ever be credited and G1
@@ -86,8 +86,11 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
     "utf8",
   );
 
-  // s1: mounted + activated + one hit recall + one detail + a [RECALL] header.
-  seedSession(root, "--p--", "s1", [
+  // x1: engram live + activated + one hit recall + one detail + a [RECALL] header.
+  // (Deliberately NOT "s1"/"s2": those ids carry ledger rows, and a ledger row is
+  // itself evidence that the plugin was running — an id collision would smuggle
+  // the second session into G2's denominator.)
+  seedSession(root, "--p--", "x1", [
     { type: "session", cwd: "/ws" },
     { type: "tool/call", data: { name: "engram_recall", callId: "c1" } },
     R4("c1", '# recall: "build" (1)\n- 3b9840b5 [error] fix build'),
@@ -95,8 +98,8 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
     R4("c2", "record"),
     { type: "request/header", data: { messages: [{ content: "[RECALL] recall · 1 hit(s) · first msg: build → #3b9840b5" }] } },
   ]);
-  // s2: mounted but no engram/esr call (a miss for the activation gate).
-  seedSession(root, "--p--", "s2", [
+  // x2: some other tool ran, but nothing engram — not in the population at all.
+  seedSession(root, "--p--", "x2", [
     { type: "session", cwd: "/ws" },
     { type: "tool/call", data: { name: "bash", callId: "c3" } },
     R4("c3", "ok"),
@@ -110,8 +113,16 @@ test("G1 counts net-positive sessions from ledger rows; G2 counts activated moun
   assert.match(byId.G1.note, /5\/6 sessions with a saving opportunity \(8 rows total\)/);
   assert.equal(byId.G1.verdict, "PASS", "83.3% meets the pre-declared floor");
   assert.equal(byId.G1b.verdict, "未测", "no ≥200-request session yet — not a pass");
-  assert.equal(byId.G2.value, "50.0%");
-  assert.equal(byId.G2.verdict, "FAIL", "below the 60% activation floor");
+  // x2 ran `bash` and nothing else: no engram tool, no [RECALL] block, no ledger
+  // row. It is not an activation miss — the plugin was never loaded in it, so it
+  // cannot be in the denominator (that proxy put three real sessions on this
+  // machine into G2 and read 50% while the truth was 3/3).
+  assert.equal(report.window.mounted, 1, "only x1 has engram live");
+  assert.equal(report.window.anyTool, 2, "both sessions ran some tool — the old, wrong denominator");
+  assert.equal(byId.G2.value, "100.0%");
+  assert.equal(byId.G2.verdict, "未测", "one installed session is not a distribution");
+  assert.match(byId.G2.note, /1\/1 installed sessions .*样本不足/);
+  assert.match(byId.G2.note, /1 个根本没装 engram/);
   assert.equal(report.activation.pushFired, 1, "the [RECALL] header is counted");
   assert.equal(report.drill.detailCalls, 1);
   assert.equal(report.drill.recallWithHits, 1);
@@ -187,4 +198,38 @@ test("G7 stays 未测 without a measurement, and reports the bench number when g
 
   const failing = auditGates({ home: "/nonexistent-engram-home-for-test", days: 14, g7: 1.2 });
   assert.equal(failing.gates.find((g) => g.id === "G7").verdict, "FAIL");
+});
+
+test("G2's opportunity row only counts sessions whose workspace has memories", () => {
+  const home = tmpDir("engram-home-");
+  const root = tmpDir("engram-sessions-");
+  // Two workspaces: one with a memory, one without.
+  fs.mkdirSync(path.join(home, "storages"), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, "storages", "dsh_engram.json"),
+    JSON.stringify({
+      version: 1,
+      tables: {
+        memories: {
+          m1: { id: "m1", workspace: "/with-memory", kind: "fact", text: "x", tags: [], createdAt: Date.now() },
+        },
+      },
+    }),
+    "utf8",
+  );
+  // Both sessions are installed (engram tool present) and neither pushed.
+  for (const [bucket, sid, ws] of [["--a--", "no-memory", "/empty"], ["--b--", "has-memory", "/with-memory"]]) {
+    seedSession(root, bucket, sid, [
+      { type: "session", cwd: ws },
+      { type: "tool/call", data: { name: "engram_status", callId: `c-${sid}` } },
+    ]);
+  }
+  const report = auditGates({ home, root, days: 14 });
+  const byId = Object.fromEntries(report.gates.map((g) => [g.id, g]));
+  assert.equal(report.window.mounted, 2, "both sessions have engram live");
+  assert.equal(byId.G2b.value, "0.0%", "neither rendered a block");
+  assert.equal(byId.G2c.value, "0.0%");
+  // The point of the row: the workspace WITHOUT memories is not a push miss, so
+  // it must not dilute the opportunity denominator.
+  assert.equal(byId.G2c.note, "0/1 sessions whose workspace has ≥1 memory");
 });

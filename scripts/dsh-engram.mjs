@@ -118,7 +118,35 @@ async function discoverPresets(status, presetsDirFlag) {
     push(id, entry.path);
   }
 
-  // 2. Legacy roots.
+  // 2. An explicit --presets-dir wins over everything: the operator named it.
+  //    Without this, a stale legacy composed-preset root (this machine has an
+  //    older checkout beside the repo) claims the ids first, the declarative
+  //    patch files are deduped away by id, and `status` reports the legacy
+  //    layout while showing the declarative ones as "custom" (three CLI tests
+  //    caught exactly this on Linux).
+  const scanDeclarative = async (dir) => {
+    let entries = [];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".patch.yml")) continue;
+      push(entry.name.slice(0, -".patch.yml".length), join(dir, entry.name));
+    }
+  };
+  //
+  // Resolved once, up front: an explicit --presets-dir or DSH_WEB_PRESETS_DIR is
+  // the operator naming a directory, and the dsh-anchored default is the layout
+  // this DSH ships. Either beats a stale legacy root that only happens to exist.
+  const presetsDir = discoverPresetsDir({
+    presetsDir: presetsDirFlag,
+    anchors: [dshBinAnchor()].filter((anchor) => typeof anchor === "string"),
+  });
+  if (presetsDir !== undefined) await scanDeclarative(presetsDir);
+
+  // 3. Legacy roots.
   for (const root of legacyPresetRoots()) {
     let entries = [];
     try {
@@ -134,23 +162,6 @@ async function discoverPresets(status, presetsDirFlag) {
     }
   }
 
-  // 3. Declarative shipped presets.
-  const presetsDir = discoverPresetsDir({
-    presetsDir: presetsDirFlag,
-    anchors: [dshBinAnchor()].filter((anchor) => typeof anchor === "string"),
-  });
-  if (presetsDir !== undefined) {
-    let entries = [];
-    try {
-      entries = await readdir(presetsDir, { withFileTypes: true });
-    } catch {
-      entries = [];
-    }
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".patch.yml")) continue;
-      push(entry.name.slice(0, -".patch.yml".length), join(presetsDir, entry.name));
-    }
-  }
   return presets;
 }
 

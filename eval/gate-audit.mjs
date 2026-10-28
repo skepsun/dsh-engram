@@ -40,6 +40,9 @@ const LONG_SESSION_REQUESTS = 200;
  *  gate FAIL (or PASS). The gate says 未测 until there is a distribution. */
 const MIN_SESSION_ROWS = 5;
 const MIN_LONG_ROWS = 3; // §6: 长会话 = ≥200 请求
+// G2's population floor: "installed sessions". Below this the rate is a coin
+// flip dressed as a percentage.
+const MIN_ACTIVATION_SESSIONS = 5;
 const ENGRAM_TOOL_RE = /^(engram_|esr_)/;
 
 function parseArgs(argv) {
@@ -55,6 +58,9 @@ function parseArgs(argv) {
     else if (arg === "--g7") out.g7 = Number(argv[++i]);
     else if (arg === "--g6") out.g6 = argv[++i] ?? null;
     else if (arg === "--home") out.home = argv[++i] ?? null;
+    // Diagnostics: which sessions are in the denominator, and what each one
+    // actually did. A rate without its population is a number you cannot act on.
+    else if (arg === "--explain") out.explain = true;
   }
   return out;
 }
@@ -200,6 +206,35 @@ function scanSessions({ root = sessionsRoot(), days = 14, now = Date.now() } = {
   return sessions.sort((a, b) => b.mtime - a.mtime);
 }
 
+/**
+ * How many memories each workspace has, so a session can be asked the only
+ * question that makes push rate meaningful: was there anything to push?
+ */
+function countMemoriesByWorkspace(dshHome) {
+  const candidates = [
+    path.join(dshHome, "storages", "dsh_engram.json"),
+    path.join(dshHome, ".dsh", "storages", "dsh_engram.json"),
+  ];
+  for (const file of candidates) {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      continue;
+    }
+    const table = parsed?.tables?.memories;
+    if (table === null || table === void 0 || typeof table !== "object") continue;
+    const counts = new Map();
+    for (const row of Object.values(table)) {
+      if (row === null || typeof row !== "object" || row.kind === "episode") continue;
+      if (typeof row.workspace !== "string" || row.workspace.length === 0) continue;
+      counts.set(row.workspace, (counts.get(row.workspace) ?? 0) + 1);
+    }
+    return counts;
+  }
+  return new Map();
+}
+
 /** Stale share over the memory table (read-only; the store stays the truth). */
 function readMemoryShare(dshHome) {
   const candidates = [
@@ -285,12 +320,29 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   const netShare = pct(positive.length, opportunityRows.length);
   const longShare = pct(longPositive.length, longRows.length);
 
-  // ── G2 Activation: mounted sessions where any engram/esr tool fired
-  const mounted = sessions.filter((s) => s.tools.size > 0);
-  const activated = mounted.filter((s) => [...s.tools.keys()].some((name) => ENGRAM_TOOL_RE.test(name)));
-  const pushFired = mounted.filter((s) => s.pushSeen);
-  const activation = pct(activated.length, mounted.length);
-  const pushShare = pct(pushFired.length, mounted.length);
+  // ── G2 Activation: installed sessions where any engram/esr tool fired
+  //
+  // "installed" used to be `tools.size > 0` — that is "the session ran SOME
+  // tool", which is true of every session and says nothing about engram. On this
+  // machine that put three Kototoro sessions in the denominator whose tool list
+  // (bash, read, edit… — no engram_*, no esr_*) shows the plugin was never
+  // loaded there: they could not fire, and counting them measured the install
+  // state of a workspace, not activation. Evidence of a live mechanism is one of:
+  // the prompt carried the [ENGRAM]/[RECALL] block, the ledger counted requests,
+  // or an engram tool was actually called.
+  const ledgerLive = new Set(rows.map((row) => row.sessionId));
+  const engramFired = (session) => [...session.tools.keys()].some((name) => ENGRAM_TOOL_RE.test(name));
+  const installed = sessions.filter((s) => s.pushSeen || ledgerLive.has(s.sessionId) || engramFired(s));
+  const activated = installed.filter(engramFired);
+  const pushFired = installed.filter((s) => s.pushSeen);
+  const memoryCounts = countMemoriesByWorkspace(dshHome);
+  // The opportunity axis: a session whose workspace HAS memories is a session
+  // where the push leg had something to say. Below that, "no push" is not evidence.
+  const hadSomethingToPush = installed.filter((s) => (memoryCounts.get(s.workspace) ?? 0) > 0);
+  const pushWherePossible = hadSomethingToPush.filter((s) => s.pushSeen);
+  const activation = pct(activated.length, installed.length);
+  const pushShare = pct(pushFired.length, installed.length);
+  const pushOpportunityShare = pct(pushWherePossible.length, hadSomethingToPush.length);
 
   // ── G3 DrillRate: detail calls per recall-with-hits
   const recallWithHits = sessions.reduce((sum, s) => sum + s.recallWithHits, 0);
@@ -302,7 +354,16 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
 
   return {
     auditedAt: now,
-    window: { days, now, sessions: sessions.length, mounted: mounted.length },
+    // "mounted" now means what the word says: engram was actually live in the
+    // session. The old count (sessions that ran any tool) is kept beside it so a
+    // reader can see how much of the population the fix removed.
+    window: {
+      days,
+      now,
+      sessions: sessions.length,
+      mounted: installed.length,
+      anyTool: sessions.filter((s) => s.tools.size > 0).length,
+    },
     ledger: {
       rows: rows.length,
       opportunityRows: opportunityRows.length,
@@ -345,19 +406,35 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
       },
       {
         id: "G2",
-        name: "Activation · 机制激活率（挂载会话 fire ≥1 次）",
+        name: "Activation · 机制激活率（装上了 engram 的会话 fire ≥1 次）",
         value: fmtPct(activation),
         target: "≥ 60%",
-        verdict: mounted.length === 0 ? "未测" : verdict(activation >= 60),
-        note: `${activated.length}/${mounted.length} mounted sessions`,
+        // Enough sessions to judge: below the floor the honest answer is 未测.
+        // n=3 would read 100% PASS and mean nothing.
+        verdict:
+          installed.length < MIN_ACTIVATION_SESSIONS ? "未测" : verdict(activation >= 60),
+        note:
+          installed.length < MIN_ACTIVATION_SESSIONS
+            ? `${activated.length}/${installed.length} installed sessions — 样本不足（需 ≥ ${MIN_ACTIVATION_SESSIONS}）；旧口径 ${sessions.filter((s) => s.tools.size > 0).length} 个"有工具"会话里有 ${sessions.filter((s) => s.tools.size > 0 && !s.pushSeen && !ledgerLive.has(s.sessionId) && !engramFired(s)).length} 个根本没装 engram`
+            : `${activated.length}/${installed.length} installed sessions`,
       },
       {
         id: "G2b",
         name: "Push · [RECALL] 注入命中会话占比",
         value: fmtPct(pushShare),
         target: "观测项（无预声明门）",
-        verdict: mounted.length === 0 ? "未测" : "—",
-        note: `${pushFired.length}/${mounted.length} sessions carry a [RECALL] block in their prompt`,
+        verdict: installed.length === 0 ? "未测" : "—",
+        note: `${pushFired.length}/${installed.length} installed sessions carry a [RECALL] block in their prompt`,
+      },
+      {
+        id: "G2c",
+        name: "Push opportunity · 有记忆可推的会话里推送腿渲染占比",
+        value: fmtPct(pushOpportunityShare),
+        target: "观测项（无预声明门）",
+        verdict: hadSomethingToPush.length === 0 ? "未测" : "—",
+        // The only push number that can be read as a miss: the workspace had
+        // memories and the block still never rendered.
+        note: `${pushWherePossible.length}/${hadSomethingToPush.length} sessions whose workspace has ≥1 memory`,
       },
       {
         id: "G3",
@@ -475,7 +552,7 @@ function renderMarkdown(report) {
   const out = [];
   out.push(`# 门审计（gate audit）· ${new Date(report.auditedAt ?? Date.now()).toISOString().slice(0, 10)}`);
   out.push("");
-  out.push(`窗口：最近 ${report.window.days} 天 · 扫描 ${report.window.sessions} 个会话（其中 ${report.window.mounted} 个挂载了工具）· 账本行 ${report.ledger.rows} 条`);
+  out.push(`窗口：最近 ${report.window.days} 天 · 扫描 ${report.window.sessions} 个会话（其中 ${report.window.mounted} 个装了 engram；"用过任意工具"的会话 ${report.window.anyTool} 个）· 账本行 ${report.ledger.rows} 条`);
   out.push("");
   out.push("| 门 | 指标 | 实测 | 目标 | 判定 | 备注 |");
   out.push("|---|---|---|---|---|---|");
@@ -524,7 +601,30 @@ async function main() {
     return;
   }
 
-  console.log(`gate audit · last ${report.window.days}d · ${report.window.sessions} sessions (${report.window.mounted} mounted) · ${report.ledger.rows} ledger rows`);
+  if (args.explain) {
+    const sessions = scanSessions({ days: args.days, root: sessionsRoot() });
+    const byId = new Map(ledger.sessions.map((row) => [row.sessionId, row]));
+    console.log("session      ws                     req  push  tools  engram-tools        recall/hit  detail  all-tools");
+    for (const s of sessions) {
+      const row = byId.get(s.sessionId) ?? {};
+      const engramTools = [...s.tools.keys()].filter((name) => ENGRAM_TOOL_RE.test(name));
+      console.log(
+        [
+          s.sessionId.slice(0, 8).padEnd(12),
+          path.basename(s.workspace || "?").slice(0, 20).padEnd(22),
+          String(row.requests ?? 0).padStart(3),
+          String(s.pushSeen ? "yes" : "-").padStart(5),
+          String(s.tools.size).padStart(6),
+          (engramTools.join(",") || "-").slice(0, 18).padEnd(18),
+          ([...s.tools.keys()].join(",") || "-").slice(0, 46).padEnd(46),
+          `${s.recallQueries}/${s.recallWithHits}`.padStart(11),
+          String(s.detailCalls).padStart(6),
+        ].join("  "),
+      );
+    }
+    console.log("");
+  }
+  console.log(`gate audit · last ${report.window.days}d · ${report.window.sessions} sessions (${report.window.mounted} with engram live, ${report.window.anyTool} with any tool) · ${report.ledger.rows} ledger rows`);
   for (const gate of report.gates) {
     console.log(`  ${gate.id.padEnd(4)} ${gate.verdict.padEnd(4)} ${gate.value.padEnd(8)} ≤/≥ ${gate.target.padEnd(10)} ${gate.name}`);
   }
