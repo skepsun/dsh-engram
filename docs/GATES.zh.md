@@ -9,24 +9,24 @@
 | G2 | Activation · 机制激活率（装上了 engram 的会话 fire ≥1 次） | 83.3% | ≥ 60% | **PASS** | 5/6 installed sessions |
 | G2b | Push · [RECALL] 注入命中会话占比 | 83.3% | 观测项（无预声明门） | **—** | 5/6 installed sessions carry a [RECALL] block in their prompt |
 | G2c | Push opportunity · 有记忆可推的会话里推送腿渲染占比 | 83.3% | 观测项（无预声明门） | **—** | 5/6 sessions whose workspace has ≥1 memory |
-| G3 | DrillRate · detail / recall-with-hits | 0.00 | 观测项（推送是否被采纳） | **—** | 0 detail / 2 recall-with-hits |
-| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/359 memories (6 tagged stale) |
+| G3 | DrillRate · detail / recall-with-hits | 0.00 | 观测项（推送是否被采纳） | **—** | 0 detail / 4 recall-with-hits |
+| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/364 memories (6 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 未测 | ≤ 700c | **未测** | pass --api <base>?workspace=<ws> to read the rendered block size |
-| G6 | Quality Δ · 配对任务成功率差 | 93.8pp | Δ ≥ −2pp | **PASS** | 16 对配对 · 9 任务 × 2 种子 · eval/g6/runs/r7-local/runs.json · 已剔除 2 行不盲控制臂 |
+| G6 | Quality Δ · 配对任务成功率差 | 100.0pp | Δ ≥ −2pp | **PASS** | 18 对配对 · 9 任务 × 2 种子 · eval/g6/runs/r8-local/runs.json |
 | G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | run `npm run bench:ledger` and pass --g7 <pct> |
 
 ## 账本合计
 
-- injected 5,072,690c（≈1,268,173 tok）· avoided 0c（≈0 tok）
+- injected 5,382,690c（≈1,345,673 tok）· avoided 0c（≈0 tok）
 - rewrites 0 次 / 0c（按 cacheDiscount 计罚 0c）
-- **net -5,072,690c ≈ -1,268,172 tok**；开源会话 6 条，其中净收益为正 0 条
+- **net -5,382,690c ≈ -1,345,672 tok**；开源会话 6 条，其中净收益为正 0 条
 
 ## 最近会话（按会话落行）
 
 | session | requests | injected | avoided | net | workspace |
 |---|---|---|---|---|---|
-| session-de86a1… | 460 | 826,106c | 0c | -826,106c | dsh-loom |
-| session-c0c6f9… | 120 | 254,331c | 0c | -254,331c | Kototoro |
+| session-de86a1… | 580 | 1,050,866c | 0c | -1,050,866c | dsh-loom |
+| session-c0c6f9… | 160 | 339,571c | 0c | -339,571c | Kototoro |
 | b6ded7c9-6408-… | 1 | 742c | 0c | -742c | Kototoro |
 | 03760170-ce43-… | 2 | 2,780c | 0c | -2,780c | Kototoro |
 | session-0fff53… | 70 | 118,833c | 0c | -118,833c | dsh-loom |
