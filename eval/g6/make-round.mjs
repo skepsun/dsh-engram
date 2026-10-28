@@ -102,7 +102,7 @@ export function encodeCheck(input) {
     id: "errcode",
     file: "errcode.js",
     fn: "fail",
-    prompt: "实现 src/errcode.js 里的 fail(code, message, details)，按团队约定抛错。改完自己验证一下。",
+    prompt: "实现 src/errcode.js 里的 fail(code, message, details)：按团队约定 throw 一个带 .code/.details 的 Error。改完自己验证一下。",
     params: (pick) => ({
       prefix: pick(["E_", "ERR_", "APP_"]),
       sep: pick([": ", " — ", " | "]),
@@ -110,7 +110,8 @@ export function encodeCheck(input) {
       defaults: pick([true, false]),
     }),
     describe: (p) =>
-      `抛出的 Error 的 message 是 \`${p.prefix}<code>${p.sep}<message>\`，错误对象上带 \`.code\`（${p.codeCase === "upper" ? "原样大写下划线码" : "带 " + p.prefix + " 前缀的大写下划线码"}）` +
+      `\`fail(...)\` 直接 **throw** 一个 Error（不是返回）：message 是 \`${p.prefix}<code>${p.sep}<message>\`，` +
+      `错误对象上带 \`.code\`（${p.codeCase === "upper" ? "原样大写下划线码" : "带 " + p.prefix + " 前缀的大写下划线码"}）` +
       (p.defaults ? "，`.details` 缺省为 `{}`。" : "，`.details` 缺省为 `undefined`。") +
       ` code 不是大写下划线格式时抛 TypeError。`,
     ref: (p) => `
@@ -123,14 +124,11 @@ export function fail(code, message, details) {
   const err = new Error(PREFIX + code + SEP + message);
   err.code = CODE_CASE === "upper" ? code : PREFIX + code;
   err.details = details === undefined ? (DEFAULTS ? {} : undefined) : details;
-  return err;
+  throw err;
 }`,
     naive: `
 export function fail(code, message, details) {
-  const err = new Error(message);
-  err.code = code;
-  err.details = details;
-  return err;
+  throw new Error(message);
 }`,
     oracle: (p) => {
       const code = "LEDGER_FROZEN";
@@ -144,7 +142,7 @@ export function fail(code, message, details) {
       ];
     },
     throws: [["fail", ["ledger-frozen", "x"], "TypeError"]],
-    fields: ["message", "code", "details"],
+    throwsWith: ["message", "code", "details"],
   },
   {
     id: "money",
@@ -551,6 +549,15 @@ for (const task of TASKS) {
   // First smoke of the first keyed round caught this: the oracle required a
   // TypeError the memory never mentioned, so the TREATMENT arm failed a task it
   // had the knowledge for. Every rejection the oracle asserts has to be stated.
+  // Same class of bug as the TypeError one: the oracle calls functions the
+  // prompt never names, or names a contract ("抛错") the oracle does not assert.
+  const named = new Set([...casesFor(task, chosen.params)].map(([fn]) => fn));
+  const unnamed = [...named].filter((fn) => !task.prompt.includes(`${fn}(`));
+  if (unnamed.length > 0) {
+    rows.push(`${task.id}: the oracle calls ${unnamed.join(", ")} but the prompt never names ${unnamed.length > 1 ? "them" : "it"} — the arm cannot know what to write`);
+    ok = false;
+    continue;
+  }
   if ((task.throws ?? []).length > 0 && !describe.includes("TypeError")) {
     rows.push(`${task.id}: oracle asserts a rejection the memory never states (add it to describe())`);
     ok = false;
@@ -582,8 +589,12 @@ process.exit(ok && tasks.length === TASKS.length ? 0 : 1);
  * formula the memory text describes — the two statements are generated from one
  * parameter set, so they cannot drift apart.
  */
+function casesFor(task, params) {
+  return task.oracle(params);
+}
+
 function buildOracle(task, params) {
-  const cases = task.oracle(params);
+  const cases = casesFor(task, params);
   const throws = task.throws ?? [];
   const lines = [
     `import { test } from "node:test";`,
@@ -594,11 +605,16 @@ function buildOracle(task, params) {
   for (const [fn, args, expected] of cases) {
     const call = `mod.${fn}(...${JSON.stringify(args)})`;
     lines.push(`test(${JSON.stringify(`${task.id}: ${fn}(${JSON.stringify(args)})`)}, () => {`);
-    if (task.fields) {
-      // A field list means the function returns an Error (or similar): a plain
-      // deepEqual would compare prototypes and fail on a correct answer.
-      lines.push(`  const got = ${call};`);
-      for (const field of task.fields) {
+    if (task.throwsWith) {
+      // The convention says the function THROWS. Assert the throw, then the
+      // fields — a plain deepEqual against an Error compares prototypes and
+      // fails a correct answer.
+      lines.push(
+        `  let got = null;`,
+        `  try { ${call}; } catch (error) { got = error; }`,
+        `  assert.ok(got, "fail must throw, not return");`,
+      );
+      for (const field of task.throwsWith) {
         lines.push(`  assert.deepEqual(got.${field}, ${JSON.stringify(expected[field])});`);
       }
     } else {

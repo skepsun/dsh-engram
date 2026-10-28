@@ -18,6 +18,11 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const GENERATOR = path.join(ROOT, "eval/g6/make-round.mjs");
+const SHARED = fs.mkdtempSync(path.join(os.tmpdir(), "g6-shared-"));
+const SHARED_RESULT = spawnSync(process.execPath, [GENERATOR, "--secret", "shared-secret-5c81de02", "--name", "rr", "--out", SHARED], {
+  encoding: "utf8",
+  timeout: 300000,
+});
 
 function compile(secret, name, out) {
   const res = spawnSync(process.execPath, [GENERATOR, "--secret", secret, "--name", name, "--out", out], { encoding: "utf8", timeout: 300000 });
@@ -54,8 +59,8 @@ test("a different secret compiles a different round", () => {
 });
 
 test("every compiled task is discriminative: the guess fails, the reference passes", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g6-ok-"));
-  const res = compile("round-trip-secret-8d3f0a1b", "rr", dir);
+  const dir = SHARED;
+  const res = { status: SHARED_RESULT.status, out: `${SHARED_RESULT.stdout ?? ""}${SHARED_RESULT.stderr ?? ""}` };
   assert.equal(res.status, 0, res.out);
   assert.match(res.out, /9\/9 tasks usable/);
   // The generator grades both sides itself, so reaching here means each task has:
@@ -68,8 +73,7 @@ test("every compiled task is discriminative: the guess fails, the reference pass
 });
 
 test("a compiled task's check stays portable: it names the repo, not this machine", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g6-ok-"));
-  assert.equal(compile("portable-secret-77cb2e90", "rr", dir).status, 0);
+  const dir = SHARED;
   const tasks = JSON.parse(fs.readFileSync(path.join(dir, "tasks.json"), "utf8")).tasks;
   for (const task of tasks) {
     assert.match(task.check, /\$\{REPO\}/, `${task.id} must use \${REPO}`);
@@ -80,9 +84,32 @@ test("a compiled task's check stays portable: it names the repo, not this machin
   }
 });
 
+test("an oracle only asserts what the memory and the prompt state", () => {
+  // Both guards exist because the first keyed round's smoke failed the TREATMENT
+  // arm twice: pad's oracle demanded a TypeError the memory never mentioned, and
+  // errcode's oracle demanded a return value for a function the prompt told the
+  // arm to throw from. Neither was a model failure.
+  const dir = SHARED;
+  const key = readKey(dir);
+  for (const task of key.tasks) {
+    const oracle = fs.readFileSync(path.join(dir, "oracle", `${task.id}.test.mjs`), "utf8");
+    if (/TypeError/.test(oracle)) {
+      assert.match(task.describe, /TypeError/, `${task.id}: oracle rejects, memory must say so`);
+    }
+    if (/must throw, not return/.test(oracle)) {
+      assert.match(task.describe, /throw/, `${task.id}: oracle expects a throw, memory must say so`);
+    }
+  }
+  const tasks = JSON.parse(fs.readFileSync(path.join(dir, "tasks.json"), "utf8")).tasks;
+  for (const task of tasks) {
+    const oracle = fs.readFileSync(path.join(dir, "oracle", `${task.id}.test.mjs`), "utf8");
+    const fns = new Set([...oracle.matchAll(/mod\.([A-Za-z_$][\w$]*)\(/g)].map((match) => match[1]));
+    for (const fn of fns) assert.ok(task.prompt.includes(`${fn}(`), `${task.id}: prompt never names ${fn}()`);
+  }
+});
+
 test("the round's conventions appear in the memory text, not in the workspace", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g6-ok-"));
-  assert.equal(compile("text-secret-3ae91c77", "rr", dir).status, 0);
+  const dir = SHARED;
   const key = readKey(dir);
   const memories = JSON.parse(fs.readFileSync(path.join(dir, "seed-memory.json"), "utf8"));
   assert.ok(Array.isArray(memories), "the seeder walks an array; a wrapper object seeds nothing");
