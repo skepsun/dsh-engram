@@ -750,3 +750,103 @@ node eval/quality-ab.mjs classify --out "$PWD/eval/g6/runs/r6-local" \
 
 臂的端点由各自的 `~/.dsh/quality-ab/profiles/<arm>/cordis.patch.yml` 决定（`llm-pi-ai` 的
 `providers` + `agent-default-model`）；两臂必须指向同一个 `provider`/`model`，否则整批数字作废。
+
+## 14. 第七轮：一臂一个 home + 语料扩容（2026-10-28 晚，本地 vLLM）
+
+### 14.1 这一轮的五个变化
+
+| # | 变化 | 为什么 |
+|---|---|---|
+| 1 | 一臂一个 `DSH_HOME`（`arms/<arm>/`） | 缝 #13：共享 home 里另一臂的记账永远清不掉 |
+| 2 | run 根不透明 `runs/<sha1(task\|seed\|arm)[0:8]>/ws`，围栏连本行 `run.log` 都挂掉 | §13.5 最后一项残留：臂从自己 cwd 就能读出臂名/任务/seed |
+| 3 | 语料 4 → 9 任务 | 4 个任务时一个任务的运气就能翻身 25pp |
+| 4 | 每个 oracle 双向验证（`test/g6-corpus.test.mjs`） | 不可满足的 oracle 会让两臂 0/0 → 闸门报"持平 PASS" |
+| 5 | 端点换成**本地** vLLM（`local-vllm-61/deepseek-v4.1-flash-1017`） | 官方 API 余额耗尽；同款开源权重，但**不能**与 §13.4 的数字互比 |
+
+**所以这一轮的 Δ 不能与第五轮（+90pp）、第六轮（+90pp）相提并论**：插件版本、语料、
+围栏、home 布局、端点全都不同。数值接近只是巧合，不是复现。
+
+### 14.2 语料：九个"只能被告诉"的约定
+
+每个任务配一条只在记忆里存在的约定。第三列是**没有记忆时一个称职的 agent 会怎么写**——
+`test/g6-corpus.test.mjs` 把这一列真的实现出来并跑 oracle，**必须挂**，否则这个任务测的是模型的先验。
+
+| 任务 | 约定（只在记忆里） | 没有记忆时最自然的写法 | 自然写法挂在哪 |
+|---|---|---|---|
+| `codec` | 校验位 = `charset[Σ(digit×3+7) mod 36]`，charset 是小写 `0-9a-z` | 按 Luhn / mod 10 | 1/1 全挂 |
+| `errcode` | `E_<CODE>: <msg>`，`.code` 存裸码，非 `UPPER_SNAKE` 直接抛 | `throw new Error(message)` | 3 条挂 2 |
+| `money` | 金额按**整数分**累加，四舍五入远离零 | `toFixed(2)` / 浮点累加 | 2/2 全挂 |
+| `ranking` | score 升序；同分**id 长者先**；再同则入参逆序 | 稳定排序 / 降序 | 2 条挂 1 |
+| `pad` | `L-` + 5 位零填充；冲正数尾部加 `C` | `padStart(5)` 或 `padStart(6)` | 2 条挂 1 |
+| `window` | 账期以 **Asia/Shanghai 04:00** 为界 | 按 UTC 零点切 | 2/2 全挂 |
+| `dedupe` | 同 id 取**最后一条内容**、**第一次出现的位置**，不改入参 | 先到先得 | 2 条挂 1 |
+| `quote` | 撇号千分位 + 负数括号 | `toFixed(2)` | 2/2 全挂 |
+| `retry` | 5xx/429/`E_LEDGER_LOCKED` 可重试，`E_VALIDATION` 永不，最多 3 次 | 只重试 5xx | 2 条挂 2 |
+
+九个 oracle 都能被"照约定写"的实现通过（参考实现在测试里），也都挡得住"照常识写"的实现。
+
+### 14.3 这一轮又抓到的两个工具 bug
+
+1. **`check.mjs` 在测试环境里静默跑空**：它内部 `node --test`，而调用者若本身在测试运行器里，
+   环境带着 `NODE_TEST_CONTEXT`，孙进程会以"测试子进程"身份启动、**一条都不跑并退出 0**——
+   所有 stub 都会被判 PASS。`test/g6-corpus.test.mjs` 上线一分钟就抓到它。现在判分用干净环境。
+2. **`armEnv()` 重建环境时丢了凭据**（冒烟抓到）：`armEnv(home)` 从 `process.env` 重建，
+   把 `liftCredential()` 放进副本里的 `LOCAL_VLLM_61_API_KEY` 丢了，两臂 1.5s 就
+   `MISSING_CREDENTIAL`。行被正确判成 `infra`，没有污染 Δ——但那是分类器的功劳，不是跑批的。
+
+### 14.4 结果（本地 vLLM，18 行/臂，2026-10-28 21:03–22:30）
+
+| 臂 | 通过 | 率 | 平均墙钟 |
+|---|---|---|---|
+| `p-a`（挂 engram） | 18/18 | 100.0% | 72.7s |
+| `p-b`（裸机） | 1/16 | 6.3% | 107.5s |
+
+**Δ = +93.8pp，16 对配对，`local-vllm-61/deepseek-v4.1-flash-1017`，`infra` 0 行。**
+
+逐任务（两位是 seed 0/1）：
+
+| 任务 | p-a | p-b | 说明 |
+|---|---|---|---|
+| codec / errcode / money / pad / window / quote / retry | 11 | 00 | 控制臂两次都写了"常识"版本 |
+| ranking | 11 | 01 | seed 1 那次**算出来的**——但它去网上查了答案（见 §14.5） |
+| dedupe | 11 | 10 | seed 0 是控制臂**自己想对**的（先到先得恰好等于约定），seed 1 挂了 900s（超时） |
+
+`p-b` 唯一有效的那一分是 `dedupe/0`：约定"取最后一条内容、保留第一次出现的位置"
+在这条数据上恰好与"先到先得"同解。这是好事——它说明语料不是"不可能任务"。
+
+### 14.5 这一轮最重要的发现：控制臂能上网查答案
+
+`runs.json` 里两行控制臂被标 `contaminated`，日志原文：
+
+```
+ranking/seed-1: "Aha! The commit `skepsun/dsh-engram` … This is exactly the eval!
+                 The repo is public. We can inspect it. … shallow clone."
+dedupe/seed-1:  同类，先 `curl https://api.github.com/search/code?q=…`，再克隆仓库
+```
+
+**为什么可能**：围栏（bwrap）只围文件系统，不围网络；而语料**是公开的**——
+`docs/G6-quality-ab.zh.md`（这份文档）在插件包里、也在仓库里，§14.2 那张表就是答案。
+这两件事凑在一起，控制臂只要 `curl` 就能把"团队约定"读出来。
+
+**修了什么**：
+
+1. `analyze()` 现在**不把不盲的行算进分母**（以前只标 `contaminated`，照样计入 Δ）。
+   两行被剔除后，13.5% 的"控制臂得分"变成 6.3%，Δ 从 88.9pp 变成 93.8pp——
+   方向没变，但**一个会让记忆看起来更差的 bug 被修掉了**。
+2. 污染正则扩到网络检索（`curl`、`git clone`、`grep.app`、`raw.githubusercontent`、
+   `github.com/search`），并有测试钉住"不盲的行不进分母"。
+3. 文档（本文件）从此**只描述方法，不写本轮答案**——§14.2 的约定表是"上一轮的"，
+   下一轮必须换一套（见下）。
+
+**还没修的（诚实清单）**：
+
+- **网络围栏没有**。按 uid 做 iptables 白名单（只放行模型端点）在本机可行且已手动验证过
+  （`setpriv --reuid=<uid>` + `-m owner --uid-owner`），但需要 root 和把实验 home 搬到
+  中立路径（`/d1/chuxiong` 是 700，被围的 uid 进不去），这一轮没做。
+- **语料仍是一次性手写的**。正解是**每轮用密钥生成**：任务模板 + 密钥文件（不入库）
+  → 生成记忆文本、oracle、参考实现；公开的只有生成器。这样"能上网"不再是漏洞。
+- 两行"想到了但没做"（`money/seed-1` 想 `web_fetch`、`pad/seed-1` 试了 `skill` 名字）：
+  诱因普遍存在，别指望模型自己克制。
+
+所以这一轮的 Δ=+93.8pp 只在"控制臂没去查、且查了会被剔除"的意义上成立；
+**在我把密钥化和网络围栏补上之前，这个数不能当作对外结论。**

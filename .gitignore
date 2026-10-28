@@ -23,3 +23,6 @@ eval/g6/runs/**/ws/
 
 # G6 experiment home (DSH_HOME for the two arms; dsh state, never commit)
 .g6/
+
+# G6 workspaces: the arms' own files, reproducible by re-running the matrix
+eval/g6/runs/*/runs/

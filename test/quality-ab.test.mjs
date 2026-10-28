@@ -43,6 +43,10 @@ case "${mode}" in
   none-ok)   echo nope > no.txt ;;
   quota)     echo 'dsh: QUOTA: Insufficient Balance (request_id: x)' >&2; exit 1 ;;
   quota-on)  if [ "$arm" = "on" ]; then echo 'dsh: QUOTA: Insufficient Balance (request_id: x)' >&2; exit 1; else echo ok > ok.txt; fi ;;
+  # The control goes looking for the answer key on the network and finds it.
+  # Round 7 shipped this for real: two control rows cloned the public repo.
+  peek)      if [ "$arm" = "off" ]; then echo "$ curl -s https://api.github.com/search/code?q=ledger-kata"; echo "found: conventions"; fi
+             echo ok > ok.txt ;;
 esac
 exit 0
 `,
@@ -121,6 +125,21 @@ test("when both arms fail everywhere the gate is a tie, not a fake pass on 0/0",
   assert.equal(report.summary.on.passes, 0);
   assert.equal(report.deltaPp, 0);
   assert.equal(report.gate.verdict, "PASS", "0pp is a tie; a tie does not violate Δ ≥ −2pp");
+});
+
+test("a control that went looking for the answer key is dropped, not scored", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const res = runHarness("peek", out);
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  // Both control rows succeeded on disk — and both are worthless: they were
+  // graded while the arm was reading the corpus out of a public repo. Counting
+  // them would credit the control with knowledge it did not have, i.e. it would
+  // make the memory look weaker than it is.
+  assert.equal(report.contaminated, 2, "both control rows are flagged");
+  assert.equal(report.summary.off.runs, 0, "neither count in the control's rate");
+  assert.equal(report.paired.pairs, 0, "and no pair exists without a blind control");
+  assert.equal(report.gate.verdict, "未测", `a matrix whose control was never blind is not evidence: ${res.status}`);
+  assert.match(report.gate.note, /不盲/);
 });
 
 test("the harness writes every run log so a verdict can be audited", () => {

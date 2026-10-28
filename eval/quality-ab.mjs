@@ -372,7 +372,14 @@ function analyze({ rows: rawRows, tasks, seeds, arms, minPairs }) {
   // failure. They stay in `report.rows` for the audit trail, and the gate note
   // says how many were dropped.
   const infraRows = rawRows.filter((row) => row.infra !== undefined);
-  const rows = rawRows.filter((row) => row.infra === undefined);
+  // A control run that read the answer key did not run blind, so it is not
+  // evidence — it does not get to sit in the control's rate. Round 7 made this
+  // concrete: two control rows cloned the PUBLIC repo (the corpus conventions
+  // are published in docs/G6-quality-ab.zh.md), read the conventions out of it,
+  // and one of them passed. Counting those rows would have made the control look
+  // better than not-knowing, i.e. it would have made the memory look worse.
+  const blindFailures = rawRows.filter((row) => row.contaminated === true);
+  const rows = rawRows.filter((row) => row.infra === undefined && row.contaminated !== true);
 const summary = {};
 for (const arm of arms) {
   const armRows = rows.filter((row) => row.arm === arm);
@@ -417,7 +424,18 @@ const gate =
     gate.note += `（另有 ${infraRows.length} 行基础设施失败未计入：${infraRows.map((row) => `${row.task}/${row.seed}/${row.arm}:${row.infra}`).join(" ")}）`;
     gate.infraExcluded = infraRows.length;
   }
-  return { summary, pairs, deltaPp, gate, infra: { count: infraRows.length, rows: infraRows.map((row) => ({ task: row.task, seed: row.seed, arm: row.arm, reason: row.infra })) } };
+  if (blindFailures.length > 0) {
+    gate.note += `（另有 ${blindFailures.length} 行控制臂不盲、未计入：${blindFailures.map((row) => `${row.task}/${row.seed}/${row.arm}`).join(" ")}）`;
+    gate.notBlindExcluded = blindFailures.length;
+  }
+  return {
+    summary,
+    pairs,
+    deltaPp,
+    gate,
+    infra: { count: infraRows.length, rows: infraRows.map((row) => ({ task: row.task, seed: row.seed, arm: row.arm, reason: row.infra })) },
+    notBlind: { count: blindFailures.length, rows: blindFailures.map((row) => ({ task: row.task, seed: row.seed, arm: row.arm })) },
+  };
 }
 
 /**
@@ -434,7 +452,7 @@ function republish(args) {
   const excluded = new Set(args.exclude ?? []);
   const rows = previous.rows.filter((row) => !excluded.has(row.task));
   const tasks_ = (previous.tasks ?? []).filter((id) => !excluded.has(id)).map((id) => ({ id }));
-  const { summary, pairs, deltaPp, gate } = analyze({
+  const { summary, pairs, deltaPp, gate, notBlind } = analyze({
     rows,
     tasks: tasks_,
     seeds: previous.seeds,
@@ -449,6 +467,7 @@ function republish(args) {
     deltaPp,
     gate,
     excluded: [...excluded],
+    notBlindExcluded: notBlind.count,
     recomputedAt: Date.now(),
     rows,
     invalidRows: previous.rows.filter((row) => excluded.has(row.task)),
@@ -882,7 +901,14 @@ function run(args) {
         // A control run that mentions the store, the tool, or a SIBLING arm's
         // artifact did not run blind (round 2 caught one reading the treatment's
         // run.log for the very same task).
-        const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md/.test(log);
+        // Round 7 taught the second half of this regex: the first pattern list
+        // only caught a control reading the answer key off the DISK. Two controls
+        // went to the network instead (`curl https://api.github.com/search/...`,
+        // `git clone` of this public repo) and one of them passed the task with
+        // the conventions it found there. Publishing the corpus makes it
+        // retrievable, so "went looking" counts as not blind.
+        const contaminated = arm !== args.arms?.[0] &&
+          /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md|\bcurl\s|git clone|grep\.app|raw\.githubusercontent|github\.com\/search/.test(log);
         const infra = infraReason(log, wallMs, pass);
         rows.push({ task: task.id, seed, arm, runKey, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}), ...(infra === null ? {} : { infra }) });
         snapshotRows();
@@ -908,6 +934,7 @@ function run(args) {
     summary,
     hideStoreFor: args.hideStoreFor ?? null,
     contaminated: allRows.filter((row) => row.contaminated === true).length,
+    notBlindExcluded: allRows.filter((row) => row.contaminated === true).length,
     infraRows: allRows.filter((row) => row.infra !== undefined).length,
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,

@@ -470,7 +470,11 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
         verdict: g6 === null ? "未测" : (g6.gate?.verdict ?? "未测"),
         note: g6 === null
           ? "needs paired A/B runs (not derivable from logs) — pass --g6 <runs.json>"
-          : `${g6.paired?.pairs ?? 0} 对配对 · ${g6.tasks?.length ?? 0} 任务 × ${g6.seeds ?? 1} 种子 · ${g6.source ?? ""}`.trim(),
+          : `${g6.paired?.pairs ?? 0} 对配对 · ${g6.tasks?.length ?? 0} 任务 × ${g6.seeds ?? 1} 种子 · ${g6.source ?? ""}`.trim() +
+            // A control row that went and read the answer key is not evidence.
+            // If the artifact dropped some, the number on this dashboard is only
+            // honest when the drop is visible next to it.
+            (g6.notBlindExcluded > 0 ? ` · 已剔除 ${g6.notBlindExcluded} 行不盲控制臂` : ""),
       },
       {
         id: "G7",

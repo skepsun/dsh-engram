@@ -1,0 +1,392 @@
+{
+  "startedAt": 1793193827638,
+  "seedMemory": "/d1/chuxiong/code/dsh-loom/eval/g6/seed-memory-blind.json",
+  "finishedAt": 1793197954935,
+  "seeds": 2,
+  "tasks": [
+    "codec",
+    "errcode",
+    "money",
+    "ranking",
+    "pad",
+    "window",
+    "dedupe",
+    "quote",
+    "retry"
+  ],
+  "arms": [
+    "p-a",
+    "p-b"
+  ],
+  "summary": {
+    "p-a": {
+      "runs": 18,
+      "passes": 18,
+      "rate": 1,
+      "meanWallMs": 72689
+    },
+    "p-b": {
+      "runs": 16,
+      "passes": 1,
+      "rate": 0.0625,
+      "meanWallMs": 107479
+    }
+  },
+  "hideStoreFor": null,
+  "contaminated": 2,
+  "infraRows": 0,
+  "paired": {
+    "pairs": 16,
+    "onlyA": 15,
+    "onlyB": 0
+  },
+  "deltaPp": 93.75,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "p-a 高 93.8pp — 记忆带去了可用的信息（另有 2 行控制臂不盲、未计入：ranking/1/p-b dedupe/1/p-b）",
+    "notBlindExcluded": 2
+  },
+  "rows": [
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "4490a7d6",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 35435
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "21058bf3",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 61622
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "196cc62a",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 116252
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "1e1e7f56",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 79549
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "6fd20d53",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 83864
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "75f0202e",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 178751
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "70b83c0e",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 70916
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "41266712",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 572322,
+      "contaminated": true
+    },
+    {
+      "task": "pad",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "afc11e60",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 64405
+    },
+    {
+      "task": "pad",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "cc2b27ec",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 291568
+    },
+    {
+      "task": "window",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "d6c1edc6",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 49948
+    },
+    {
+      "task": "window",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "fb105371",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 68227
+    },
+    {
+      "task": "dedupe",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "a258e5d9",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 128160
+    },
+    {
+      "task": "dedupe",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "b3b62571",
+      "pass": false,
+      "exit": null,
+      "wallMs": 900002,
+      "contaminated": true
+    },
+    {
+      "task": "quote",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "a870ee14",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 104624
+    },
+    {
+      "task": "quote",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "e2ecede9",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 126794
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "2e2f1b59",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 145363
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "c6e172ee",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 114188
+    },
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "27285460",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 71261
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "24538581",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 91919
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "fa6435f4",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 81530
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "5f6ed96f",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 79852
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "0c4eeacc",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 105838
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "13d8d486",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 85554
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "81163317",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 41042
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "1f39f813",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 44998
+    },
+    {
+      "task": "pad",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "5dd091bd",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 22371
+    },
+    {
+      "task": "pad",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "d00fc77a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 56391
+    },
+    {
+      "task": "window",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "e46b7b7c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 94619
+    },
+    {
+      "task": "window",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "0369d840",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 82856
+    },
+    {
+      "task": "dedupe",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "2a2b5df1",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 50981
+    },
+    {
+      "task": "dedupe",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "ba3be84b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 80189
+    },
+    {
+      "task": "quote",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "56f1104b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 69466
+    },
+    {
+      "task": "quote",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "746635a8",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 78791
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "7eb8be9c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 84174
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "a8cf4f1c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 86576
+    }
+  ],
+  "armLabels": {
+    "arm-a": "p-a",
+    "arm-b": "p-b"
+  },
+  "target": {
+    "provider": "local-vllm-61",
+    "model": "deepseek-v4.1-flash-1017"
+  },
+  "excluded": [],
+  "notBlindExcluded": 2,
+  "recomputedAt": 1793198196032,
+  "invalidRows": []
+}
