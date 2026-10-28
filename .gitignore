@@ -26,3 +26,6 @@ eval/g6/runs/**/ws/
 
 # G6 workspaces: the arms' own files, reproducible by re-running the matrix
 eval/g6/runs/*/runs/
+
+# G6 rounds compiled from a secret: key.json IS the answer key for that round
+eval/g6/local/

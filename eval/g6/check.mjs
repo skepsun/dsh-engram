@@ -24,7 +24,9 @@ const ws = process.cwd();
 // call the same helper so "how a run is graded" has exactly one implementation.
 const dirIndex = process.argv.indexOf("--dir");
 const oracleDir = dirIndex === -1 ? "oracle" : process.argv[dirIndex + 1];
-const oracle = path.join(import.meta.dirname, oracleDir, `${task}.test.mjs`);
+// `resolve` (not `join`): a corpus generated from a secret lives wherever the
+// operator put it, so `--dir` may be absolute or relative to this file.
+const oracle = path.resolve(import.meta.dirname, oracleDir, `${task}.test.mjs`);
 if (!fs.existsSync(oracle)) {
   console.error(`check: no oracle for "${task}"`);
   process.exit(2);
