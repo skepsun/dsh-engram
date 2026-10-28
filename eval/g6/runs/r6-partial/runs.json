@@ -1,0 +1,105 @@
+{
+ "startedAt": 1793167783168,
+ "seedMemory": "eval/g6/seed-memory-blind.json",
+ "seeds": 5,
+ "tasks": [
+  "codec",
+  "errcode",
+  "money",
+  "ranking"
+ ],
+ "arms": [
+  "p-a",
+  "p-b"
+ ],
+ "hideStoreFor": "p-b",
+ "partial": true,
+ "rows": [
+  {
+   "task": "codec",
+   "seed": 0,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 190226
+  },
+  {
+   "task": "codec",
+   "seed": 1,
+   "arm": "p-b",
+   "pass": true,
+   "exit": 0,
+   "wallMs": 813812,
+   "contaminated": true
+  },
+  {
+   "task": "codec",
+   "seed": 2,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 292234
+  },
+  {
+   "task": "codec",
+   "seed": 3,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 190936
+  },
+  {
+   "task": "codec",
+   "seed": 4,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 401216
+  },
+  {
+   "task": "errcode",
+   "seed": 0,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 125125
+  },
+  {
+   "task": "errcode",
+   "seed": 1,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 436923,
+   "contaminated": true
+  },
+  {
+   "task": "errcode",
+   "seed": 2,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 66414
+  },
+  {
+   "task": "errcode",
+   "seed": 3,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 276489
+  },
+  {
+   "task": "errcode",
+   "seed": 4,
+   "arm": "p-b",
+   "pass": false,
+   "exit": 0,
+   "wallMs": 108130
+  }
+ ],
+ "armLabels": {
+  "arm-a": "p-a",
+  "arm-b": "p-b"
+ }
+}
