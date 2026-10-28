@@ -11,8 +11,8 @@
 | G3 | DrillRate · detail / recall-with-hits | 0.07 | 观测项（推送是否被采纳） | **—** | 3 detail / 45 recall-with-hits |
 | G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/406 memories (13 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 681c | ≤ 700c | **PASS** | /Users/sunchuxiong/dsh-loom · 119 memories · 6 lines |
-| G6 | Quality Δ · 配对任务成功率差 | 90.0pp | Δ ≥ −2pp | **PASS** | 20 对配对 · 4 任务 × 5 种子 · eval/g6/runs/r5-confined/runs.json（臂名泄漏已修未复跑，见 §12） |
-| G7 | 账本自身开销 | 0.0144% | < 0.5% 请求时延 | **PASS** | from `npm run bench:ledger` (worst op vs a 300ms request floor) |
+| G6 | Quality Δ · 配对任务成功率差 | 95.0pp | Δ ≥ −2pp | **PASS** | 2026-10-28 重测 · 4 任务 × 5 种子 · **13/20 对有效** · `eval/g6/runs/r6-neutral/runs.json` · 另有 7 行治疗臂因 `QUOTA: Insufficient Balance` 未跑，已标记 `infra` 并排除（不排除、当失败算的保守口径是 **+60.0pp**，同样 PASS） |
+| G7 | 账本自身开销 | 0.0236% | < 0.5% 请求时延 | **PASS** | `npm run bench:ledger`（本机 2026-10-28：最坏 op = p50 步长的 0.0236%，或 300ms 预算的 0.3022%） |
 
 ## 账本合计
 
@@ -32,6 +32,11 @@
 | session-ffbe89… | 120 | 361,254c | 0c | -361,254c | Kototoro |
 | session-ed8929… | 260 | 775,040c | 0c | -775,040c | Kototoro |
 
+> **2026-10-28（Linux 接管）**：只有 G6 / G7 在本机重测过，其余行仍是 2026-10-26 那台机器的快照——
+> 本机的会话历史只有 8 个，用 `--out` 整表重写会把有证据的行降级成"未测"。G6 的围栏机制已从
+> macOS seatbelt 换成 Linux bubblewrap（同契约、两套实现，见 `docs/G6-quality-ab.zh.md` §13.6），
+> 因此这一轮的 Δ **不能**与第五轮的 +90pp 直接比同（插件版本 0.8.2 → 0.8.8，语料 `check` 也换了可移植写法）。
+>
 > 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。
 > 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，
 > G6 需要配对实验：`npm run quality:ab -- run …`（协议见 docs/G6-quality-ab.zh.md，< 10 对配对一律报未测）。

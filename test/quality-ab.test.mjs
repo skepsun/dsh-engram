@@ -28,6 +28,8 @@ case "${mode}" in
   gap)       [ "$arm" = "on" ] && echo ok > ok.txt ;;
   hurt)      [ "$arm" = "off" ] && echo ok > ok.txt ;;
   none-ok)   echo nope > no.txt ;;
+  quota)     echo 'dsh: QUOTA: Insufficient Balance (request_id: x)' >&2; exit 1 ;;
+  quota-on)  if [ "$arm" = "on" ]; then echo 'dsh: QUOTA: Insufficient Balance (request_id: x)' >&2; exit 1; else echo ok > ok.txt; fi ;;
 esac
 exit 0
 `,
@@ -323,4 +325,42 @@ test("--control-first runs every control before any treatment run", () => {
   const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
   const order = report.rows.map((row) => row.arm);
   assert.deepEqual(order, ["off", "off", "on", "on"], "controls first: no treatment session exists while a control runs");
+});
+
+test("a run that never reached a model is excluded, not scored as an arm failure", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const res = runHarness("quota", out);
+  assert.equal(res.status, 0, res.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(report.infraRows, 4, "all four runs died without a model");
+  assert.equal(report.summary.on.runs, 0, "so neither arm gets a denominator");
+  assert.equal(report.deltaPp, null);
+  assert.equal(report.gate.verdict, "未测", "an empty matrix is not a tie (and not a PASS)");
+  assert.match(report.gate.note, /4 行基础设施失败未计入/);
+  assert.equal(report.rows.length, 4, "the rows stay in the artifact for the audit trail");
+});
+
+test("--resume retries a row that never got a model, and does not double-count it", () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "ab-out-"));
+  const first = runHarness("quota-on", out);
+  assert.equal(first.status, 0, first.stderr);
+  const before = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(before.summary.on.runs, 0, "the treatment never ran");
+  assert.equal(before.summary.off.runs, 2, "the control did");
+
+  // Resume with a host that works: only the infra rows should be paid for again,
+  // and the retried row must REPLACE its dead self rather than join it.
+  const { workspace, tasks } = fixture();
+  const second = spawnSync(
+    process.execPath,
+    [HARNESS, "run", "--tasks", tasks, "--workspace", workspace, "--arm", "on,off", "--seeds", "1", "--out", out, "--min-pairs", "2", "--resume"],
+    { encoding: "utf8", env: { ...process.env, AB_DSH_BIN: path.join(stubDir("perfect"), "dsh") } },
+  );
+  assert.equal(second.status, 0, second.stderr);
+  assert.match(second.stdout, /resume: 2 runs reused/);
+  const after = JSON.parse(fs.readFileSync(path.join(out, "runs.json"), "utf8"));
+  assert.equal(after.rows.length, 4, "four keys, four rows — the retry replaced the dead one");
+  assert.equal(after.summary.on.runs, 2);
+  assert.equal(after.summary.on.passes, 2);
+  assert.equal(after.infraRows, 0);
 });

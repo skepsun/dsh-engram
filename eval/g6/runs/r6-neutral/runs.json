@@ -1,0 +1,384 @@
+{
+  "startedAt": 1793172573040,
+  "seedMemory": "/d1/chuxiong/code/dsh-loom/eval/g6/seed-memory-blind.json",
+  "seeds": 5,
+  "tasks": [
+    "codec",
+    "errcode",
+    "money",
+    "ranking"
+  ],
+  "arms": [
+    "p-a",
+    "p-b"
+  ],
+  "hideStoreFor": "p-b",
+  "rows": [
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 62233
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 305189
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 59204
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 23726
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 147663
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 99871
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 159823
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 58248
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 251400
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 113824
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 200868
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 127291
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 43293
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 190398
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 170128
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 124601
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 28557
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 65013
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 176559
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "p-b",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 144353
+    },
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 21194
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 36642
+    },
+    {
+      "task": "codec",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 24448
+    },
+    {
+      "task": "codec",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 17635
+    },
+    {
+      "task": "codec",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 33420
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 31892
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 21492
+    },
+    {
+      "task": "errcode",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 29953
+    },
+    {
+      "task": "errcode",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 41306
+    },
+    {
+      "task": "errcode",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 23346
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 27487
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 43329
+    },
+    {
+      "task": "money",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": true,
+      "exit": 1,
+      "wallMs": 46983
+    },
+    {
+      "task": "money",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2241,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "money",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2144,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2214,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2307,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "ranking",
+      "seed": 2,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2247,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "ranking",
+      "seed": 3,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2206,
+      "infra": "QUOTA"
+    },
+    {
+      "task": "ranking",
+      "seed": 4,
+      "arm": "p-a",
+      "pass": false,
+      "exit": 1,
+      "wallMs": 2225,
+      "infra": "QUOTA"
+    }
+  ],
+  "armLabels": {
+    "arm-a": "p-a",
+    "arm-b": "p-b"
+  },
+  "summary": {
+    "p-a": {
+      "runs": 13,
+      "passes": 13,
+      "rate": 1,
+      "meanWallMs": 30702
+    },
+    "p-b": {
+      "runs": 20,
+      "passes": 1,
+      "rate": 0.05,
+      "meanWallMs": 127612
+    }
+  },
+  "paired": {
+    "pairs": 13,
+    "onlyA": 13,
+    "onlyB": 0
+  },
+  "deltaPp": 95,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "p-a 高 95.0pp — 记忆带去了可用的信息（另有 7 行基础设施失败未计入：money/3/p-a:QUOTA money/4/p-a:QUOTA ranking/0/p-a:QUOTA ranking/1/p-a:QUOTA ranking/2/p-a:QUOTA ranking/3/p-a:QUOTA ranking/4/p-a:QUOTA）",
+    "infraExcluded": 7
+  },
+  "classes": {
+    "infra": 7,
+    "changed": 0
+  },
+  "infraRows": 7,
+  "recomputedAt": 1793175815276,
+  "contaminated": 0
+}

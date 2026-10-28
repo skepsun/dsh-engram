@@ -319,7 +319,12 @@ function writeArtifacts(out, report, minPairs) {
  * (fresh runs) and `report` (recomputing an existing artifact with an
  * exclusion), so a number is never produced two different ways.
  */
-function analyze({ rows, tasks, seeds, arms, minPairs }) {
+function analyze({ rows: rawRows, tasks, seeds, arms, minPairs }) {
+  // Excluded first, so an infrastructure death cannot enter a denominator as a
+  // failure. They stay in `report.rows` for the audit trail, and the gate note
+  // says how many were dropped.
+  const infraRows = rawRows.filter((row) => row.infra !== undefined);
+  const rows = rawRows.filter((row) => row.infra === undefined);
 const summary = {};
 for (const arm of arms) {
   const armRows = rows.filter((row) => row.arm === arm);
@@ -358,7 +363,13 @@ const gate =
       : deltaPp > 2
         ? { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "PASS", note: `${arms[0]} 高 ${deltaPp.toFixed(1)}pp — 记忆带去了可用的信息` }
         : { id: "G6", target: "Δ ≥ −2pp", minPairs: minPairs, verdict: "PASS", note: "两臂持平（不伤害）" };
-  return { summary, pairs, deltaPp, gate };
+  // Infrastructure rows are excluded from the verdict, never silently: the note
+  // says how many, and which, so a reader can see the denominator that was used.
+  if (infraRows.length > 0) {
+    gate.note += `（另有 ${infraRows.length} 行基础设施失败未计入：${infraRows.map((row) => `${row.task}/${row.seed}/${row.arm}:${row.infra}`).join(" ")}）`;
+    gate.infraExcluded = infraRows.length;
+  }
+  return { summary, pairs, deltaPp, gate, infra: { count: infraRows.length, rows: infraRows.map((row) => ({ task: row.task, seed: row.seed, arm: row.arm, reason: row.infra })) } };
 }
 
 /**
@@ -398,6 +409,56 @@ function republish(args) {
   return report;
 }
 
+/**
+ * `classify --out <dir> [--log-dir <dir>]`
+ *
+ * Re-derive "did this row ever reach a model?" from the logs on disk, for a
+ * matrix that was scored before that question existed (round 6 lost its last
+ * seven treatment rows to `QUOTA: Insufficient Balance` and the artifact called
+ * them task failures). Deliberately a separate, additive pass: it can only move
+ * rows into or out of the excluded set, and it rewrites the same artifact.
+ */
+function reclassify(args) {
+  if (!args.out) throw new Error("classify needs --out <dir>");
+  const file = path.join(args.out, "runs.json");
+  const previous = JSON.parse(fs.readFileSync(file, "utf8"));
+  const logDir = args.logDir ?? path.join(args.out, "logs");
+  let changed = 0;
+  const rows = previous.rows.map((row) => {
+    const logPath = path.join(logDir, row.arm, row.task, `seed-${row.seed}.log`);
+    if (!fs.existsSync(logPath)) return row;
+    const reason = infraReason(fs.readFileSync(logPath, "utf8"), row.wallMs, row.pass);
+    const was = row.infra === undefined;
+    if ((reason === null) === was) return row;
+    changed += 1;
+    const next = { ...row };
+    if (reason === null) delete next.infra;
+    else next.infra = reason;
+    return next;
+  });
+  const { summary, pairs, deltaPp, gate } = analyze({ rows, tasks: previous.tasks.map((id) => ({ id })), seeds: previous.seeds, arms: previous.arms, minPairs: args.minPairs });
+  const report = {
+    ...previous,
+    summary,
+    paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
+    deltaPp,
+    gate,
+    classes: { infra: gate.infraExcluded ?? 0, changed },
+    // `partial` belongs to the incremental writes; a finished matrix that is only
+    // being re-classified is not partial, and the contamination count must come
+    // from the rows rather than from whichever snapshot this file started as.
+    partial: undefined,
+    contaminated: rows.filter((row) => row.contaminated === true).length,
+    infraRows: rows.filter((row) => row.infra !== undefined).length,
+    recomputedAt: Date.now(),
+    rows,
+  };
+  if (report.partial === undefined) delete report.partial;
+  writeArtifacts(args.out, report, args.minPairs);
+  console.log(`classify: ${changed} row(s) re-labelled · ${report.infraRows} infrastructure · Δ ${deltaPp === null ? "未测" : `${deltaPp.toFixed(1)}pp`} · G6 ${gate.verdict}`);
+  return report;
+}
+
 /** Below this the matrix is not worth starting: the rows are cheap next to the
  *  model time, but a disk that fills mid-run throws them all away. Round 4 died
  *  to ENOSPC with ~40% of the matrix paid for; round 6 died the same way at 40%
@@ -418,6 +479,34 @@ function armEnv(home) {
   for (const key of ["DSH_PROFILE", "DSH_PROFILE_DIR", "DSH_SESSION_ID", "DSH_WEB_URL", "DSH_SHELL", "DSH_ATTACH"]) delete env[key];
   env.DSH_HOME = home;
   return env;
+}
+
+/**
+ * A run that never reached a model is not a data point about an arm.
+ *
+ * Round 6's last seven treatment rows died in ~2s each with
+ * `QUOTA: Insufficient Balance` and were scored as task failures, which quietly
+ * turned "we ran out of credit" into "the arm could not do it" — the wrong
+ * direction for a gate that is supposed to protect against exactly this.
+ * A real attempt never finishes in seconds, so a fast death with a transport or
+ * billing signature is infrastructure, and the row says so.
+ */
+const INFRA_SIGNATURES = [
+  [/QUOTA: Insufficient Balance|Insufficient Balance/, "QUOTA"],
+  [/MISSING_CREDENTIAL/, "CREDENTIAL"],
+  [/502 Bad Gateway|503 Service Unavailable|504 Gateway Time-?out/, "UPSTREAM"],
+  [/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|getaddrinfo|socket hang up|other side closed/, "NETWORK"],
+];
+function infraReason(log, wallMs, pass) {
+  if (wallMs > 120000) return null;
+  // A row that PASSED obviously had a model, whatever a sub-call said on the way
+  // (money/seed-2 hit QUOTA on its very last call after 198 lines of real work,
+  // with a green check). And a row with a real attempt in it is a data point even
+  // if the endpoint died at the end — that is a task outcome, not a billing one.
+  if (pass) return null;
+  if (log.split("\n").length > 40) return null;
+  for (const [pattern, label] of INFRA_SIGNATURES) if (pattern.test(log)) return label;
+  return null;
 }
 
 function assertFreeSpace(out) {
@@ -575,7 +664,9 @@ function run(args) {
       const file = fs.existsSync(live) ? live : path.join(args.out, "runs.json");
       const previous = JSON.parse(fs.readFileSync(file, "utf8"));
       priorRows = previous.rows ?? [];
-      const done = new Set(priorRows.map((row) => `${row.task}|${row.seed}|${row.arm}`));
+      // An infra row is NOT a finished row: `--resume` exists to finish a matrix,
+      // and a row that never got a model is exactly what is left to do.
+      const done = new Set(priorRows.filter((row) => row.infra === undefined).map((row) => `${row.task}|${row.seed}|${row.arm}`));
       const before = plan.length;
       for (let i = plan.length - 1; i >= 0; i -= 1) {
         if (done.has(`${plan[i].task.id}|${plan[i].seed}|${plan[i].arm}`)) plan.splice(i, 1);
@@ -700,14 +791,19 @@ function run(args) {
         // artifact did not run blind (round 2 caught one reading the treatment's
         // run.log for the very same task).
         const contaminated = arm !== args.arms?.[0] && /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md/.test(log);
-        rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}) });
+        const infra = infraReason(log, wallMs, pass);
+        rows.push({ task: task.id, seed, arm, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}), ...(infra === null ? {} : { infra }) });
         snapshotRows();
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }
     }
   }
 
-  const allRows = [...priorRows, ...rows];
+  // `--resume` re-runs infra rows, so the same key can exist twice; keep the LAST
+  // attempt (that is the one with a model in it) or the denominators double.
+  const byKey = new Map();
+  for (const row of [...priorRows, ...rows]) byKey.set(`${row.task}|${row.seed}|${row.arm}`, row);
+  const allRows = [...byKey.values()];
   const { summary, pairs, deltaPp, gate } = analyze({ rows: allRows, tasks, seeds: args.seeds, arms, minPairs: args.minPairs });
 
   const report = {
@@ -720,6 +816,7 @@ function run(args) {
     summary,
     hideStoreFor: args.hideStoreFor ?? null,
     contaminated: allRows.filter((row) => row.contaminated === true).length,
+    infraRows: allRows.filter((row) => row.infra !== undefined).length,
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,
     gate,
@@ -735,7 +832,8 @@ const args = parseArgs(process.argv.slice(2));
 if (args.cmd === "prepare") prepare(args);
 else if (args.cmd === "run") run(args);
 else if (args.cmd === "report") republish(args);
+else if (args.cmd === "classify") reclassify(args);
 else {
-  console.error("usage: quality-ab.mjs prepare|run|report … (see the header comment)");
+  console.error("usage: quality-ab.mjs prepare|run|report|classify … (see the header comment)");
   process.exitCode = 2;
 }
