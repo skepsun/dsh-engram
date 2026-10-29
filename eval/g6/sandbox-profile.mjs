@@ -59,6 +59,64 @@ function variants(entry) {
   return [...out];
 }
 
+/**
+ * The network half of the fence (docs §16).
+ *
+ * bwrap fences the filesystem and nothing else: round 7's controls answered
+ * ledger questions after `git clone`-ing the public repo, because a blind arm
+ * with a shell still has a socket. This is the other half, and it costs a uid.
+ *
+ * The shape: the arm runs as a dedicated uid (`g6arm`), and iptables REJECTs
+ * egress from that uid except loopback and one endpoint. Nothing else on the
+ * host is touched — the rules carry `--uid-owner`, so the operator's own shell,
+ * the harness and the concurrent web GUI keep their network.
+ *
+ * Two consequences worth knowing before reading the code:
+ *
+ *  - The rules must be installed as root (`sudo -n iptables`). A fence that
+ *    silently did not apply would produce the most dangerous artifact of all:
+ *    a matrix that LOOKS blind. So `applyEgress()` verifies itself with
+ *    `probeEgress()` and the harness refuses to score rows if the probe does
+ *    not agree (endpoint reachable, github unreachable, DNS dead).
+ *  - Dropping the uid breaks the old mount plan: `$HOME` is 0700, so the arm
+ *    could not read its own profile. Every path the arm needs is therefore
+ *    re-bound at a neutral root (`NEUTRAL_ROOT`) that the dropped uid can
+ *    traverse, and the real home is tmpfs'd away exactly as before.
+ */
+export const NEUTRAL_ROOT = "/srv/g6";
+export const NETFENCE_UID = "g6arm";
+/** Where the per-run secret env file appears inside the fence (in the run's HOME). */
+export const NET_ENV_FILE = "/srv/g6/home/.netenv";
+
+/** Where a path the arm may read/write lives once the uid has been dropped. */
+export function neutralPath(kind) {
+  return `${NEUTRAL_ROOT}/${kind}`;
+}
+
+/**
+ * The iptables rules, in insertion order.
+ *
+ * `-I OUTPUT` prepends, so the REJECT goes in FIRST and the two allows go in
+ * after it — otherwise the allows would sit below the reject and never match.
+ * Each rule is scoped to the arm's uid, which is the whole point: the same
+ * endpoint stays reachable from the harness and from this session.
+ */
+export function egressRules({ uid, endpointHost, endpointPort }) {
+  const owner = ["-m", "owner", "--uid-owner", String(uid)];
+  const rules = [
+    // Everything not explicitly allowed, for this uid only.
+    { why: "default deny for the arm uid", spec: [...owner, "-j", "REJECT"] },
+    // The model endpoint. Without it the arm cannot answer at all.
+    {
+      why: "the model endpoint",
+      spec: [...owner, "-p", "tcp", "-d", `${endpointHost}/32`, "--dport", String(endpointPort), "-j", "ACCEPT"],
+    },
+    // Loopback: local sockets the runtime needs, and nothing that leaves.
+    { why: "loopback", spec: [...owner, "-o", "lo", "-j", "ACCEPT"] },
+  ];
+  return rules.map((rule) => ({ ...rule, add: ["-I", "OUTPUT", ...rule.spec], del: ["-D", "OUTPUT", ...rule.spec] }));
+}
+
 export function buildProfile({ denyRead }) {
   const flat = [...new Set(denyRead.filter((p) => typeof p === "string" && p.length > 0).flatMap(variants))];
   return ["(version 1)", "(allow default)", `(deny file-read* ${flat.map((p) => `(subpath ${JSON.stringify(p)})`).join(" ")} fit)`.replace(" fit", ""), ""].join("\n");
@@ -297,6 +355,135 @@ export function buildBwrapArgs({
 }
 
 /**
+ * The bwrap plan for a NET-FENCED run: same deny-by-hiding logic, one extra
+ * constraint. The arm is about to drop to an unprivileged uid, and `$HOME` is
+ * 0700, so the real paths are unusable to it. Everything it may touch is bound
+ * at NEUTRAL_ROOT instead, and the real home is tmpfs'd away as before — which
+ * also means the sibling arm's home is not merely hidden but absent.
+ */
+function buildNetBwrapArgs({ home, toolchain, armHome, ws, runTmp, runHome, repo = null, docsToHide = [] }) {
+  const exists = (entry) => entry !== null && entry !== undefined && entry !== "" && fs.existsSync(entry);
+  return [
+    "--ro-bind", "/", "/",
+    "--dev", "/dev",
+    "--proc", "/proc",
+    // The host's home disappears, and the neutral root is a fresh tmpfs that
+    // only the binds below can populate. The sibling arm's home is not hidden
+    // here — it is absent, because nothing under it is mounted at all.
+    "--tmpfs", home,
+    "--tmpfs", "/srv",
+    "--dir", NEUTRAL_ROOT,
+    // A fresh /tmp and $HOME per run: the arm keeps a writable scratch space and
+    // cannot hand a file to the next row through either.
+    "--bind", runTmp, "/tmp",
+    "--bind", runHome, neutralPath("home"),
+    // The toolchain (read-only) — never the experiment around it.
+    ...(exists(toolchain) ? ["--ro-bind", toolchain, neutralPath("toolchain")] : []),
+    // This arm's own DSH_HOME (the ARM HOME, which holds profiles/<arm>), and
+    // only this one: dsh resolves `--profile` under it.
+    "--bind", armHome, neutralPath("arm"),
+    // The workspace is the only tree the arm may also write.
+    "--bind", ws, neutralPath("ws"),
+    ...(exists(repo) && !repo.startsWith(`${home}${path.sep}`) ? ["--tmpfs", repo] : []),
+    // `--tmpfs` takes ONE path: a nested array here becomes "--tmpfs,a,b" in the
+    // argv and bwrap rejects the whole plan (it did, in the first fenced smoke).
+    ...docsToHide.filter(exists).flatMap((docs) => ["--tmpfs", docs]),
+    "--unshare-pid", "--unshare-ipc", "--die-with-parent",
+    "--chdir", neutralPath("ws"),
+  ];
+}
+
+/**
+ * The install root to bind read-only: `/…/lib/node_modules/@scope/pkg/lib/bin.js`
+ * means `/…` is the prefix whose `bin/` and `lib/node_modules/` the launcher
+ * needs. Walking to the `lib/node_modules` marker is the mechanical version of
+ * "the toolchain, not the experiment" — a global prefix also holds other
+ * people's packages, so only the prefix itself is mounted and only read-only.
+ */
+export function installRootOf(dshBin) {
+  let real = dshBin;
+  try {
+    real = fs.realpathSync(dshBin);
+  } catch {
+    // not on disk: the spelled path is all there is
+  }
+  const marker = `${path.sep}lib${path.sep}node_modules${path.sep}`;
+  const at = real.indexOf(marker);
+  return at === -1 ? path.dirname(path.dirname(real)) : real.slice(0, at);
+}
+
+/**
+ * Rewrite a host path into the namespace the net fence builds.
+ *
+ * The launcher is the one path this has to get right: `~/.npm-global/bin/dsh` is
+ * unreadable to the dropped uid, so exec must name the neutral copy or the run
+ * dies with ENOENT that looks like a missing binary.
+ */
+export function neutralizePath(target, { home = os.homedir(), props = {} } = {}) {
+  const rules = [
+    // Most specific first: the toolchain normally lives UNDER $HOME, so a rule
+    // keyed on $HOME would rewrite the launcher into a path that does not exist.
+    [props.toolchain ?? installRootOf(props.dshBin ?? target), neutralPath("toolchain")],
+    [props.dshHome, neutralPath("arm")],
+    [props.ws, neutralPath("ws")],
+    [home, neutralPath("home")],
+  ];
+  for (const [from, to] of rules) {
+    if (typeof from !== "string" || from === "") continue;
+    if (target === from) return to;
+    if (target.startsWith(`${from}${path.sep}`)) return `${to}${target.slice(from.length)}`;
+  }
+  return target;
+}
+
+/**
+ * The environment the fenced arm gets.
+ *
+ * Deliberately a fresh, small environment rather than the operator's: the old
+ * plan handed the arm `process.env` (a channel in its own right — DSH_* vars
+ * name the experiment), and the credential file cannot be mounted any more
+ * because the uid cannot read it. The keys travel in memory, from the parent's
+ * already-lifted environment, and nothing else does.
+ */
+/**
+ * The names of the credentials an arm legitimately needs: exactly the one its
+ * model provider names, derived the same way the profile config derives it
+ * (`local-vllm-61` → `LOCAL_VLLM_61_API_KEY`).
+ *
+ * Not "every key in the operator's environment". A control arm has no business
+ * holding the paid API's key, and on this host argv is world-readable through
+ * `ps`, so a key that is not needed is a key that must not be handed over.
+ */
+export function netKeyNames({ provider }) {
+  if (typeof provider !== "string" || provider === "") return [];
+  return [`${provider.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_API_KEY`];
+}
+
+/** The env-file body: one assignment per line, sourced by the fence wrapper. */
+export function netFenceSecretLines({ base = process.env, provider }) {
+  return netKeyNames({ provider })
+    .filter((name) => typeof base[name] === "string" && base[name] !== "")
+    .map((name) => `${name}=${base[name]}`);
+}
+
+export function netFenceEnv({ base = process.env } = {}) {
+  const env = {
+    PATH: `${neutralPath("toolchain")}/bin:/usr/local/bin:/usr/bin:/bin`,
+    HOME: neutralPath("home"),
+    DSH_HOME: neutralPath("arm"),
+    TMPDIR: "/tmp",
+    LANG: base.LANG ?? "C.UTF-8",
+    LC_ALL: base.LC_ALL ?? "",
+  };
+  if (env.LC_ALL === "") delete env.LC_ALL;
+  // No credentials here: `env` lands in argv, and argv is visible to every user
+  // on the host via `ps`. The key travels in a 0600 file inside the run's own
+  // $HOME instead, which the wrapper below sources and which is deleted with the
+  // row.
+  return env;
+}
+
+/**
  * The install roots an arm needs on PATH when they happen to live under $HOME —
  * `~/.npm-global/bin/dsh` is the normal case on a dev box, and the home tmpfs
  * would otherwise take the launcher with it.
@@ -362,7 +549,61 @@ export function fenceCommand({ platform = process.platform, cmd, argv, ...dims }
         "G6 needs an OS-level fence: install bubblewrap (apt install bubblewrap) or run on macOS with sandbox-exec. A matrix without it measures nothing (docs/G6-quality-ab.zh.md §10).",
       );
     }
-    return { cmd: bwrap, argv: [...buildBwrapArgs(dims), "--", cmd, ...argv], cleanup: () => {} };
+    if (dims.net === null || dims.net === undefined) {
+      return { cmd: bwrap, argv: [...buildBwrapArgs(dims), "--", cmd, ...argv], cleanup: () => {} };
+    }
+    // Net fenced: bubblewrap runs with the privilege to build the mount tree,
+    // then drops to the arm's own uid for the command itself. Both halves are
+    // needed and neither is optional — bwrap alone cannot bind paths the
+    // dropped uid may not read, and the uid alone could read the experiment.
+    const { uid, gid = uid, runTmp, runHome } = dims.net;
+    const toolchain = dims.net.toolchain ?? dims.toolchain ?? installRootOf(cmd);
+    if (!fs.existsSync(toolchain)) {
+      throw new Error(`net fence: toolchain root ${toolchain} does not exist — the arm would exec a path that is not mounted`);
+    }
+    const armHome = dims.armHome ?? path.dirname(path.dirname(dims.dshHome));
+    const plan = buildNetBwrapArgs({ ...dims, toolchain, armHome, runTmp, runHome });
+    const neutralCmd = neutralizePath(cmd, {
+      home: dims.home ?? os.homedir(),
+      props: { armHome, dshHome: dims.dshHome, ws: dims.ws, toolchain },
+    });
+    return {
+      cmd: "/usr/bin/sudo",
+      argv: [
+        "-n",
+        bwrap,
+        ...plan,
+        "--",
+        // setpriv is `util-linux`, present on any host that has iptables.
+        "/usr/bin/setpriv",
+        `--reuid=${uid}`,
+        `--regid=${gid}`,
+        "--clear-groups",
+        "--",
+        "/usr/bin/env",
+        "-i",
+        ...Object.entries(netFenceEnv({ base: dims.baseEnv ?? process.env })).map(([key, value]) => `${key}=${value}`),
+        // umask 000 so everything the arm writes stays readable/deletable by the
+        // harness afterwards; the arm's files are graded, not kept secret. The
+        // secret env file is sourced here rather than exported above, because
+        // argv is readable by every user on the host.
+        "/bin/sh",
+        "-c",
+        // `set -a` is not decoration: sourcing a plain file ASSIGNS the variable
+        // in this shell but does not export it, so dsh starts without the key
+        // and dies with MISSING_CREDENTIAL (which is at least how it was found).
+        (dims.net.envFile ? `set -a; . ${NET_ENV_FILE}; set +a; ` : "") + 'umask 000; exec "$0" "$@"',
+        neutralCmd,
+        ...argv,
+      ],
+      // The environment is baked into the argv, not handed to sudo: sudo's
+      // env_reset drops everything the harness passes (HOME becomes /root and
+      // DSH_HOME vanishes — the first fenced smoke died in 0.1s on exactly
+      // that). `env -i` inside the fence makes the arm's environment explicit
+      // and keeps the operator's out of it.
+      env: {},
+      cleanup: () => {},
+    };
   }
   throw new Error(
     `G6 has no OS-level fence for ${platform}: the two implemented mechanisms are macOS seatbelt and Linux bubblewrap. Do not run the matrix unfenced — say so instead.`,

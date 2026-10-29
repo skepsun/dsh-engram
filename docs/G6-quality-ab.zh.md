@@ -921,3 +921,81 @@ node eval/g6/make-round.mjs --secret ~/.dsh/g6-secret --name r8 --out eval/g6/lo
 2. **和第七轮不可比**：约定不同、语料不同。能跨轮说的只有一句：第七轮控制臂能上网查答案
    （已剔除 2 行），第八轮查不到（密钥化 + 已核实的盲区）。第七轮的 +93.8pp 因此**不能**
    对外当结果，第八轮才可以。
+
+## 16. 网络围栏：一臂一个 uid，出网只留一个洞（2026-10-29）
+
+§14.5 留下的洞只有一个：**围栏只围文件系统，网卡还在**。第七轮的控制臂因此去 GitHub
+查到了约定。密钥化把"必然查得到"降成了"没人泄露就查不到"，但只要臂有 shell 和 socket，
+"没人泄露"就仍然是一个假设。这一节把假设变成机制。
+
+### 16.1 为什么不是"再写几条 bwrap 规则"
+
+bubblewrap 管文件系统，不管网络：`--unshare-net` 会把网卡整个拿掉，模型端点也就没了。
+要"只允许一个出口"，需要的是**按进程身份**的过滤，也就是 iptables 的 `owner` 匹配——
+它需要一个独立的 uid。于是围栏变成两段：
+
+```
+sudo bwrap …（搭挂载树）
+  └── setpriv --reuid=1016 --regid=1016 --clear-groups
+        └── /bin/sh -c 'set -a; . $HOME/.netenv; set +a; umask 000; exec "$0" "$@"'
+              └── dsh --profile p-a "<task>"
+```
+
+宿主机上另有三条 `iptables -I OUTPUT -m owner --uid-owner 1016 …`：默认 REJECT，
+只放行 loopback 和 `172.27.221.61:8003`。规则**只按 uid 生效**，所以本会话、harness、
+并发跑的 Web GUI 都不受影响——这是按 uid 而不是按进程过滤的意义。
+
+```bash
+node eval/quality-ab.mjs run … --sandbox --net-fence --net-endpoint 172.27.221.61:8003
+```
+
+### 16.2 两个前置探针：不合格就不计分
+
+围栏自身会坏，而坏掉的围栏产生的恰恰是最危险的数字：一个"看起来双盲、其实不盲"的矩阵。
+所以 `--net-fence` 在花任何模型时间之前先做两次自证：
+
+1. **出网探针**（以 1016 身份跑）：端点必须可达、`github.com` 必须 000、DNS 必须死。
+   任一条不符就 `throw`，不跑矩阵。实测：`endpoint reachable (401), github 000, dns dead`。
+2. **写目录探针**（走同一条 fence，`touch` 一个文件）：臂必须能在自己的 ws 里写。
+
+第二条不是形式主义。第一次带围栏的冒烟里，ws 是从模板 `cpSync` 出来的、
+属 `chuxiong:chuxiong 775`，而臂是 1016——**臂能读不能写**，于是它把工作做在 `/tmp` 副本里、
+汇报"这个工作区对我只读"（那是控制臂，它甚至把这个发现写进了报告）。
+四条行全部 0.x 秒失败，`rm -rf` 也删不掉 1016 建的临时目录。
+现在 ws 每次复制后 `chmod -R a+rwX`，并在矩阵开始前用探针证明一次。
+
+### 16.3 密钥不进 argv
+
+`env -i K=V …` 会被写进进程的 argv，而 argv 对宿主机上每个用户都可见（`ps`）。
+所以凭据走**文件**：每行一个 `envFile`（`<runHome>/.netenv`，600，属 1016，
+随行删除），由 fence 里的 sh `set -a; . file; set +a` 导出。
+
+- 只有**本臂 provider 那一个** key 会进文件（`local-vllm-61` → `LOCAL_VLLM_61_API_KEY`），
+  付费 API 的 key 不发给任何一臂。
+- `set -a` 不是装饰：只 `. file` 是赋值不导出，dsh 起来就是 `MISSING_CREDENTIAL`
+  ——这条也是冒烟里踩出来的（4 行全部被判 CREDENTIAL，而不是当成任务失败计分）。
+
+### 16.4 冒烟里暴露的语料 bug（§15.2 的第 4 条自证）
+
+带围栏的冒烟跑出 `p-a` 在 `retry` 上挂了一次，原因不是围栏：**工作区里的 stub 和 prompt
+签的是两个函数**——`src/retry.js` 写着 `shouldRetry(status, code, attempt)`，
+而 prompt、记忆文本和 oracle 都写 `shouldRetry(attempt, error)`。臂只能挑一份文档信，
+挑哪份是硬币。第八轮 p-a 在这一题上 2/2 通过，纯粹是硬币落对了面。
+
+生成器现在有第 4 条自证（编译期，不通过就不出语料）：
+
+- stub 必须导出 prompt 点名的那个函数（当时 `ranking.js` 导 `rankRows`、`dedupe.js` 导 `mergeRows`）；
+- stub 的参数个数必须等于 prompt 里写的参数个数（`errcode` 是 3 个，oracle 故意只传 2 个测试
+  `.details` 缺省，这是合法的：**oracle 可以少传，不能多传**）。
+
+补上这条之后，同一把密钥编译出的第九轮 **9/9 usable**，另外三处 stub 冲突
+（`retry`/`ranking`/`dedupe`）一并不存在了。
+
+### 16.5 这一节解决了什么、还剩什么
+
+- 解决了：臂没有可用的出网路径（含 DNS）。第七轮那两份"去 GitHub 查"的日志，
+  在围栏下会变成 `curl` 立刻失败——不是"没找到"，是"出不去"。
+- 还剩：**`--net-fence` 需要 root**（装 iptables 规则）。这是刻意的取舍：没有 root
+  就没有按 uid 的过滤；harness 会把 `sudo -n` 的失败当成硬错误，不会静默降级成"无围栏"。
+- 还剩：uid 是宿主机级的（`g6arm`，1016）。同一台机器上并发的两轮矩阵会共用这个 uid
+  和它的规则集，所以**同一时刻只跑一轮带围栏的矩阵**。

@@ -558,6 +558,41 @@ for (const task of TASKS) {
     ok = false;
     continue;
   }
+  // Self-check #4 (found by the net-fenced smoke, not by review): the stub the
+  // arm STARTS FROM must state the same signature the prompt states. The retry
+  // fixture shipped `shouldRetry(status, code, attempt)` while the prompt, the
+  // memory and the oracle all said `shouldRetry(attempt, error)`, so two
+  // memory-armed rows split on which document to trust and a coin flip was
+  // being scored as a quality result. Two fixtures also exported a function
+  // name the prompt never mentions (`rankRows`/`mergeRows`).
+  //
+  // The oracle is allowed to call with FEWER arguments than declared — that is
+  // how an optional `details` gets tested — but never with more.
+  {
+    const declaredInPrompt = /里的\s*([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/.exec(task.prompt);
+    const stubSource = fs.readFileSync(path.join(FIXTURE, "src", task.file), "utf8");
+    const declared = declaredParams(stubSource, task.fn);
+    const callArities = [...casesFor(task, chosen.params), ...(task.throws ?? [])]
+      .filter(([fn]) => fn === task.fn)
+      .map(([, caseArgs]) => caseArgs.length);
+    const promptParams =
+      declaredInPrompt === null ? null : declaredInPrompt[2].split(",").map((part) => part.trim()).filter((part) => part !== "").length;
+    const problems = [];
+    if (declared === null) problems.push(`the fixture stub does not export ${task.fn}`);
+    if (declaredInPrompt !== null && declaredInPrompt[1] !== task.fn) {
+      problems.push(`the prompt names ${declaredInPrompt[1]} but the task is ${task.fn}`);
+    }
+    if (promptParams !== null && declared !== null && promptParams !== declared) {
+      problems.push(`the prompt declares ${promptParams} parameter(s) but the stub declares ${declared}`);
+    }
+    const tooMany = callArities.filter((arity) => declared !== null && arity > declared);
+    if (tooMany.length > 0) problems.push(`the oracle calls with ${tooMany.join("/")} argument(s), more than the stub's ${declared}`);
+    if (problems.length > 0) {
+      rows.push(`${task.id}: ${problems.join("; ")} — the arm would have to guess which document wins`);
+      ok = false;
+      continue;
+    }
+  }
   if ((task.throws ?? []).length > 0 && !describe.includes("TypeError")) {
     rows.push(`${task.id}: oracle asserts a rejection the memory never states (add it to describe())`);
     ok = false;
@@ -589,6 +624,13 @@ process.exit(ok && tasks.length === TASKS.length ? 0 : 1);
  * formula the memory text describes — the two statements are generated from one
  * parameter set, so they cannot drift apart.
  */
+/** How many parameters `export function NAME(a, b)` declares, or null. */
+function declaredParams(source, name) {
+  const match = new RegExp(`export function ${name}\\(([^)]*)\\)`).exec(source);
+  if (match === null) return null;
+  return match[1].split(",").map((part) => part.trim()).filter((part) => part !== "").length;
+}
+
 function casesFor(task, params) {
   return task.oracle(params);
 }

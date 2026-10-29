@@ -1,3 +1,3 @@
-export function mergeRows(rows) {
+export function dedupe(rows) {
   throw new Error("not implemented");
 }

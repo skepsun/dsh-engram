@@ -171,3 +171,98 @@ test("a hidden store is hidden by the fence, not by a rename in the same directo
 test("an unsupported platform refuses instead of running unfenced", () => {
   assert.throws(() => fenceCommand({ platform: "win32", cmd: "dsh", argv: [] }), /no OS-level fence/);
 });
+
+/**
+ * The network half (docs §16). Cheap to test because the plan is pure: the
+ * harness turns it into iptables calls and a `sudo bwrap … setpriv` argv, and
+ * both are inspectable strings.
+ */
+test("the egress plan denies first and opens exactly two holes, all scoped to the arm uid", async () => {
+  const { egressRules } = await import("../eval/g6/sandbox-profile.mjs");
+  const rules = egressRules({ uid: 1016, endpointHost: "172.27.221.61", endpointPort: 8003 });
+  // `-I OUTPUT` prepends, so insertion order IS final order: the REJECT goes in
+  // first and the allows land above it. Get this backwards and the fence
+  // silently allows everything, which is the failure mode nobody notices.
+  assert.match(rules[0].add.join(" "), /-j REJECT$/, "the default deny must be inserted first");
+  const endpointRule = rules[1].add.join(" ");
+  for (const part of ["-m owner --uid-owner 1016", "-p tcp", "-d 172.27.221.61/32", "--dport 8003", "-j ACCEPT"]) {
+    assert.ok(endpointRule.includes(part), `endpoint rule is missing ${part}: ${endpointRule}`);
+  }
+  assert.match(rules[2].add.join(" "), /-o lo -j ACCEPT/);
+  for (const rule of rules) {
+    assert.match(rule.add.join(" "), /-m owner --uid-owner 1016/, "every rule is scoped to the arm");
+    assert.deepEqual(rule.del, rule.add.map((part, index) => (index === 0 ? "-D" : part)), "removal mirrors insertion");
+  }
+  // No DNS hole, no ICMP hole: resolving a name is how a control finds github.
+  assert.ok(!rules.some((rule) => /--dport 53|icmp|--sport/.test(rule.add.join(" "))));
+});
+
+test("the net fence mounts one arm at a neutral root and drops the uid", async () => {
+  const { fenceCommand, NEUTRAL_ROOT, NETFENCE_UID } = await import("../eval/g6/sandbox-profile.mjs");
+  // A real directory for the toolchain: the plan refuses to bind a source that
+  // does not exist, and a test that faked it would not catch that.
+  const toolchain = fs.mkdtempSync("/tmp/g6-tc-");
+  fs.mkdirSync(path.join(toolchain, "bin"));
+  fs.writeFileSync(path.join(toolchain, "bin", "dsh"), "#!/bin/sh\n");
+  const fence = fenceCommand({
+    platform: "linux",
+    cmd: `${toolchain}/bin/dsh`,
+    argv: ["--profile", "p-a", "do the task"],
+    home: "/home/op",
+    // `dshHome` is the PROFILE (what the non-net plan mounts under the real
+    // home); the neutral root is the ARM home, because DSH_HOME must contain
+    // `profiles/<arm>` for `--profile` to resolve.
+    dshHome: "/home/op/.dsh/quality-ab-r8/arms/p-a/profiles/p-a",
+    armHome: "/home/op/.dsh/quality-ab-r8/arms/p-a",
+    ws: "/home/op/code/repo/eval/g6/runs/abc/ws",
+    sessionsDir: null,
+    credentials: "/home/op/.dsh/.credentials.yaml",
+    repo: "/home/op/code/repo",
+    toolPaths: [],
+    net: { uid: 1016, runTmp: "/home/op/code/repo/eval/g6/runs/abc/tmp", runHome: "/home/op/code/repo/eval/g6/runs/abc/home", envFile: "/home/op/code/repo/eval/g6/runs/abc/home/.netenv" },
+    baseEnv: { LOCAL_VLLM_61_API_KEY: "k-123", PATH: "/home/op/.npm-global/bin:/usr/bin", DSH_SESSION_ID: "leak" },
+  });
+  assert.equal(fence.cmd, "/usr/bin/sudo");
+  assert.equal(fence.argv[0], "-n", "the mount tree needs root; a prompt would hang a matrix");
+  const line = fence.argv.join(" ");
+  assert.match(line, new RegExp(`--reuid=1016 --regid=1016 --clear-groups`));
+  assert.match(line, /--tmpfs \/home\/op( |$)/, "the host home must still disappear");
+  assert.match(line, new RegExp(`--bind /home/op/.dsh/quality-ab-r8/arms/p-a ${NEUTRAL_ROOT}/arm`));
+  assert.match(line, new RegExp(`--chdir ${NEUTRAL_ROOT}/ws`));
+  // The launcher is exec'd from the neutral copy: the host one is unreadable to
+  // the dropped uid, and an ENOENT there looks like a missing binary.
+  assert.match(line, new RegExp(`${NEUTRAL_ROOT}/toolchain/bin/dsh --profile p-a do the task$`));
+  // The credential FILE is gone (the uid cannot read it); the key travels in env
+  // and the rest of the operator's environment does not.
+  assert.ok(!line.includes(".credentials.yaml"), "net fenced runs must not mount the credentials file");
+  // The environment travels in the argv, not through sudo: sudo's env_reset
+  // drops what the harness passes (HOME→/root, DSH_HOME gone), which killed the
+  // first fenced smoke in 0.1s. `env -i` inside the fence is the whole truth.
+  assert.deepEqual(fence.env, {}, "sudo must receive no environment to leak");
+  const at = fence.argv.indexOf("-i");
+  assert.ok(at > 0 && fence.argv[at - 1] === "/usr/bin/env", "the fenced command sets its own environment");
+  const pairs = fence.argv.slice(at + 1, fence.argv.indexOf("/bin/sh", at));
+  const envOf = (name) => pairs.find((pair) => pair.startsWith(`${name}=`))?.slice(name.length + 1);
+  assert.deepEqual(pairs.map((pair) => pair.split("=")[0]).sort(), ["DSH_HOME", "HOME", "LANG", "PATH", "TMPDIR"]);
+  assert.equal(envOf("DSH_HOME"), `${NEUTRAL_ROOT}/arm`);
+  assert.equal(envOf("HOME"), `${NEUTRAL_ROOT}/home`);
+  assert.equal(envOf("DSH_SESSION_ID"), undefined, "the operator's DSH_* vars must not reach the arm");
+  // The credential is NOT in the argv: `ps` shows every process's argv to every
+  // user, so a key there is a key published. It is sourced from a 0600 file in
+  // the run's own $HOME instead, and the wrapper proves it.
+  assert.ok(!line.includes("k-123"), "the credential must never appear in argv");
+  assert.ok(line.includes(". /srv/g6/home/.netenv;"), "the wrapper sources the secret file");
+  const keys = (await import("../eval/g6/sandbox-profile.mjs")).netFenceSecretLines({ base: { LOCAL_VLLM_61_API_KEY: "k-123", DEEPSEEK_API_KEY: "paid" }, provider: "local-vllm-61" });
+  assert.deepEqual(keys, ["LOCAL_VLLM_61_API_KEY=k-123"], "only the arm's own provider key travels — never the paid API's");
+});
+
+test("the neutral rewrite prefers the toolchain over the home it lives in", async () => {
+  const { neutralizePath } = await import("../eval/g6/sandbox-profile.mjs");
+  const props = { dshHome: "/home/op/.dsh/quality-ab-r8/arms/p-a", ws: "/home/op/run/ws", toolchain: "/home/op/.npm-global" };
+  assert.equal(neutralizePath("/home/op/.npm-global/bin/dsh", { home: "/home/op", props }), "/srv/g6/toolchain/bin/dsh");
+  assert.equal(neutralizePath("/home/op/.dsh/quality-ab-r8/arms/p-a/profiles/p-a", { home: "/home/op", props }), "/srv/g6/arm/profiles/p-a");
+  assert.equal(neutralizePath("/home/op/run/ws/src/a.js", { home: "/home/op", props }), "/srv/g6/ws/src/a.js");
+  // A path outside every known root is left alone: rewriting by guesswork would
+  // hand an arm a path that does not exist.
+  assert.equal(neutralizePath("/usr/local/bin/node", { home: "/home/op", props }), "/usr/local/bin/node");
+});

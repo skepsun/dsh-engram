@@ -26,7 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { fenceCommand, toolReadPaths } from "./g6/sandbox-profile.mjs";
+import { egressRules, fenceCommand, installRootOf, NETFENCE_UID, netFenceSecretLines, netKeyNames, toolReadPaths } from "./g6/sandbox-profile.mjs";
 
 /** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -71,6 +71,11 @@ function parseArgs(argv) {
     else if (arg === "--exclude") out.exclude = next().split(",").map((x) => x.trim()).filter(Boolean);
     else if (arg === "--log-dir") out.logDir = next();
     else if (arg === "--sandbox") out.sandbox = true;
+    // The network half of the fence: the arm runs as a dedicated uid and may
+    // reach exactly one endpoint (docs §16). Needs root for the rules, so it is
+    // its own flag rather than a default.
+    else if (arg === "--net-fence") out.netFence = true;
+    else if (arg === "--net-endpoint") out.netEndpoint = next();
     // Provenance for an artifact written before `run` recorded it (see classify).
     else if (arg === "--target") out.target = next();
     // Resume a matrix that died mid-flight (round 4 hit ENOSPC after the whole
@@ -213,8 +218,16 @@ function linkCredentials(home) {
  * the experiment's arm names and layout straight out of the file. The memory
  * store is not affected: `seedStore` re-seeds it before every treatment run.
  */
-function scrubArmHome(home) {
-  fs.rmSync(path.join(home, "sessions"), { recursive: true, force: true });
+function scrubArmHome(home, { elevated = false } = {}) {
+  const sessions = path.join(home, "sessions");
+  if (elevated) {
+    // A net-fenced run wrote its sessions as the fence uid; the harness cannot
+    // even scandir them. Deleting through sudo is not a convenience here — the
+    // scrub is what keeps one row's transcript out of the next row's home.
+    sudoRun(["rm", "-rf", sessions], { allowFailure: true });
+  } else {
+    fs.rmSync(sessions, { recursive: true, force: true });
+  }
   // The ledger is keyed by absolute workspace path (`…/ab-engram/csv/seed-0/ws`)
   // and records `injectedChars` — a control that reads it learns both the arm
   // names and that one arm injects memory. It holds no state a run needs.
@@ -233,7 +246,7 @@ function prepare(args) {
     // Each arm gets its own home; its profile lives inside it, so `--profile`
     // resolves only when that arm's home is the DSH_HOME in force.
     const homeForArm = armHome(home, profile);
-    if (args.sandbox) scrubArmHome(homeForArm);
+    if (args.sandbox) scrubArmHome(homeForArm, { elevated: args.netFence === true });
     const env = armEnv(homeForArm);
     fs.mkdirSync(path.join(homeForArm, "profiles"), { recursive: true });
     // Instantiate the one-shot headless template under this profile name.
@@ -592,6 +605,11 @@ const INFRA_SIGNATURES = [
   [/MISSING_CREDENTIAL/, "CREDENTIAL"],
   [/502 Bad Gateway|503 Service Unavailable|504 Gateway Time-?out/, "UPSTREAM"],
   [/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|getaddrinfo|socket hang up|other side closed/, "NETWORK"],
+  // The fence could not start the arm at all. Never a task outcome: it means the
+  // harness's own launcher is broken, and scoring it would invent a "both arms
+  // failed" that looks like a quality result (the first net-fenced smoke did
+  // exactly that until this line existed).
+  [/bwrap: |execvp |sudo: a password is required|no new privileges|Operation not permitted/, "FENCE"],
 ];
 function infraReason(log, wallMs, pass) {
   if (wallMs > 120000) return null;
@@ -638,6 +656,148 @@ function artifactPath(args) {
   return args.logDir === undefined ? path.join(args.out, "runs.json") : path.join(args.logDir, "runs.json");
 }
 
+
+/**
+ * The network fence, harness side (docs §16).
+ *
+ * `apply` installs root-owned iptables rules scoped to the arm's uid, `probe`
+ * proves they do what the docs claim, `close` removes them. The probe is not
+ * decoration: an iptables rule that failed to apply looks exactly like a fence
+ * from inside the run, and the artifact it produces ("the control could not
+ * find the answer") would be false. So the harness refuses to score anything
+ * until the probe agrees with the claim.
+ */
+function sudoRun(argv, { allowFailure = false } = {}) {
+  const res = spawnSync("/usr/bin/sudo", ["-n", ...argv], { encoding: "utf8" });
+  if (!allowFailure && res.status !== 0) {
+    throw new Error(`sudo -n ${argv.join(" ")} failed: ${(res.stderr ?? res.stdout ?? "").trim().slice(0, 300)}`);
+  }
+  return res;
+}
+
+/**
+ * Make the arm home readable/writable for BOTH uids.
+ *
+ * The two writers disagree about modes: the harness creates files 0644 under
+ * umask 022, and the plugin writes its store 0600. Neither can then touch the
+ * other's file, and the failure surfaces as EACCES in whichever step runs
+ * second (the seed, or the contamination scan). A chmod after each transplant
+ * is cheaper than teaching every writer to be group-friendly.
+ */
+function openUpArmHome(home) {
+  sudoRun(["chmod", "-R", "a+rwX", home]);
+}
+
+function netFenceUid() {
+  const res = spawnSync("/usr/bin/id", ["-u", NETFENCE_UID], { encoding: "utf8" });
+  const uid = Number((res.stdout ?? "").trim());
+  if (res.status !== 0 || !Number.isInteger(uid) || uid <= 0) {
+    throw new Error(
+      `--net-fence needs a dedicated uid: getent passwd ${NETFENCE_UID} is empty. Create it (useradd --system --no-create-home ${NETFENCE_UID}) — a fence that shares the operator's uid cannot be scoped.`,
+    );
+  }
+  return uid;
+}
+
+function parseEndpoint(spec) {
+  const match = /^(?<host>[0-9a-zA-Z._-]+):(?<port>\d+)$/.exec(spec ?? "");
+  if (match === null) throw new Error(`--net-endpoint must be host:port (got ${JSON.stringify(spec)})`);
+  return { host: match.groups.host, port: Number(match.groups.port), url: `http://${match.groups.host}:${match.groups.port}/v1/models` };
+}
+
+function clearEgressRules(uid) {
+  // Read the rules back and delete what is actually installed for this uid.
+  // Deleting by the spec we spelled is unreliable: the kernel normalises
+  // `-p tcp --dport` into `-p tcp -m tcp --dport`, so the delete misses its own
+  // rule and the leftovers stack up (one survived a killed smoke exactly so).
+  const res = spawnSync("/usr/bin/sudo", ["-n", "iptables", "-S", "OUTPUT"], { encoding: "utf8" });
+  for (const line of (res.stdout ?? "").split("\n")) {
+    if (!line.startsWith("-A OUTPUT ")) continue;
+    const spec = line.slice("-A OUTPUT ".length);
+    if (!spec.includes(`--uid-owner ${uid}`)) continue;
+    sudoRun(["iptables", "-D", "OUTPUT", ...spec.split(" ")], { allowFailure: true });
+  }
+}
+
+function openNetFence({ uid, endpoint }) {
+  const rules = egressRules({ uid, endpointHost: endpoint.host, endpointPort: endpoint.port });
+  // Idempotent: a previous matrix that died without cleanup leaves rules behind.
+  clearEgressRules(uid);
+  for (const rule of rules) sudoRun(["iptables", ...rule.add]);
+  return {
+    rules,
+    close() {
+      for (const rule of [...rules].reverse()) sudoRun(["iptables", ...rule.del], { allowFailure: true });
+      clearEgressRules(uid);
+    },
+  };
+}
+
+/** Run as the fence uid and report what actually leaves the box. */
+function probeNetFence({ uid, endpoint }) {
+  const script = [
+    `printf 'endpoint=%s ' "$(curl -s -m 5 -o /dev/null -w %{http_code} ${endpoint.url})"`,
+    `printf 'github=%s ' "$(curl -s -m 5 -o /dev/null -w %{http_code} https://github.com)"`,
+    `printf 'dns=%s' "$(getent hosts github.com >/dev/null 2>&1 && echo up || echo dead)"`,
+  ].join("; ");
+  const res = spawnSync(
+    "/usr/bin/sudo",
+    ["-n", "/usr/bin/setpriv", `--reuid=${uid}`, `--regid=${uid}`, "--clear-groups", "/bin/bash", "-c", script],
+    { encoding: "utf8", timeout: 60000 },
+  );
+  const out = (res.stdout ?? "").trim();
+  const read = (name) => new RegExp(`${name}=([^ ]+)`).exec(out)?.[1] ?? "?";
+  return { raw: out, endpoint: read("endpoint"), github: read("github"), dns: read("dns") };
+}
+
+function assertNetFence({ uid, endpoint }) {
+  const probe = probeNetFence({ uid, endpoint });
+  const ok = probe.endpoint !== "000" && probe.endpoint !== "?" && probe.github === "000" && probe.dns === "dead";
+  if (!ok) {
+    throw new Error(
+      `network fence did not hold as claimed (${probe.raw}) — expected the endpoint reachable, github=000 and dns=dead. Refusing to run: a matrix that looks blind but is not is the worst artifact this harness can produce.`,
+    );
+  }
+  console.log(`net fence: uid ${uid} → endpoint reachable (${probe.endpoint}), github ${probe.github}, dns ${probe.dns}`);
+  return probe;
+}
+
+/**
+ * Prove the arm can actually write its workspace before spending an hour of
+ * model time finding out it cannot.
+ *
+ * The network probe answers "can it reach the endpoint"; this answers "can it
+ * deliver the work". They fail independently, and both failures look like a
+ * quality result from outside: no writes means no diff means a red check.
+ */
+function assertFenceWritable({ netDims, netFence, homeForArm, ws, arm }) {
+  const marker = path.join(ws, ".g6-write-probe");
+  fs.rmSync(marker, { force: true });
+  const probe = fenceCommand({
+    platform: process.platform,
+    home: os.homedir(),
+    dshHome: path.join(homeForArm, "profiles", arm),
+    armHome: homeForArm,
+    ws,
+    repo: null,
+    toolPaths: [],
+    net: { ...netDims, envFile: null },
+    cmd: "/usr/bin/touch",
+    argv: ["/srv/g6/ws/.g6-write-probe"],
+  });
+  const res = spawnSync(probe.cmd, probe.argv, { cwd: ws, env: probe.env ?? {}, encoding: "utf8", timeout: 60000 });
+  const wrote = fs.existsSync(marker);
+  fs.rmSync(marker, { force: true });
+  if (!wrote) {
+    throw new Error(
+      `the fenced arm cannot write its workspace (touch exited ${res.status}: ${(res.stderr ?? "").trim().slice(0, 200)}). Refusing to run: every row would be a read-only tour of the task.`,
+    );
+  }
+  console.log(`net fence: uid ${netFence.uid} can write the workspace (probed)`);
+}
+
+let activeNetFence = null;
+
 function run(args) {
   if (!args.out) throw new Error("run needs --out <dir>");
   // A stub host never touches a model, so it is almost always a test or a dry
@@ -666,7 +826,7 @@ function run(args) {
     const homeForArm = armHome(home, arm);
     fs.mkdirSync(homeForArm, { recursive: true });
     linkCredentials(homeForArm);
-    if (args.sandbox) scrubArmHome(homeForArm);
+    if (args.sandbox) scrubArmHome(homeForArm, { elevated: args.netFence === true });
   }
   // One base env for credential lifting (the keys are process-wide); each run
   // still gets its own DSH_HOME below. `armEnv` must be seeded with THIS object
@@ -690,6 +850,24 @@ function run(args) {
   const targets = assertSameTarget({ dshBin: DSH_BIN, arms, envFor: (arm) => armEnv(armHome(home, arm), env) });
   const [targetProvider, targetModel] = [targets[arms[0]].provider, targets[arms[0]].model];
   console.log(`model target: ${targetProvider ?? "?"}/${targetModel ?? "?"} (both arms must agree — checked)`);
+  // A dropped uid cannot read a 0700 $HOME, so the arm homes are opened up for
+  // it. They are experiment-only trees, and the net fence mounts just one of
+  // them, so the sibling arm is not exposed by this.
+  const netFence = (() => {
+    if (!args.netFence) return null;
+    const uid = netFenceUid();
+    for (const arm of arms) sudoRun(["chmod", "-R", "a+rwX", armHome(home, arm)]);
+    const endpoint = parseEndpoint(args.netEndpoint);
+    const keyNames = netKeyNames({ provider: targetProvider });
+    const missing = keyNames.filter((name) => typeof env[name] !== "string" || env[name] === "");
+    if (missing.length > 0) {
+      throw new Error(`--net-fence needs ${missing.join(", ")} in the environment (provider ${targetProvider}) — the arm could not authenticate, and every row would be infra`);
+    }
+    const fence = openNetFence({ uid, endpoint });
+    activeNetFence = fence;
+    assertNetFence({ uid, endpoint });
+    return { uid, endpoint, fence, provider: targetProvider, keyNames };
+  })();
   const seedMemories = args.seedMemory === undefined ? null : JSON.parse(fs.readFileSync(args.seedMemory, "utf8"));
   const rows = [];
   const startedAt = Date.now();
@@ -810,16 +988,36 @@ function run(args) {
         const runKey = createHash("sha1").update(`${task.id}|${seed}|${arm}`).digest("hex").slice(0, 8);
         const dir = path.join(args.out, "runs", runKey);
         const ws = path.join(dir, "ws");
-        fs.rmSync(dir, { recursive: true, force: true });
+        if (args.netFence) {
+          // The previous fenced attempt left /tmp entries owned by the fence uid
+          // with its own modes; `rmSync` cannot unlink those. Resume has to be
+          // able to redo a row, so the removal is elevated when the fence is on.
+          sudoRun(["rm", "-rf", dir], { allowFailure: true });
+        } else {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
         fs.mkdirSync(dir, { recursive: true });
         fs.cpSync(args.workspace, ws, { recursive: true, dereference: true });
+        if (netFence !== null) {
+          // The copy belongs to this uid; the arm does not. Without this the arm
+          // reads the workspace and cannot write a single file — the second
+          // fenced smoke found that out loudly (a control reported uid 1016 vs
+          // 775/664 ownership and did its work in /tmp instead).
+          sudoRun(["chmod", "-R", "a+rwX", ws]);
+        }
 
         const homeForArm = armHome(home, arm);
         // Fresh state per run, per arm: the treatment's store is re-seeded, and
         // the control's home simply never has one.
-        if (args.sandbox) scrubArmHome(homeForArm);
+        if (args.sandbox) scrubArmHome(homeForArm, { elevated: args.netFence === true });
         if (task.setup) spawnSync("bash", ["-lc", task.setup], { cwd: ws, encoding: "utf8", timeout: args.timeoutMs });
-        if (seedMemories !== null && arm === arms[0]) seedStore(homeForArm, ws, seedMemories);
+        if (seedMemories !== null && arm === arms[0]) {
+          seedStore(homeForArm, ws, seedMemories);
+          // The plugin writes its store 0600 as the fence uid; a seeded store
+          // written by the harness is 0644. Both sides must be able to replace
+          // it, or the NEXT run dies seeding.
+          if (netFence !== null) openUpArmHome(homeForArm);
+        }
         // Same seed for both arms: the prompt is the seed-sensitive part, so we
         // pin it verbatim and keep the arm the only difference.
         const prompt = task.prompt;
@@ -839,11 +1037,37 @@ function run(args) {
         // Linux) but both come out of fenceCommand(), so the profile a run gets
         // is the same one the fence test asserts against.
         const otherArm = arms.find((candidate) => candidate !== arm) ?? null;
+        // A fresh /tmp and $HOME per row, owned by the fence uid: writable
+        // scratch with no way to hand a file to the next arm through it.
+        let netDims = null;
+        if (netFence !== null) {
+          const runTmp = path.join(dir, "tmp");
+          const runHome = path.join(dir, "home");
+          for (const sub of [runTmp, runHome]) fs.mkdirSync(sub, { recursive: true });
+          // The key lives here, not in argv: `ps` is world-readable.
+          const envFile = path.join(runHome, ".netenv");
+          const lines = netFenceSecretLines({ base: env, provider: netFence.provider });
+          if (lines.length === 0) throw new Error(`net fence: no credential for provider ${netFence.provider} — refusing to run an arm that cannot authenticate`);
+          fs.writeFileSync(envFile, `${lines.join("\n")}\n`, { mode: 0o600 });
+          // Hand both scratch trees to the fence uid AFTER writing the secret:
+          // a directory owned by the dropped uid is one this uid can no longer
+          // create files in, and the write above would fail with EACCES.
+          for (const sub of [runTmp, runHome]) {
+            sudoRun(["chown", "-R", `${netFence.uid}:${netFence.uid}`, sub]);
+            sudoRun(["chmod", "-R", "a+rwX", sub]);
+          }
+          netDims = { uid: netFence.uid, runTmp, runHome, envFile };
+        }
+        if (netFence !== null && netFence.probed !== true) {
+          assertFenceWritable({ netDims, netFence, homeForArm, ws, arm });
+          netFence.probed = true;
+        }
         const fence = args.sandbox
           ? fenceCommand({
               home: os.homedir(),
               nodeDir: path.dirname(path.dirname(process.execPath)),
               dshHome: path.join(homeForArm, "profiles", arm),
+              armHome: homeForArm,
               ws,
               otherArmProfile: args.sandbox === "norearm" || otherArm === null ? null : path.join(armHome(home, otherArm), "profiles", otherArm),
               sessionsDir: path.join(homeForArm, "sessions"),
@@ -857,6 +1081,7 @@ function run(args) {
                 .map((name) => path.join(armHome(home, name), "profiles", name, "node_modules", "dsh-engram", "docs")),
               cmd: DSH_EXEC,
               argv: ["--profile", arm, prompt],
+              ...(netDims === null ? {} : { net: netDims, baseEnv: env }),
             })
           : null;
         try {
@@ -864,7 +1089,7 @@ function run(args) {
             ? dsh(["--profile", arm, prompt], { cwd: ws, env: armEnv(homeForArm, env), timeoutMs: args.timeoutMs })
             : spawnSync(fence.cmd, fence.argv, {
                 cwd: ws,
-                env: armEnv(homeForArm, env),
+                env: fence.env ?? armEnv(homeForArm, env),
                 encoding: "utf8",
                 timeout: args.timeoutMs,
                 maxBuffer: 32 * 1024 * 1024,
@@ -907,6 +1132,10 @@ function run(args) {
         // `git clone` of this public repo) and one of them passed the task with
         // the conventions it found there. Publishing the corpus makes it
         // retrievable, so "went looking" counts as not blind.
+        // The arm wrote sessions and its store as the fence uid (0600); the
+        // contamination scan below reads them as this uid, and the next row
+        // scrubs them.
+        if (netFence !== null) openUpArmHome(homeForArm);
         const contaminated = arm !== args.arms?.[0] &&
           /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md|\bcurl\s|git clone|grep\.app|raw\.githubusercontent|github\.com\/search/.test(log);
         const infra = infraReason(log, wallMs, pass);
@@ -945,12 +1174,34 @@ function run(args) {
     // say cannot be compared to anything later, including to itself.
     target: { provider: targetProvider, model: targetModel },
   };
+  if (activeNetFence !== null) {
+    activeNetFence.close();
+    activeNetFence = null;
+    console.log("net fence: rules removed");
+  }
   writeArtifacts(args.out, report, args.minPairs);
   console.log(`\nG6 ${report.gate.verdict} (${report.gate.target}) — ${report.gate.note}`);
   process.exitCode = report.gate.verdict === "FAIL" ? 1 : 0;
 }
 
 const args = parseArgs(process.argv.slice(2));
+// A signal skips `exit` handlers, and a REJECT left behind is a trap for the
+// NEXT matrix: the host's own arm uid would keep an allowlist for an endpoint it
+// may no longer be running against. SIGKILL is the only unstoppable case, which
+// is why `openNetFence` also clears by uid before it adds.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    if (activeNetFence !== null) activeNetFence.close();
+    process.exit(130);
+  });
+}
+
+process.on("exit", () => {
+  // Leaking a REJECT rule would take this uid off the network for the whole
+  // host, including the next matrix — clean up even on a crash.
+  if (activeNetFence !== null) activeNetFence.close();
+});
+
 if (args.cmd === "prepare") prepare(args);
 else if (args.cmd === "run") run(args);
 else if (args.cmd === "report") republish(args);
