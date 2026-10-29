@@ -190,7 +190,8 @@ curl -s -X POST http://127.0.0.1:3080/api/dsh-engram/import \
 | `0.8.0`–`0.8.5` | 本地 | 同 `0.5.0` —— 证据化 procedure、导出 DSH Skill、subagent 交接胶囊、审批门 + GUI、记忆行文件信号（`⚠file-changed`/`⚠file-missing`）、G6 门改单边 + 隐藏规格语料（Δ=+58.3pp） | 同 `0.5.0` |
 | `0.8.6`（npm） | 已发布 | 同 `0.5.0` —— 修 issue #9：宿主不暴露 `sessionQuery`/`snapshotEvents` 时退回 `seq`+`eventAt` 逐条读，四项注入特性不再静默休眠；warn 报出宿主 surface；G6 第五轮 Δ=+90.0pp | 同 `0.5.0` |
 | `0.8.7`（npm） | 已发布 | 同 `0.5.0` —— 推送腿落盘（`$DSH_HOME/engram/push-legs.jsonl`）+ `status` 打印事件日志读法；`minimal` 预设不再承诺永远不会发生的自动接管 | 同 `0.5.0` |
-| `0.8.8`（本期 / this release） | 本地 | 同 `0.5.0` —— 修推送腿遥测写错目录（`engram/engram/`）导致状态显示「还没记录」；`pushLegsPath` 契约写死在一处 | 同 `0.5.0` |
+| `0.8.8` | 本地 | 同 `0.5.0` —— 修推送腿遥测写错目录（`engram/engram/`）导致状态显示「还没记录」；`pushLegsPath` 契约写死在一处 | 同 `0.5.0` |
+| `0.9.0`（本期 / this release） | 本地（tag，未发 npm） | 同 `0.5.0` —— 产品代码只有一条 CLI 修复（`--presets-dir` 优先）；主体是评测：G6 网络围栏（per-uid 出网白名单 + 两条前置探针）、密钥语料第 4 条自证、污染三分类与重算、G7 实测 0.2956%。**不是 1.0**：宿主仍 rc、G1 未测、减法债未还 | 同 `0.5.0` |
 
 ### API 族断裂点:`0.1.2-alpha.2`
 
