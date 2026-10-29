@@ -1,0 +1,397 @@
+{
+  "startedAt": 1793239948388,
+  "seedMemory": "/d1/chuxiong/code/dsh-loom/eval/g6/local/r9/seed-memory.json",
+  "finishedAt": 1793247228446,
+  "seeds": 2,
+  "tasks": [
+    "codec",
+    "errcode",
+    "money",
+    "ranking",
+    "pad",
+    "window",
+    "dedupe",
+    "quote",
+    "retry"
+  ],
+  "arms": [
+    "p-a",
+    "p-b"
+  ],
+  "summary": {
+    "p-a": {
+      "runs": 18,
+      "passes": 18,
+      "rate": 1,
+      "meanWallMs": 177126
+    },
+    "p-b": {
+      "runs": 18,
+      "passes": 0,
+      "rate": 0,
+      "meanWallMs": 227020
+    }
+  },
+  "hideStoreFor": null,
+  "contaminated": 0,
+  "notBlindExcluded": 0,
+  "infraRows": 0,
+  "paired": {
+    "pairs": 18,
+    "onlyA": 18,
+    "onlyB": 0
+  },
+  "deltaPp": 100,
+  "gate": {
+    "id": "G6",
+    "target": "Δ ≥ −2pp",
+    "minPairs": 10,
+    "verdict": "PASS",
+    "note": "p-a 高 100.0pp — 记忆带去了可用的信息"
+  },
+  "rows": [
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "4490a7d6",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 585399
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "21058bf3",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 330973
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "196cc62a",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 138641
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "1e1e7f56",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 79397
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "6fd20d53",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 328878
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "75f0202e",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 362823
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "70b83c0e",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 145568
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "41266712",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 47676
+    },
+    {
+      "task": "pad",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "afc11e60",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 540146
+    },
+    {
+      "task": "pad",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "cc2b27ec",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 57780
+    },
+    {
+      "task": "window",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "d6c1edc6",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 73230
+    },
+    {
+      "task": "window",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "fb105371",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 77489
+    },
+    {
+      "task": "dedupe",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "a258e5d9",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 276198
+    },
+    {
+      "task": "dedupe",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "b3b62571",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 128114
+    },
+    {
+      "task": "quote",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "a870ee14",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 163241
+    },
+    {
+      "task": "quote",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "e2ecede9",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 578814
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "p-b",
+      "runKey": "2e2f1b59",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 123642
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "p-b",
+      "runKey": "c6e172ee",
+      "pass": false,
+      "exit": 0,
+      "wallMs": 48358
+    },
+    {
+      "task": "codec",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "27285460",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 223571
+    },
+    {
+      "task": "codec",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "24538581",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 203548
+    },
+    {
+      "task": "errcode",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "fa6435f4",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 63509
+    },
+    {
+      "task": "errcode",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "5f6ed96f",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 73104
+    },
+    {
+      "task": "money",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "0c4eeacc",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 276500
+    },
+    {
+      "task": "money",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "13d8d486",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 165015
+    },
+    {
+      "task": "ranking",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "81163317",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 109685
+    },
+    {
+      "task": "ranking",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "1f39f813",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 140146
+    },
+    {
+      "task": "pad",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "5dd091bd",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 47822
+    },
+    {
+      "task": "pad",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "d00fc77a",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 45261
+    },
+    {
+      "task": "window",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "e46b7b7c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 96469
+    },
+    {
+      "task": "window",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "0369d840",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 178041
+    },
+    {
+      "task": "dedupe",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "2a2b5df1",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 192728
+    },
+    {
+      "task": "dedupe",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "ba3be84b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 309645
+    },
+    {
+      "task": "quote",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "56f1104b",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 169205
+    },
+    {
+      "task": "quote",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "746635a8",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 227436
+    },
+    {
+      "task": "retry",
+      "seed": 0,
+      "arm": "p-a",
+      "runKey": "7eb8be9c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 374593
+    },
+    {
+      "task": "retry",
+      "seed": 1,
+      "arm": "p-a",
+      "runKey": "a8cf4f1c",
+      "pass": true,
+      "exit": 0,
+      "wallMs": 291997
+    }
+  ],
+  "armLabels": {
+    "arm-a": "p-a",
+    "arm-b": "p-b"
+  },
+  "target": {
+    "provider": "local-vllm-61",
+    "model": "deepseek-v4.1-flash-1017"
+  },
+  "classes": {
+    "infra": 0,
+    "changed": 0,
+    "contamination": 0
+  },
+  "reclassified": {
+    "at": 1793247368961,
+    "netFence": true,
+    "leakRule": "classifyLeak"
+  },
+  "recomputedAt": 1793247368961
+}

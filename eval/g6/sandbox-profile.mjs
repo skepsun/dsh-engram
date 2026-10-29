@@ -85,8 +85,14 @@ function variants(entry) {
  */
 export const NEUTRAL_ROOT = "/srv/g6";
 export const NETFENCE_UID = "g6arm";
-/** Where the per-run secret env file appears inside the fence (in the run's HOME). */
-export const NET_ENV_FILE = "/srv/g6/home/.netenv";
+/**
+ * Where the per-run secret env file appears inside the fence.
+ *
+ * Not in $HOME: a control that lists its home directory sees every entry there,
+ * and one of them literally read `.netenv` and reasoned about "the harness".
+ * A dedicated read-only bind keeps $HOME empty and gives the arm no signboard.
+ */
+export const NET_ENV_FILE = "/srv/g6/env";
 
 /** Where a path the arm may read/write lives once the uid has been dropped. */
 export function neutralPath(kind) {
@@ -361,7 +367,7 @@ export function buildBwrapArgs({
  * at NEUTRAL_ROOT instead, and the real home is tmpfs'd away as before — which
  * also means the sibling arm's home is not merely hidden but absent.
  */
-function buildNetBwrapArgs({ home, toolchain, armHome, ws, runTmp, runHome, repo = null, docsToHide = [] }) {
+function buildNetBwrapArgs({ home, toolchain, armHome, ws, runTmp, runHome, envFile = null, repo = null, docsToHide = [] }) {
   const exists = (entry) => entry !== null && entry !== undefined && entry !== "" && fs.existsSync(entry);
   return [
     "--ro-bind", "/", "/",
@@ -382,6 +388,8 @@ function buildNetBwrapArgs({ home, toolchain, armHome, ws, runTmp, runHome, repo
     // This arm's own DSH_HOME (the ARM HOME, which holds profiles/<arm>), and
     // only this one: dsh resolves `--profile` under it.
     "--bind", armHome, neutralPath("arm"),
+    // The one credential, as a read-only single-file bind outside $HOME.
+    ...(typeof envFile === "string" && envFile !== "" && fs.existsSync(envFile) ? ["--ro-bind", envFile, NET_ENV_FILE] : []),
     // The workspace is the only tree the arm may also write.
     "--bind", ws, neutralPath("ws"),
     ...(exists(repo) && !repo.startsWith(`${home}${path.sep}`) ? ["--tmpfs", repo] : []),
@@ -562,7 +570,7 @@ export function fenceCommand({ platform = process.platform, cmd, argv, ...dims }
       throw new Error(`net fence: toolchain root ${toolchain} does not exist — the arm would exec a path that is not mounted`);
     }
     const armHome = dims.armHome ?? path.dirname(path.dirname(dims.dshHome));
-    const plan = buildNetBwrapArgs({ ...dims, toolchain, armHome, runTmp, runHome });
+    const plan = buildNetBwrapArgs({ ...dims, toolchain, armHome, runTmp, runHome, envFile: dims.net.envFile });
     const neutralCmd = neutralizePath(cmd, {
       home: dims.home ?? os.homedir(),
       props: { armHome, dshHome: dims.dshHome, ws: dims.ws, toolchain },

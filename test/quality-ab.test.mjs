@@ -450,3 +450,14 @@ test("a run's own path does not name its arm, its task or its seed", () => {
     assert.ok(!dirs.includes(forbidden), `${forbidden} must not be a directory name`);
   }
 });
+
+test("classifyLeak: trying to reach the network is not blindness loss under a fence", async () => {
+  const { classifyLeak } = await import("../eval/quality-ab.mjs");
+  const looked = "let me curl -I https://example.com and grep.app for the convention";
+  assert.equal(classifyLeak(looked, { netFence: false }), "network", "without a fence, going looking is contamination");
+  assert.equal(classifyLeak(looked, { netFence: true }), null, "with a fence the fetch cannot complete, so the attempt is not a leak");
+  // A memory block in the bare arm is fatal either way: the fence has no opinion
+  // about a mount that was never supposed to be there.
+  assert.equal(classifyLeak("## [ENGRAM] 3 memories", { netFence: true }), "memory");
+  assert.equal(classifyLeak("see runs.json", { netFence: true }), "artifact");
+});

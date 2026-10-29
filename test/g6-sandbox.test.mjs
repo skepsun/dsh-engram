@@ -204,6 +204,8 @@ test("the net fence mounts one arm at a neutral root and drops the uid", async (
   const toolchain = fs.mkdtempSync("/tmp/g6-tc-");
   fs.mkdirSync(path.join(toolchain, "bin"));
   fs.writeFileSync(path.join(toolchain, "bin", "dsh"), "#!/bin/sh\n");
+  const envFile = path.join(toolchain, "netenv");
+  fs.writeFileSync(envFile, "LOCAL_VLLM_61_API_KEY=k-123\n");
   const fence = fenceCommand({
     platform: "linux",
     cmd: `${toolchain}/bin/dsh`,
@@ -219,7 +221,7 @@ test("the net fence mounts one arm at a neutral root and drops the uid", async (
     credentials: "/home/op/.dsh/.credentials.yaml",
     repo: "/home/op/code/repo",
     toolPaths: [],
-    net: { uid: 1016, runTmp: "/home/op/code/repo/eval/g6/runs/abc/tmp", runHome: "/home/op/code/repo/eval/g6/runs/abc/home", envFile: "/home/op/code/repo/eval/g6/runs/abc/home/.netenv" },
+    net: { uid: 1016, runTmp: "/home/op/code/repo/eval/g6/runs/abc/tmp", runHome: "/home/op/code/repo/eval/g6/runs/abc/home", envFile: path.join(toolchain, "netenv") },
     baseEnv: { LOCAL_VLLM_61_API_KEY: "k-123", PATH: "/home/op/.npm-global/bin:/usr/bin", DSH_SESSION_ID: "leak" },
   });
   assert.equal(fence.cmd, "/usr/bin/sudo");
@@ -251,7 +253,8 @@ test("the net fence mounts one arm at a neutral root and drops the uid", async (
   // user, so a key there is a key published. It is sourced from a 0600 file in
   // the run's own $HOME instead, and the wrapper proves it.
   assert.ok(!line.includes("k-123"), "the credential must never appear in argv");
-  assert.ok(line.includes(". /srv/g6/home/.netenv;"), "the wrapper sources the secret file");
+  assert.ok(line.includes(". /srv/g6/env;"), "the wrapper sources the secret file");
+  assert.ok(line.includes(`--ro-bind ${envFile} /srv/g6/env`), "the secret is a single read-only bind, not a file in $HOME");
   const keys = (await import("../eval/g6/sandbox-profile.mjs")).netFenceSecretLines({ base: { LOCAL_VLLM_61_API_KEY: "k-123", DEEPSEEK_API_KEY: "paid" }, provider: "local-vllm-61" });
   assert.deepEqual(keys, ["LOCAL_VLLM_61_API_KEY=k-123"], "only the arm's own provider key travels — never the paid API's");
 });

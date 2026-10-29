@@ -1,4 +1,4 @@
-# 门审计（gate audit）· 2026-10-28
+# 门审计（gate audit）· 2026-10-29
 
 窗口：最近 14 天 · 扫描 14 个会话（其中 6 个装了 engram；"用过任意工具"的会话 8 个）· 账本行 6 条
 
@@ -10,22 +10,22 @@
 | G2b | Push · [RECALL] 注入命中会话占比 | 83.3% | 观测项（无预声明门） | **—** | 5/6 installed sessions carry a [RECALL] block in their prompt |
 | G2c | Push opportunity · 有记忆可推的会话里推送腿渲染占比 | 83.3% | 观测项（无预声明门） | **—** | 5/6 sessions whose workspace has ≥1 memory |
 | G3 | DrillRate · detail / recall-with-hits | 0.00 | 观测项（推送是否被采纳） | **—** | 0 detail / 4 recall-with-hits |
-| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/364 memories (6 tagged stale) |
+| G4 | StaleRate · 被 supersede 的行占比 | 0.0% | < 1% | **PASS** | 0/369 memories (6 tagged stale) |
 | G5 | 索引 ≤ 700 chars | 未测 | ≤ 700c | **未测** | pass --api <base>?workspace=<ws> to read the rendered block size |
-| G6 | Quality Δ · 配对任务成功率差 | 100.0pp | Δ ≥ −2pp | **PASS** | 18 对配对 · 9 任务 × 2 种子 · eval/g6/runs/r8-local/runs.json |
+| G6 | Quality Δ · 配对任务成功率差 | 100.0pp | Δ ≥ −2pp | **PASS** | 18 对配对 · 9 任务 × 2 种子 · eval/g6/runs/r9-net/runs.json |
 | G7 | 账本自身开销 | 未测 | < 0.5% 请求时延 | **未测** | run `npm run bench:ledger` and pass --g7 <pct> |
 
 ## 账本合计
 
-- injected 5,382,690c（≈1,345,673 tok）· avoided 0c（≈0 tok）
+- injected 5,850,956c（≈1,462,739 tok）· avoided 0c（≈0 tok）
 - rewrites 0 次 / 0c（按 cacheDiscount 计罚 0c）
-- **net -5,382,690c ≈ -1,345,672 tok**；开源会话 6 条，其中净收益为正 0 条
+- **net -5,850,956c ≈ -1,462,739 tok**；开源会话 6 条，其中净收益为正 0 条
 
 ## 最近会话（按会话落行）
 
 | session | requests | injected | avoided | net | workspace |
 |---|---|---|---|---|---|
-| session-de86a1… | 580 | 1,050,866c | 0c | -1,050,866c | dsh-loom |
+| session-de86a1… | 820 | 1,519,132c | 0c | -1,519,132c | dsh-loom |
 | session-c0c6f9… | 160 | 339,571c | 0c | -339,571c | Kototoro |
 | b6ded7c9-6408-… | 1 | 742c | 0c | -742c | Kototoro |
 | 03760170-ce43-… | 2 | 2,780c | 0c | -2,780c | Kototoro |

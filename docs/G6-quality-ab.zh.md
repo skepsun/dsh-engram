@@ -999,3 +999,48 @@ node eval/quality-ab.mjs run … --sandbox --net-fence --net-endpoint 172.27.221
   就没有按 uid 的过滤；harness 会把 `sudo -n` 的失败当成硬错误，不会静默降级成"无围栏"。
 - 还剩：uid 是宿主机级的（`g6arm`，1016）。同一台机器上并发的两轮矩阵会共用这个 uid
   和它的规则集，所以**同一时刻只跑一轮带围栏的矩阵**。
+
+### 16.6 第九轮：带围栏的一整轮（2026-10-29 10:12–12:12）
+
+`eval/g6/runs/r9-net/`，同一把密钥重新编译的第九轮（9 任务 × 2 seed × 2 臂 = 36 行），
+`--sandbox --net-fence --net-endpoint 172.27.221.61:8003 --control-first`。
+
+开场三行日志（不合格就不会有这一轮）：
+
+```
+net fence: uid 1016 → endpoint reachable (401), github 000, dns dead
+net fence: uid 1016 can write the workspace (probed)
+…
+net fence: rules removed
+```
+
+| 臂 | 通过 | 比例 | 平均墙钟 |
+|---|---|---|---|
+| p-a（挂 engram） | 18/18 | 100.0% | 177.1s |
+| p-b（裸） | 0/18 | 0.0% | 227.0s |
+
+Δ = **+100.0pp**（18 对配对，only-p-a 18，only-p-b 0），闸门 PASS，`infraRows 0`，
+`contaminated 0`。
+
+**围栏在这一轮里真的被撞过。** 18 份控制日志里有 4 份试图出网，原话分别是
+"`curl -I https://example.com` … if network works, I could search GitHub for the eval repo"
+和"`grep.app` / `github.com/search`"。它们全部失败（`exit 124`、`network unavailable`），
+没有任何一行是从外面拿回信息后通过的——这正是 §14.5 那两个"查到答案"的行的反面。
+
+**这 4 行一度被判"控制臂不盲"。** 检测器是第七轮写的，那时 `curl` 意味着"可能查到了"；
+在已经用探针证明出网不可达的围栏里，`curl` 只意味着"试过、出不去"。这是**检测器口径**的问题，
+不是围栏漏了。处理方式是重新计算而不是手改文件：`quality-ab.mjs classify` 用同一批日志、
+按新口径（`classifyLeak(log, {netFence})`，围栏下只认"看到了记忆块"和"读到了答案文件"）
+重新判定，`classes.contamination: 4` 就是这个撤销的痕迹。撤销前后 Δ 都是 +100pp
+（这 4 行本来就是控制臂失败行，剔除只是少了 4 对配对）。
+
+**墙钟变慢是围栏的代价，不是质量信号**：p-a 从第八轮的 94.9s 涨到 177.1s，
+p-b 从 117.6s 涨到 227.0s。多出来的是每行重搭挂载树、掉 uid、冷 `/tmp`，
+以及臂花在"网络不通"上的试探时间。G6 只认 check 的退出码。
+
+**和第八轮不可比**（约定不同：`--name r9` 是另一抽），能跨轮说的仍只有那一句：
+第八轮控制臂查不到答案（语料密钥化），第九轮控制臂**出不去**（网络围栏）。
+
+**这一轮顺带修掉的语料 bug**（§16.4）：`retry` 的 stub 签名与 prompt 冲突、`ranking`/`dedupe`
+的 stub 导出名与 prompt 不一致。它们不改变"处理臂 18/18"这个结论，但改变这个结论的**成色**——
+一份靠"猜哪份文档算数"得来的通过不是证据。修完之后 p-a 在 `retry` 上两 seed 全过（374.6s / 292.0s）。

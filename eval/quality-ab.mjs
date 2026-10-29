@@ -20,6 +20,12 @@
  *
  * `check` must exit 0 for a pass. `setup` runs in the copied workspace before
  * the agent starts, so one fixture can serve many tasks.
+ *
+ * With `--sandbox`, the arm runs inside an OS-level fence (bwrap on Linux,
+ * sandbox-exec on macOS). With `--sandbox --net-fence --net-endpoint HOST:PORT`
+ * it ALSO runs as a dedicated uid that can reach nothing but that endpoint: the
+ * filesystem fence has no opinion about the network, and a control arm that can
+ * `git clone` the answers is not a control (docs/G6-quality-ab.zh.md §16).
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -504,16 +510,44 @@ function reclassify(args) {
   const previous = JSON.parse(fs.readFileSync(file, "utf8"));
   const logDir = args.logDir ?? path.join(args.out, "logs");
   let changed = 0;
+  let leaksChanged = 0;
+  const fenced = args.netFence === true || previous.netFence != null;
+  // `arms[0]` is the TREATMENT (the run's own rule is `arm !== args.arms[0]`);
+  // reading it the other way round flagged 16 treatment rows for mentioning the
+  // memory they were given, which is the one thing those rows are supposed to do.
+  const controlArm = previous.arms?.[1] ?? null;
   const rows = previous.rows.map((row) => {
     const logPath = path.join(logDir, row.arm, row.task, `seed-${row.seed}.log`);
     if (!fs.existsSync(logPath)) return row;
-    const reason = infraReason(fs.readFileSync(logPath, "utf8"), row.wallMs, row.pass);
+    const log = fs.readFileSync(logPath, "utf8");
+    let next = { ...row };
+    const reason = infraReason(log, row.wallMs, row.pass);
     const was = row.infra === undefined;
-    if ((reason === null) === was) return row;
-    changed += 1;
-    const next = { ...row };
-    if (reason === null) delete next.infra;
-    else next.infra = reason;
+    if ((reason === null) !== was) {
+      changed += 1;
+      if (reason === null) delete next.infra;
+      else next.infra = reason;
+    }
+    // Contamination is re-derived from the same logs, under today's rules. Round
+    // 9 was scored by a detector that counted a failed `curl` as blindness loss;
+    // the fence makes that attempt worthless, so the flag has to be withdrawn —
+    // and the withdrawal has to be a recomputation, not a hand edit of the file.
+    const leak = row.arm === controlArm ? classifyLeak(log, { netFence: fenced }) : null;
+    // Compare the FLAG, not the reason: the round-9 artifact predates the `leak`
+    // field, so `row.leak` is undefined on every row and comparing reasons alone
+    // would leave all four flags in place while reporting "0 re-labelled".
+    if ((row.contaminated === true) !== (leak !== null)) {
+      leaksChanged += 1;
+      if (leak === null) {
+        delete next.contaminated;
+        delete next.leak;
+      } else {
+        next.contaminated = true;
+        next.leak = leak;
+      }
+    } else if (leak !== null) {
+      next.leak = leak;
+    }
     return next;
   });
   const { summary, pairs, deltaPp, gate } = analyze({ rows, tasks: previous.tasks.map((id) => ({ id })), seeds: previous.seeds, arms: previous.arms, minPairs: args.minPairs });
@@ -531,12 +565,22 @@ function reclassify(args) {
     paired: { pairs: pairs.length, onlyA: pairs.filter((p) => p.a && !p.b).length, onlyB: pairs.filter((p) => !p.a && p.b).length },
     deltaPp,
     gate,
-    classes: { infra: gate.infraExcluded ?? 0, changed },
+    classes: { infra: gate.infraExcluded ?? 0, changed, contamination: leaksChanged },
+    // A control-only rule applied to the wrong arm is not a subtle bug: it turns
+    // every honest treatment row into "not blind". Refuse to write that.
+    ...(rows.some((row) => row.contaminated === true && row.arm !== controlArm)
+      ? (() => { throw new Error(`classify flagged a non-control arm (control is ${controlArm}) — refusing to publish`); })()
+      : {}),
+    reclassified: { at: Date.now(), netFence: fenced, leakRule: "classifyLeak" },
     // `partial` belongs to the incremental writes; a finished matrix that is only
     // being re-classified is not partial, and the contamination count must come
     // from the rows rather than from whichever snapshot this file started as.
     partial: undefined,
     contaminated: rows.filter((row) => row.contaminated === true).length,
+    // The gate's own note is regenerated from the rows above; leaving the
+    // snapshot's count here made the dashboard quote "4 rows excluded" next to a
+    // recomputed verdict that excluded none.
+    notBlindExcluded: gate.notBlindExcluded ?? 0,
     infraRows: rows.filter((row) => row.infra !== undefined).length,
     ...(target === null ? {} : { target }),
     recomputedAt: Date.now(),
@@ -684,6 +728,24 @@ function sudoRun(argv, { allowFailure = false } = {}) {
  * second (the seed, or the contamination scan). A chmod after each transplant
  * is cheaper than teaching every writer to be group-friendly.
  */
+/**
+ * Did a CONTROL row learn something it should not have?
+ *
+ * Two leaks, and they are not equal. `memory` means the bare arm somehow saw a
+ * memory block — always fatal. `network` means it went looking for the answers
+ * on the internet, which was fatal in round 7 (it found them) and is worthless
+ * under `--net-fence`, where the probe has already proved the fetch cannot
+ * complete. Round 9 flagged four control rows for typing `curl` and `grep.app`;
+ * they are attempts, not acquisitions, and counting them as blindness loss
+ * would punish the arm for testing its own cage.
+ */
+export function classifyLeak(log, { netFence = false } = {}) {
+  if (/dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]/.test(log)) return "memory";
+  if (/runs\.json|REPORT\.md/.test(log)) return "artifact";
+  if (netFence) return null;
+  return /\bcurl\s|git clone|grep\.app|raw\.githubusercontent|github\.com\/search/.test(log) ? "network" : null;
+}
+
 function openUpArmHome(home) {
   sudoRun(["chmod", "-R", "a+rwX", home]);
 }
@@ -885,6 +947,10 @@ function run(args) {
       tasks: tasks.map((task) => task.id),
       arms,
       hideStoreFor: args.hideStoreFor ?? null,
+      // Provenance: "was the network fence on" decides how a `curl` in a control
+      // log must be read (attempt vs acquisition), so the artifact has to carry
+      // it rather than have a future reader infer it from the code's default.
+      netFence: netFence === null ? null : { endpoint: `${netFence.endpoint.host}:${netFence.endpoint.port}`, uid: netFence.uid },
       partial: true,
       rows: [...priorRows, ...rows],
       armLabels: { "arm-a": arms[0], "arm-b": arms[1] },
@@ -1045,7 +1111,9 @@ function run(args) {
           const runHome = path.join(dir, "home");
           for (const sub of [runTmp, runHome]) fs.mkdirSync(sub, { recursive: true });
           // The key lives here, not in argv: `ps` is world-readable.
-          const envFile = path.join(runHome, ".netenv");
+          // Outside $HOME on purpose: the arm can list its home, and a file
+          // named `.netenv` there tells it more about this harness than it needs.
+          const envFile = path.join(dir, "netenv");
           const lines = netFenceSecretLines({ base: env, provider: netFence.provider });
           if (lines.length === 0) throw new Error(`net fence: no credential for provider ${netFence.provider} — refusing to run an arm that cannot authenticate`);
           fs.writeFileSync(envFile, `${lines.join("\n")}\n`, { mode: 0o600 });
@@ -1136,10 +1204,10 @@ function run(args) {
         // contamination scan below reads them as this uid, and the next row
         // scrubs them.
         if (netFence !== null) openUpArmHome(homeForArm);
-        const contaminated = arm !== args.arms?.[0] &&
-          /dsh_engram(\.json)?|engram_recall|\[ENGRAM\]|ab-engram[\/]|runs\.json|REPORT\.md|\bcurl\s|git clone|grep\.app|raw\.githubusercontent|github\.com\/search/.test(log);
+        const leak = arm === args.arms?.[0] ? null : classifyLeak(log, { netFence: netFence !== null });
+        const contaminated = leak !== null;
         const infra = infraReason(log, wallMs, pass);
-        rows.push({ task: task.id, seed, arm, runKey, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true } : {}), ...(infra === null ? {} : { infra }) });
+        rows.push({ task: task.id, seed, arm, runKey, pass, exit: res.status, wallMs, ...(contaminated ? { contaminated: true, leak } : {}), ...(infra === null ? {} : { infra }) });
         snapshotRows();
         console.log(`${pass ? "PASS" : "fail"}  ${task.id} seed=${seed} arm=${arm} ${(wallMs / 1000).toFixed(1)}s`);
       }
@@ -1184,7 +1252,11 @@ function run(args) {
   process.exitCode = report.gate.verdict === "FAIL" ? 1 : 0;
 }
 
-const args = parseArgs(process.argv.slice(2));
+// Importable for its pure helpers (the tests import `classifyLeak`): dispatching
+// on argv at import time would `process.exit(2)` inside a test runner.
+const invokedDirectly = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+
+const args = invokedDirectly ? parseArgs(process.argv.slice(2)) : { cmd: "imported" };
 // A signal skips `exit` handlers, and a REJECT left behind is a trap for the
 // NEXT matrix: the host's own arm uid would keep an allowlist for an endpoint it
 // may no longer be running against. SIGKILL is the only unstoppable case, which
@@ -1204,6 +1276,7 @@ process.on("exit", () => {
 
 if (args.cmd === "prepare") prepare(args);
 else if (args.cmd === "run") run(args);
+else if (args.cmd === "imported") { /* imported for its helpers: nothing to run */ }
 else if (args.cmd === "report") republish(args);
 else if (args.cmd === "classify") reclassify(args);
 else {
