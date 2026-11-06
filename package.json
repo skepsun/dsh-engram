@@ -46,6 +46,8 @@
     "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor",
     "eval": "node eval/recall-bench.mjs",
     "gate:audit": "node eval/gate-audit.mjs",
+    "i18n:check": "node tools/i18n/wrap.mjs --check",
+    "i18n:wrap": "node tools/i18n/wrap.mjs",
     "playbook:audit": "node eval/playbook-audit.mjs",
     "prepublishOnly": "node scripts/prepublish-check.mjs",
     "quality:ab": "node eval/quality-ab.mjs",
