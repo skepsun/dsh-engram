@@ -4,6 +4,8 @@
  * WebSocket. Every endpoint is loopback-fenced on the host side.
  */
 
+import { activeLocale } from "./i18n";
+
 export const API_PREFIX = "/api/dsh-engram";
 
 export interface MemoryRecord {
@@ -424,7 +426,10 @@ export class EngramApi {
   }
 
   async model(workspace = ""): Promise<{ model: MentalModelRecord }> {
-    return readJson(await fetch(`${API_PREFIX}/model${query({ workspace })}`));
+    // The standing summary is rendered server-side: ask for the GUI language.
+    // The cached row and the esr_model tool output stay language-neutral (zh).
+    const lang = activeLocale().toLowerCase().startsWith("ru") ? "ru" : "zh";
+    return readJson(await fetch(`${API_PREFIX}/model${query({ workspace, lang })}`));
   }
 
   async stats(workspace?: string): Promise<EngramStats> {

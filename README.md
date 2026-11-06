@@ -1297,6 +1297,11 @@ typecheck installs — has no JS AST API); install it locally with
 `tr("已沉淀 {0} 项", { "0": n })`, so translations may reorder placeholders.
 A second language is one dictionary file plus an entry in `ctx.locale.register`.
 
+Host-rendered GUI text uses the same idea at the API boundary: the standing
+summary (`/api/dsh-engram/model`) accepts `?lang=` and renders on demand, while
+the cached row and the `esr_model` tool keep their default copy — the
+model-facing output never changes with the browser language.
+
 ## Development
 
 ```sh

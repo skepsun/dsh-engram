@@ -86,6 +86,24 @@ test("compileSummary covers tasks / graph / observations / memory kinds", async 
   assert.match(content, /未闭环风险/);
 });
 
+test("compileSummary renders the GUI language on request, without changing the default", async () => {
+  const domain = await seed();
+  const now = Date.now();
+  const ru = compileSummary(domain, "/ws/A", { now, lang: "ru" });
+  assert.match(ru, /Задачи: 1 в работе \(0 готовы\) · закрыто: 0/);
+  assert.match(ru, /Граф сущностей: узлов 1 · связей 0/);
+  assert.match(ru, /Наблюдения: 1 · доказательств всего: 2/);
+  assert.match(ru, /Память: 2/);
+  assert.match(ru, /Ключевые убеждения/);
+  assert.match(ru, /Незакрытые риски/);
+  assert.doesNotMatch(ru, /常驻摘要|任务：/, "no Chinese leak in the Russian rendering");
+  const global = compileSummary(domain, "", { now, lang: "ru" });
+  assert.match(global, /^## Все пространства · постоянная сводка/);
+  // The default (cached row / esr_model tool) rendering is untouched.
+  const zh = compileSummary(domain, "", { now });
+  assert.match(zh, /^## 全部工作区 · 常驻摘要/);
+});
+
 test("empty workspace yields a healthy placeholder summary", () => {
   const domain = { summarize: () => ({ workspaces: {}, totals: { memories: 0, tasks: 0, links: 0, nodes: 0, observations: 0 } }), listTasks: () => [], listObservations: () => [], listMemories: () => [] };
   const content = compileSummary(domain, "", { now: Date.now() });
