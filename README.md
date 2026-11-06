@@ -1266,6 +1266,37 @@ Defaults are token-conscious; override any key via the profile patch
     esrOrder: 41
 ```
 
+## Localization
+
+The client UI (composer dock, ESR board, memory viewer, telemetry, config card)
+renders through a message catalog keyed by the **Chinese source text**
+(gettext-style msgid):
+
+- `client/src/i18n/index.ts` — `tr(key, params)` + `installTranslator`; an
+  unknown key renders the Chinese source, so untranslated copy degrades to the
+  original instead of a `missing.key` placeholder.
+- `client/src/i18n/ru.ts` — Russian catalog (the language layer this fork adds).
+- `client/src/entry.tsx` registers `{ zh, en, ru }` with the DSH locale service;
+  at runtime `tr()` follows the active locale's fallback chain, and the shared
+  `esrModel` date formatting uses the active locale tag.
+
+`zh`/`en` behaviour is unchanged: the English dictionary still carries only the
+three shell-level keys (`nav` / `refresh` / `error`), and msgid copy falls back
+to Chinese exactly as before this layer existed.
+
+Maintaining copy:
+
+```sh
+npm run i18n:wrap   # wrap new Chinese strings in tr(...) and refresh ru.ts
+npm run i18n:check  # fail on unwrapped copy or empty catalog entries
+```
+
+`i18n:wrap` needs the TypeScript 5 compiler API (TypeScript 7 — what the client
+typecheck installs — has no JS AST API); install it locally with
+`cd tools/.toolchain && npm install`. Template literals become
+`tr("已沉淀 {0} 项", { "0": n })`, so translations may reorder placeholders.
+A second language is one dictionary file plus an entry in `ctx.locale.register`.
+
 ## Development
 
 ```sh

@@ -886,6 +886,32 @@ promote: 2 pending todo(s) vs 1 ESR task(s) — esr_task(name="…") #suggest-pr
     esrOrder: 41
 ```
 
+## 本地化
+
+客户端界面（输入框上方任务条、ESR 看板、记忆查看器、遥测、配置卡）通过按
+**中文源文本**（gettext 式 msgid）索引的消息目录渲染：
+
+- `client/src/i18n/index.ts` —— `tr(key, params)` 与 `installTranslator`；缺少条目时
+  直接回退到中文源文本，而不是 `missing.key`。
+- `client/src/i18n/ru.ts` —— 俄语目录。
+- `client/src/entry.tsx` 通过 DSH locale 服务注册 `{ zh, en, ru }`；运行时 `tr()`
+  沿当前语言的 fallback 链查找，`esrModel` 的日期格式也使用当前语言。
+
+`zh`/`en` 行为不变：英文词典仍只有 `nav` / `refresh` / `error` 三个键，msgid
+文案与之前的回退行为完全一致。
+
+维护文案：
+
+```sh
+npm run i18n:wrap   # 把新增中文串包进 tr(...)，并刷新 ru.ts
+npm run i18n:check  # 未包裹的文案或空翻译会失败
+```
+
+`i18n:wrap` 需要 TypeScript 5 编译器 API（客户端 typecheck 安装的 TypeScript 7
+已无 JS AST API）：`cd tools/.toolchain && npm install`。模板字符串会转成
+`tr("已沉淀 {0} 项", { "0": n })`，翻译可以调整占位符顺序。新增一种语言 = 一个
+词典文件 + `ctx.locale.register` 中的一项。
+
 ## 开发
 
 ```sh
