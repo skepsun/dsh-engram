@@ -25,6 +25,7 @@ import type { EngramApi, EngramConfig, EngramOverview, ImportReport, MemoryRecor
 import { useEngramTheme } from "./theme";
 import { POLL_MS, taskGaps } from "./esrModel";
 
+import { tr } from "./i18n";
 export interface EngramSectionFace {
   api: EngramApi;
   t: (key: string) => string;
@@ -52,15 +53,16 @@ const KIND_COLORS: Record<string, string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
-  preference: "偏好",
-  decision: "决定",
-  error: "错误",
-  procedure: "流程",
-  fact: "事实",
-  insight: "洞察",
-  handoff: "交接",
-  task: "任务",
+  preference: tr("偏好"),
+  decision: tr("决定"),
+  error: tr("错误"),
+  procedure: tr("流程"),
+  fact: tr("事实"),
+  insight: tr("洞察"),
+  handoff: tr("交接"),
+  task: tr("任务"),
 };
+const kindLabel = (kind: string): string => tr(KIND_LABEL[kind] ?? kind);
 
 const s = {
   root: { padding: "2px 4px 40px" },
@@ -455,7 +457,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
       setImportDump(JSON.parse(text) as unknown);
       setImportName(file.name);
     } catch (e) {
-      setDataError(`无法解析 ${file.name}：${e instanceof Error ? e.message : String(e)}`);
+      setDataError(tr("无法解析 {0}：{1}", { "0": file.name, "1": e instanceof Error ? e.message : String(e) }));
     }
   };
 
@@ -463,7 +465,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
   const runImport = async () => {
     if (importDump === null) return;
     if (importMode === "replace" && !importReplaceOk) {
-      setDataError("替换模式会先清空目标工作区 — 请先勾选确认");
+      setDataError(tr("替换模式会先清空目标工作区 — 请先勾选确认"));
       return;
     }
     setImportBusy(true);
@@ -555,7 +557,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
         memoryRefs: refs,
       });
       if (out.state === "active") {
-        setError(`证据仍有缺口：${(out.gaps ?? []).join(", ")}${out.artifactReason ? `（${out.artifactReason}）` : ""} — 任务保持 ACTIVE，补齐后再提交`);
+        setError(tr("证据仍有缺口：{0}{1} — 任务保持 ACTIVE，补齐后再提交", { "0": (out.gaps ?? []).join(", "), "1": out.artifactReason ? `（${out.artifactReason}）` : "" }));
       }
       setCloseFor(null);
       setCloseArtifact("");
@@ -575,7 +577,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
       setDetail({ kind: "memory", memory: m });
       setDetailNotice(null);
     } else {
-      setDetailNotice(`记忆 ${id} 不在当前加载列表 — 切换到「记忆」页加载后可用`);
+      setDetailNotice(tr("记忆 {0} 不在当前加载列表 — 切换到「记忆」页加载后可用", { "0": id }));
     }
   };
   const openTask = (id: string) => {
@@ -594,28 +596,27 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
   return (
     <div style={{ ...s.root, ...vars }}>
-      <h1 style={s.h1}>Engram 记忆</h1>
+      <h1 style={s.h1}>{tr("Engram 记忆")}</h1>
       <p style={s.sub}>
-        跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_engram.json
-      </p>
+        {tr("跨会话记忆 · 零 LLM 自动捕获 · 符号索引渐进披露 — 数据源 ~/.dsh/storages/dsh_engram.json")}</p>
 
       {error && <div style={s.error}>{t("error")}: {error}</div>}
 
       <div style={s.tabBar}>
-        <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>记忆</button>
-        <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>ESR（任务 · 节点 · 关系）</button>
-        <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>注入预览</button>
-        <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>遥测</button>
-        <button style={view === "config" ? s.tabActive : s.tab} onClick={() => setView("config")}>设置</button>
+        <button style={view === "mem" ? s.tabActive : s.tab} onClick={() => setView("mem")}>{tr("记忆")}</button>
+        <button style={view === "esr" ? s.tabActive : s.tab} onClick={() => setView("esr")}>{tr("ESR（任务 · 节点 · 关系）")}</button>
+        <button style={view === "preview" ? s.tabActive : s.tab} onClick={() => setView("preview")}>{tr("注入预览")}</button>
+        <button style={view === "telemetry" ? s.tabActive : s.tab} onClick={() => setView("telemetry")}>{tr("遥测")}</button>
+        <button style={view === "config" ? s.tabActive : s.tab} onClick={() => setView("config")}>{tr("设置")}</button>
       </div>
 
       {view !== "config" && (
       <div style={{ ...s.row, marginTop: 2 }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>工作区：</span>
+        <span style={{ fontWeight: 700, fontSize: 13 }}>{tr("工作区：")}</span>
         <select style={s.input} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
-          <option value="">全部工作区</option>
+          <option value="">{tr("全部工作区")}</option>
           {workspaces.map((ws) => (
-            <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} 条）</option>
+            <option key={ws} value={ws}>{ws}（{overview?.workspaces[ws]?.memories ?? 0} {tr(" 条）")}</option>
           ))}
         </select>
       </div>
@@ -627,16 +628,14 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
       {view === "mem" && approvals.length > 0 && (
         <div style={{ ...s.card, marginBottom: 12, borderColor: "#f0c36d" }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
-            Playbook 待批准（{approvals.filter((a) => !a.approved).length} 条 / 共 {approvals.length}）
-          </div>
+            {tr("Playbook 待批准（{0} 条 / 共 {1}）", { "0": approvals.filter((a) => !a.approved).length, "1": approvals.length })}</div>
           <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
-            证据已过关（≥3 次验证、14 天内）。写文件给宿主广告需要你点头 —— 证据证明命令跑通过，不证明指令是对的。
-            批准后：<code>npx dsh-engram skill export</code>。
+            {tr("证据已过关（≥3 次验证、14 天内）。写文件给宿主广告需要你点头 —— 证据证明命令跑通过，不证明指令是对的。 批准后：")}<code>npx dsh-engram skill export</code>。
           </div>
           {approvals.map((item) => (
             <div key={item.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", fontSize: 12 }}>
               <code style={{ fontWeight: 600 }}>{item.name}</code>
-              <span style={{ opacity: 0.7 }}>{item.id.slice(0, 8)} · 证据 {item.evidence} 次</span>
+              <span style={{ opacity: 0.7 }}>{item.id.slice(0, 8)} {tr(" · 证据 {0} 次", { "0": item.evidence })}</span>
               <span style={{ opacity: 0.7, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {item.description}
               </span>
@@ -645,7 +644,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
                 disabled={approvalBusy === item.id}
                 onClick={() => void toggleApproval(item)}
               >
-                {item.approved ? "撤销" : "批准"}
+                {item.approved ? tr("撤销") : tr("批准")}
               </button>
             </div>
           ))}
@@ -665,27 +664,27 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
           : null;
         return (
         <div style={s.stats}>
-          <StatCard num={String(memNum)} label={wsCounts ? "记忆 (active)" : "记忆 (active, 全局)"} />
-          <StatCard num={String(taskNum)} label={wsCounts ? "任务 (active)" : "任务 (active, 全局)"} />
-          <StatCard num={String(linkNum)} label={wsCounts ? "关系" : "关系 (全局)"} />
-          <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview.totals.nodes ?? 0))} label={wsCounts ? "节点" : "节点 (全局)"} />
-          <StatCard num={String(workspaces.length)} label="工作区" />
-          <StatCard num={String(overview.captures.total)} label="自动捕获" />
-          <StatCard num={String(overview.captures.preference ?? 0)} label="偏好捕获" />
+          <StatCard num={String(memNum)} label={wsCounts ? tr("记忆 (active)") : tr("记忆 (active, 全局)")} />
+          <StatCard num={String(taskNum)} label={wsCounts ? tr("任务 (active)") : tr("任务 (active, 全局)")} />
+          <StatCard num={String(linkNum)} label={wsCounts ? tr("关系") : tr("关系 (全局)")} />
+          <StatCard num={String(wsCounts ? (wsCounts.nodes ?? 0) : (overview.totals.nodes ?? 0))} label={wsCounts ? tr("节点") : tr("节点 (全局)")} />
+          <StatCard num={String(workspaces.length)} label={tr("工作区")} />
+          <StatCard num={String(overview.captures.total)} label={tr("自动捕获")} />
+          <StatCard num={String(overview.captures.preference ?? 0)} label={tr("偏好捕获")} />
           <StatCard
             num={indexCost ? `~${indexCost.tokens}` : "–"}
-            label="[ENGRAM] 索引 token / 工作区"
+            label={tr("[ENGRAM] 索引 token / 工作区")}
           />
           {gc && (
             <StatCard
               num={String(gc.archivedMemories + gc.archivedTasks)}
-              label={`GC 已归档 · 链接-${gc.removedLinks}`}
+              label={tr("GC 已归档 · 链接-{0}", { "0": gc.removedLinks })}
             />
           )}
           {ledgerBucket && (
             <StatCard
               num={signedTokens(ledgerBucket.netTokens)}
-              label={`上下文净 token · 请求 ${ledgerBucket.requests}`}
+              label={tr("上下文净 token · 请求 {0}", { "0": ledgerBucket.requests })}
             />
           )}
         </div>
@@ -694,26 +693,24 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
       <div style={s.subPanel}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>记忆 GC（pi-esr 约束）</span>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{tr("记忆 GC（pi-esr 约束）")}</span>
           <label style={{ fontSize: 12, display: "inline-flex", gap: 4, alignItems: "center" }}>
             <input type="checkbox" checked={gcDryRun} onChange={(e) => setGcDryRun(e.target.checked)} />
-            仅预览（dry run）
-          </label>
+            {tr("仅预览（dry run）")}</label>
           <button style={s.btnPrimary} onClick={() => void runGc()} disabled={gcRunning || !workspace}>
-            {gcRunning ? "…" : "运行 GC"}
+            {gcRunning ? "…" : tr("运行 GC")}
           </button>
           {gc && gc.lastRun > 0 && (
-            <span style={s.mono}>上次 {fmtDate(gc.lastRun)}</span>
+            <span style={s.mono}>{tr("上次 {0}", { "0": fmtDate(gc.lastRun) })}</span>
           )}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-          工作集（active 任务引用 / 任务记忆 / 已入索引命中）永不驱逐；TTL 过期归档、超容量淘汰、stable 任务超窗归档、悬空链接清理。只归档不硬删——条目 id 保持可重取。
-        </div>
+          {tr("工作集（active 任务引用 / 任务记忆 / 已入索引命中）永不驱逐；TTL 过期归档、超容量淘汰、stable 任务超窗归档、悬空链接清理。只归档不硬删——条目 id 保持可重取。")}</div>
         {gcReport && (
           <div style={{ marginTop: 8, fontSize: 12.5 }}>
             <div>
-              {gcReport.dryRun ? "dry-run 预览：" : "已执行："}
-              {" "}归档记忆 <b>{gcReport.archivedMemories.length}</b> · 归档任务 <b>{gcReport.archivedTasks.length}</b> · 清理链接 <b>{gcReport.removedLinks.length}</b> · 保护 <b>{gcReport.protectedMemories}</b>
+              {gcReport.dryRun ? tr("dry-run 预览：") : tr("已执行：")}
+              {" "}{tr("归档记忆 ")}<b>{gcReport.archivedMemories.length}</b> {tr(" · 归档任务 ")}<b>{gcReport.archivedTasks.length}</b> {tr(" · 清理链接 ")}<b>{gcReport.removedLinks.length}</b> {tr(" · 保护 ")}<b>{gcReport.protectedMemories}</b>
             </div>
             {gcReport.archivedMemories.slice(0, 5).map((e) => (
               <div key={e.id} style={s.mono}>- {e.id.slice(0, 8)} {e.reason}: {e.text}</div>
@@ -730,13 +727,11 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
       <div style={s.subPanel}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>数据备份（export / import）</span>
-          <button style={s.btn} title="下载当前工作区（或全部）的 dsh-engram/export v1 转储" onClick={() => void downloadExport()}>
-            导出 JSON
-          </button>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{tr("数据备份（export / import）")}</span>
+          <button style={s.btn} title={tr("下载当前工作区（或全部）的 dsh-engram/export v1 转储")} onClick={() => void downloadExport()}>
+            {tr("导出 JSON")}</button>
           <label style={{ ...s.btn, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-            选择导入文件…
-            <input
+            {tr("选择导入文件…")}<input
               type="file"
               accept="application/json,.json"
               style={{ display: "none" }}
@@ -746,15 +741,13 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
           {importName && <span style={s.mono}>{importName}</span>}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-          导出即可移植备份（记忆/任务/关系/节点，含归档）；<b>merge</b> 只补缺失（幂等），<b>replace</b> 先清空目标工作区再恢复。记忆正文与所有写入路径一样过脱敏。
-        </div>
+          {tr("导出即可移植备份（记忆/任务/关系/节点，含归档）；")}<b>merge</b> {tr(" 只补缺失（幂等），")}<b>replace</b> {tr(" 先清空目标工作区再恢复。记忆正文与所有写入路径一样过脱敏。")}</div>
         {importDump !== null && (
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
               <label style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
                 <input type="checkbox" checked={importDryRun} onChange={(e) => setImportDryRun(e.target.checked)} />
-                仅预览（dry run）
-              </label>
+                {tr("仅预览（dry run）")}</label>
               <select
                 style={s.input}
                 value={importMode}
@@ -764,29 +757,28 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
                   if (mode !== "replace") setImportReplaceOk(false);
                 }}
               >
-                <option value="merge">合并（merge，幂等）</option>
-                <option value="replace">替换（replace，先清空工作区）</option>
+                <option value="merge">{tr("合并（merge，幂等）")}</option>
+                <option value="replace">{tr("替换（replace，先清空工作区）")}</option>
               </select>
               {importMode === "replace" && (
                 <label style={{ display: "inline-flex", gap: 4, alignItems: "center", color: "#b45309" }}>
                   <input type="checkbox" checked={importReplaceOk} onChange={(e) => setImportReplaceOk(e.target.checked)} />
-                  我确认替换{workspace ? `（${workspace}）` : "（需先选工作区）"}
-                </label>
+                  {tr("我确认替换{0}", { "0": workspace ? `（${workspace}）` : tr("（需先选工作区）") })}</label>
               )}
               <button
                 style={s.btnPrimary}
                 disabled={importBusy || (importMode === "replace" && (!importReplaceOk || !workspace))}
                 onClick={() => void runImport()}
               >
-                {importBusy ? "…" : importDryRun ? "预览导入" : "执行导入"}
+                {importBusy ? "…" : importDryRun ? tr("预览导入") : tr("执行导入")}
               </button>
             </div>
             {importReport && (
               <div style={{ fontSize: 12.5 }}>
                 <div>
-                  {importReport.dryRun ? "dry-run 预览：" : "已导入："}
+                  {importReport.dryRun ? tr("dry-run 预览：") : tr("已导入：")}
                   {" "}{Object.entries(importReport.written).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"}
-                  {importReport.skipped.length > 0 ? ` · 跳过 ${importReport.skipped.length}` : ""}
+                  {importReport.skipped.length > 0 ? tr(" · 跳过 {0}", { "0": importReport.skipped.length }) : ""}
                 </div>
                 {importReport.skipped.slice(0, 5).map((x, i) => (
                   <div key={`${x.table}-${x.id ?? i}`} style={s.mono}>- {x.table} {x.id ? x.id.slice(0, 8) : "?"}: {x.reason}</div>
@@ -800,19 +792,19 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
       <div style={s.row}>
         <select style={s.input} value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="">全部类型</option>
+          <option value="">{tr("全部类型")}</option>
           {kindsPresent.map((k) => (
-            <option key={k} value={k}>{KIND_LABEL[k] ?? k}</option>
+            <option key={k} value={k}>{kindLabel(k)}</option>
           ))}
         </select>
         <select style={s.input} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="active">仅活动</option>
-          <option value="all">全部状态</option>
-          <option value="archived">已归档</option>
+          <option value="active">{tr("仅活动")}</option>
+          <option value="all">{tr("全部状态")}</option>
+          <option value="archived">{tr("已归档")}</option>
         </select>
         <input
           style={{ ...s.input, width: 180 }}
-          placeholder="搜索记忆…"
+          placeholder={tr("搜索记忆…")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void refresh(); }}
@@ -827,7 +819,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
           <span style={s.tag}>autoCapture {cfg.autoCapture ? "on" : "off"}</span>
           <span style={s.tag}>sessionSearch {cfg.sessionSearch ? "on" : "off"}</span>
           <span style={s.tag}>TTL {cfg.expireDays}d</span>
-          <span style={s.tag}>index {cfg.indexMaxLines} 行 / {cfg.indexMaxChars} 字符</span>
+          <span style={s.tag}>index {cfg.indexMaxLines} {tr(" 行 / {0} 字符", { "0": cfg.indexMaxChars })}</span>
           <span style={s.tag}>promote ≥{cfg.promoteHits} hits</span>
         </div>
       )}
@@ -840,27 +832,26 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
         </colgroup>
         <thead>
           <tr>
-            <th style={s.th}>类型</th>
-            <th style={s.th}>内容</th>
+            <th style={s.th}>{tr("类型")}</th>
+            <th style={s.th}>{tr("内容")}</th>
             <th style={s.th} />
           </tr>
         </thead>
         <tbody>
           {flatRows.length === 0 && (
-            <tr><td colSpan={3} style={s.empty}>暂无记忆 — 使用 engram_store 显式记录，或让自动捕获工作（git 提交 / 关键文件编辑 / 工具错误）</td></tr>
+            <tr><td colSpan={3} style={s.empty}>{tr("暂无记忆 — 使用 engram_store 显式记录，或让自动捕获工作（git 提交 / 关键文件编辑 / 工具错误）")}</td></tr>
           )}
           {memPageRows.map((r) =>
             r.kind === "head" ? (
-              <tr key={`h-${r.ws}`}><td colSpan={3} style={s.wsHead}>{r.ws} · {r.count} 条</td></tr>
+              <tr key={`h-${r.ws}`}><td colSpan={3} style={s.wsHead}>{r.ws} · {r.count} {tr(" 条")}</td></tr>
             ) : (
               <tr key={r.m.id}>
                 <td style={{ ...s.td, whiteSpace: "nowrap" }}>
-                  <span style={{ ...s.badge, background: KIND_COLORS[r.m.kind] ?? "#6b7280" }}>{KIND_LABEL[r.m.kind] ?? r.m.kind}</span>
+                  <span style={{ ...s.badge, background: KIND_COLORS[r.m.kind] ?? "#6b7280" }}>{kindLabel(r.m.kind)}</span>
                   {r.m.status === "archived" && <span style={{ ...s.tag, color: "#b45309", background: "#fef3c7" }}>archived</span>}
                   {supersedeIndex.replacedBy.has(r.m.id) && (
-                    <span style={{ ...s.tag, color: "#b45309", background: "#fef3c7" }} title={`已被 ${(supersedeIndex.replacedBy.get(r.m.id) ?? []).map((x) => `#${x.id.slice(0, 8)}`).join(", ")} 替代（旧行保留、召回降级）`}>
-                      已替换
-                    </span>
+                    <span style={{ ...s.tag, color: "#b45309", background: "#fef3c7" }} title={tr("已被 {0} 替代（旧行保留、召回降级）", { "0": (supersedeIndex.replacedBy.get(r.m.id) ?? []).map((x) => `#${x.id.slice(0, 8)}`).join(", ") })}>
+                      {tr("已替换")}</span>
                   )}
                 </td>
                 <td style={{ ...s.td, minWidth: 0 }}>
@@ -869,11 +860,10 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
                     <div style={{ ...s.mono, flex: "1 1 160px" }} title={`${fmtDate(r.m.createdAt)} · ${r.m.id} · ${r.m.entity ?? ""} · signal ${r.m.signal.toFixed(2)} · hits ${r.m.hits} · TTL ${daysLeft(r.m.expiresAt)}`}>
                       {fmtDate(r.m.createdAt)} · {r.m.id.slice(0, 8)}{r.m.entity ? ` · ${r.m.entity}` : ""} · {r.m.signal.toFixed(2)} · hits {r.m.hits} · {daysLeft(r.m.expiresAt)}
                     </div>
-                    <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? "收起" : "展开全文"}</button>
+                    <button style={s.linkBtn} onClick={() => toggleExpand(r.m.id)}>{expandedRows.has(r.m.id) ? tr("收起") : tr("展开全文")}</button>
                     {r.m.supersedes && (
-                      <button style={s.linkBtn} title={`打开被替代的旧记忆 ${r.m.supersedes}`} onClick={() => openMemory(r.m.supersedes as string)}>
-                        替代 #{r.m.supersedes.slice(0, 8)}
-                      </button>
+                      <button style={s.linkBtn} title={tr("打开被替代的旧记忆 {0}", { "0": r.m.supersedes })} onClick={() => openMemory(r.m.supersedes as string)}>
+                        {tr("替代 #{0}", { "0": r.m.supersedes.slice(0, 8) })}</button>
                     )}
                   </div>
                   {r.m.tags.length > 0 && (
@@ -882,9 +872,9 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                    <button style={s.linkBtn} title="在侧栏打开详情" onClick={() => { setDetail({ kind: "memory", memory: r.m }); setDetailNotice(null); }}>详情</button>
-                    <button style={s.btn} title="归档（TTL/软删，可恢复不载入索引）" onClick={() => void act(() => api.archive(r.m.id, r.m.workspace))}>归档</button>
-                    <button style={s.btn} title="永久删除" onClick={() => { if (window.confirm(`删除这条记忆?\n${r.m.text.slice(0, 60)}`)) void act(() => api.remove(r.m.id, r.m.workspace)); }}>删除</button>
+                    <button style={s.linkBtn} title={tr("在侧栏打开详情")} onClick={() => { setDetail({ kind: "memory", memory: r.m }); setDetailNotice(null); }}>{tr("详情")}</button>
+                    <button style={s.btn} title={tr("归档（TTL/软删，可恢复不载入索引）")} onClick={() => void act(() => api.archive(r.m.id, r.m.workspace))}>{tr("归档")}</button>
+                    <button style={s.btn} title={tr("永久删除")} onClick={() => { if (window.confirm(tr("删除这条记忆?\n{0}", { "0": r.m.text.slice(0, 60) }))) void act(() => api.remove(r.m.id, r.m.workspace)); }}>{tr("删除")}</button>
                   </div>
                 </td>
               </tr>
@@ -895,9 +885,9 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
 
       {flatRows.length > 0 && (
         <div style={s.pageBar}>
-          <button style={s.btn} disabled={memPageSafe === 0} onClick={() => setMemPage(memPageSafe - 1)}>‹ 上一页</button>
-          <span>第 {memPageSafe + 1} / {memPageCount} 页 · 共 {flatRows.length} 条</span>
-          <button style={s.btn} disabled={memPageSafe >= memPageCount - 1} onClick={() => setMemPage(memPageSafe + 1)}>下一页 ›</button>
+          <button style={s.btn} disabled={memPageSafe === 0} onClick={() => setMemPage(memPageSafe - 1)}>{tr("‹ 上一页")}</button>
+          <span>{tr("第 {0} / {1} 页 · 共 {2} 条", { "0": memPageSafe + 1, "1": memPageCount, "2": flatRows.length })}</span>
+          <button style={s.btn} disabled={memPageSafe >= memPageCount - 1} onClick={() => setMemPage(memPageSafe + 1)}>{tr("下一页 ›")}</button>
         </div>
       )}
         </>
@@ -907,20 +897,18 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
         <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
         <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)" }}>
-          工具调用与命中统计见「遥测」tab；[ESR] 注入块的 escalate 提醒依据真实数据动态出现。
-        </span>
+          {tr("工具调用与命中统计见「遥测」tab；[ESR] 注入块的 escalate 提醒依据真实数据动态出现。")}</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
-          <button type="button" style={esrGraph ? s.tab : s.tabActive} onClick={() => setEsrGraph(false)}>列表</button>
-          <button type="button" style={esrGraph ? s.tabActive : s.tab} onClick={() => setEsrGraph(true)}>图谱</button>
+          <button type="button" style={esrGraph ? s.tab : s.tabActive} onClick={() => setEsrGraph(false)}>{tr("列表")}</button>
+          <button type="button" style={esrGraph ? s.tabActive : s.tab} onClick={() => setEsrGraph(true)}>{tr("图谱")}</button>
         </span>
       </div>
       {esrGraph ? (
         <div style={s.subPanel}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_link 力导向图）</span>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>{tr("关系图谱（esr_link 力导向图）")}</span>
             <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsh-color-muted, #6b7280)" }}>
-              {workspace === "" ? "全部工作区" : `工作区：${workspace}`} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
-            </span>
+              {workspace === "" ? tr("全部工作区") : tr("工作区：{0}", { "0": workspace })} {tr(" · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细")}</span>
           </div>
           <EngramGraph
             workspace={workspace}
@@ -932,7 +920,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
         </div>
       ) : (
         <>
-      <div style={s.panelTitle}>ESR 任务（证据闭环）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
+      <div style={s.panelTitle}>{tr("ESR 任务（证据闭环）")}{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>{tr("· 全部工作区")}</span>}</div>
 
       {/* GUI 新建任务：把 esr_task 触发器直接放到面板里 */}
       <div style={s.subPanel}>
@@ -941,18 +929,18 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
             {workspaces.length === 0 && <option value="">(no workspaces)</option>}
             {workspaces.map((ws) => <option key={ws} value={ws}>{ws}</option>)}
           </select>
-          <input style={{ ...s.input, width: 170 }} placeholder="任务名…" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNewTask(); }} />
-          <input style={{ ...s.input, width: 240 }} placeholder="要产出 / 满足什么（可选）" value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} />
+          <input style={{ ...s.input, width: 170 }} placeholder={tr("任务名…")} value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNewTask(); }} />
+          <input style={{ ...s.input, width: 240 }} placeholder={tr("要产出 / 满足什么（可选）")} value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} />
           <button style={s.btnPrimary} disabled={newTaskBusy || newTaskName.trim() === ""} onClick={() => void createNewTask()}>
-            {newTaskBusy ? "…" : "新建任务"}
+            {newTaskBusy ? "…" : tr("新建任务")}
           </button>
         </div>
       </div>
 
-      {tasks.length === 0 && <div style={s.empty}>暂无任务 — 用上方「新建任务」或 esr_task 工具创建</div>}
+      {tasks.length === 0 && <div style={s.empty}>{tr("暂无任务 — 用上方「新建任务」或 esr_task 工具创建")}</div>}
       {taskGroups.map(([ws, items]) => (
         <Fragment key={ws}>
-          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 个任务</div>}
+          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} {tr(" 个任务")}</div>}
           {items.map((task) => {
             const gaps = taskGaps(task);
             const isStable = task.state === "stable";
@@ -973,29 +961,28 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
                   </span>
                   {!isStable && (
                     <button style={s.btn} onClick={() => setCloseFor(closeFor === task.id ? null : task.id)}>
-                      {closeFor === task.id ? "收起" : "填写证据关闭…"}
+                      {closeFor === task.id ? tr("收起") : tr("填写证据关闭…")}
                     </button>
                   )}
-                  <button style={s.linkBtn} title="在侧栏打开详情" onClick={() => openTask(task.id)}>详情</button>
+                  <button style={s.linkBtn} title={tr("在侧栏打开详情")} onClick={() => openTask(task.id)}>{tr("详情")}</button>
                 </div>
                 {!isStable && gaps.length > 0 && (
                   <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>
-                    缺口：{gaps.join(", ")} — 提供 artifact / evaluation / memory_ref 后转为 STABLE
-                  </div>
+                    {tr("缺口：{0} — 提供 artifact / evaluation / memory_ref 后转为 STABLE", { "0": gaps.join(", ") })}</div>
                 )}
                 {task.description && <div style={{ fontSize: 12, color: "var(--dsh-color-muted-strong, #4b5563)", marginTop: 4 }}>{task.description}</div>}
                 {task.memoryRefs.length > 0 && (
-                  <div style={{ fontSize: 12, marginTop: 4 }}>记忆引用：{task.memoryRefs.map((r) => <span key={r} style={s.tag}>{r.slice(0, 8)}</span>)}</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>{tr("记忆引用：")}{task.memoryRefs.map((r) => <span key={r} style={s.tag}>{r.slice(0, 8)}</span>)}</div>
                 )}
                 {closeFor === task.id && (
                   <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--dsh-color-border, #e5e7eb)", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>提供证据后关闭（三项全齐才转 STABLE）</div>
+                    <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>{tr("提供证据后关闭（三项全齐才转 STABLE）")}</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <input style={{ ...s.input, width: 150 }} placeholder="artifact 路径/URL" value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
-                      <input style={{ ...s.input, width: 150 }} placeholder="evaluation 验证证据" value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
-                      <input style={{ ...s.input, width: 150 }} placeholder="memory_refs 逗号分隔" value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
-                      <button style={s.btnPrimary} disabled={closeBusy} onClick={() => void submitClose(task)}>{closeBusy ? "…" : "提交关闭"}</button>
-                      <button style={s.btn} onClick={() => setCloseFor(null)}>取消</button>
+                      <input style={{ ...s.input, width: 150 }} placeholder={tr("artifact 路径/URL")} value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
+                      <input style={{ ...s.input, width: 150 }} placeholder={tr("evaluation 验证证据")} value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
+                      <input style={{ ...s.input, width: 150 }} placeholder={tr("memory_refs 逗号分隔")} value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
+                      <button style={s.btnPrimary} disabled={closeBusy} onClick={() => void submitClose(task)}>{closeBusy ? "…" : tr("提交关闭")}</button>
+                      <button style={s.btn} onClick={() => setCloseFor(null)}>{tr("取消")}</button>
                     </div>
                   </div>
                 )}
@@ -1005,13 +992,13 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
         </Fragment>
       ))}
 
-      <div style={s.panelTitle}>节点与关系（esr_node / esr_link）{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>· 全部工作区</span>}</div>
-      {nodes.length === 0 && <div style={s.empty}>暂无节点 — 模型会为反复出现的领域对象主动登记（esr_node），此处也可查看关系</div>}
+      <div style={s.panelTitle}>{tr("节点与关系（esr_node / esr_link）")}{workspace === "" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--dsh-color-muted, #9ca3af)" }}>{tr("· 全部工作区")}</span>}</div>
+      {nodes.length === 0 && <div style={s.empty}>{tr("暂无节点 — 模型会为反复出现的领域对象主动登记（esr_node），此处也可查看关系")}</div>}
       {nodeGroups.map(([ws, items]) => (
         <Fragment key={ws}>
-          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 个节点</div>}
+          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} {tr(" 个节点")}</div>}
           {items.map((n: EntityRecord) => (
-            <div key={n.id} style={{ fontSize: 12.5, padding: "2px 0", cursor: "pointer", borderRadius: 6 }} title="在侧栏打开节点详情" onClick={() => openNode(n.id)}>
+            <div key={n.id} style={{ fontSize: 12.5, padding: "2px 0", cursor: "pointer", borderRadius: 6 }} title={tr("在侧栏打开节点详情")} onClick={() => openNode(n.id)}>
               <span className="mono" style={{ ...s.mono, color: "#4338ca" }}>{n.id.slice(0, 24)}</span>{" "}
               <span style={{ fontWeight: 600 }}>{n.name}</span>
               {n.kind && <span style={{ ...s.tag, color: "#4338ca", background: "#eef2ff" }}>{n.kind}</span>}
@@ -1020,14 +1007,14 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
           ))}
         </Fragment>
       ))}
-      <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 6 }}>关系：</div>
-      {links.length === 0 && <div style={s.empty}>暂无关系 — esr_link 创建</div>}
+      <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 6 }}>{tr("关系：")}</div>
+      {links.length === 0 && <div style={s.empty}>{tr("暂无关系 — esr_link 创建")}</div>}
       {linkGroups.map(([ws, items]) => (
         <Fragment key={ws}>
-          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} 条关系</div>}
+          {workspace === "" && <div style={s.groupLabel}>{ws} · {items.length} {tr(" 条关系")}</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
             {items.map((l: LinkRecord) => (
-              <div key={l.id} style={{ ...s.relRow, cursor: "pointer" }} title="在侧栏打开关系详情" onClick={() => { setDetail({ kind: "link", link: l }); setDetailNotice(null); }}>
+              <div key={l.id} style={{ ...s.relRow, cursor: "pointer" }} title={tr("在侧栏打开关系详情")} onClick={() => { setDetail({ kind: "link", link: l }); setDetailNotice(null); }}>
                 <span className="mono" style={s.nodePill} title={l.source}>{nameOf(l.source)}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--dsh-color-muted, #6b7280)" }}>
                   <span style={{ border: "1px dashed var(--dsh-color-border, #cbd5e1)", borderRadius: 999, padding: "1px 7px" }}>{l.relation}</span>
@@ -1068,8 +1055,7 @@ export function EngramSection({ api, t, scope }: EngramSectionFace) {
             <EngramConfigCard scope={scope} defaultOpen />
           ) : (
             <div style={s.error}>
-              设置面板不可用：host 没有为 dsh-engram 提供设置命名空间（旧版 DSH 走「插件」→ 配置 tab）。
-            </div>
+              {tr("设置面板不可用：host 没有为 dsh-engram 提供设置命名空间（旧版 DSH 走「插件」→ 配置 tab）。")}</div>
           )}
         </div>
       )}

@@ -13,6 +13,7 @@
 
 import type { TaskRecord } from "./api";
 
+import { activeLocale, tr } from "./i18n";
 /** The three esr_close evidence gates, in the order they render. */
 export type GapKey = "artifact" | "evaluation" | "memory_ref";
 
@@ -44,9 +45,9 @@ export function shortAgent(a: string | null): string {
   return bare.replace(/^session[-_]/i, "").replace(/^agent[-_]/i, "").slice(0, 14);
 }
 
-/** Short zh-CN birthdate used in the markdown export ("8月26日"). */
+/** Short, locale-aware birthdate used in the markdown export ("8月26日", "26 авг.", "Aug 26"). */
 export function fmtDateShort(ts: number): string {
-  return ts ? new Date(ts).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) : "–";
+  return ts ? new Date(ts).toLocaleDateString(activeLocale(), { month: "short", day: "numeric" }) : "–";
 }
 
 /** Rendering-agnostic markdown export of the current task view. */
@@ -59,7 +60,7 @@ export function buildTasksMarkdown(tasks: TaskRecord[]): string {
       const ev = `${t.artifact ? "artifact✓" : "artifact✗"} · ${t.evaluation ? "eval✓" : "eval✗"} · ${(t.memoryRefs?.length ?? 0) > 0 ? "ref✓" : "ref✗"}`;
       return `| ${t.state} | ${esc(t.name)} | ${esc(t.workspace.replace(/^.*[\\/]/, ""))} | ${esc(taskGaps(t).join(", ") || "—")} | ${ev} | ${fmtDateShort(t.createdAt ?? 0)} |`;
     });
-  return `# ESR 任务导出 · ${new Date().toISOString().slice(0, 10)}\n\n| 状态 | 任务 | 工作区 | 证据缺口 | 证据 | 创建 |\n|---|---|---|---|---|---|\n${rows.join("\n") || "(无任务)"}`;
+  return tr("# ESR 任务导出 · {0}\n\n| 状态 | 任务 | 工作区 | 证据缺口 | 证据 | 创建 |\n|---|---|---|---|---|---|\n{1}", { "0": new Date().toISOString().slice(0, 10), "1": rows.join("\n") || tr("(无任务)") });
 }
 
 /**

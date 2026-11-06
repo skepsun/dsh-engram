@@ -32,6 +32,8 @@ import { EngramSection, type EngramSectionFace } from "./EngramSection";
 import { EngramConfigCard, type EngramConfigCardFace, type EngramConfigValue } from "./EngramConfigCard";
 import { EngramScopeImpl } from "./scope";
 import { mountEngramBoard } from "./EngramBoardMount";
+import { installTranslator } from "./i18n";
+import { ru } from "./i18n/ru";
 
 interface ClientSlots {
   inject(key: string, callback: () => unknown): unknown;
@@ -39,8 +41,12 @@ interface ClientSlots {
 }
 
 interface ClientLocale {
-  register(namespace: string, dictionaries: { zh: EngramKey; en: EngramKey }): () => void;
-  bind(namespace: string): (key: string) => string;
+  register(namespace: string, dictionaries: { zh: EngramKey; en: EngramKey; ru: EngramKey }): () => void;
+  bind(namespace: string): (key: string, params?: Record<string, string>) => string;
+  /** Active locale snapshot; absent on very old shells (then `en-US` formatting applies). */
+  getLocale?(): { active: string };
+  /** Locale-change notifications for DOM-mounted surfaces; absent on old shells. */
+  subscribe?(onChange: () => void): () => void;
 }
 
 type EngramClientContext = ClientContext & {
@@ -58,11 +64,8 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   }
 }
 
-interface EngramKey {
-  nav: string;
-  refresh: string;
-  error: string;
-}
+/** Message catalog: the three shell-level keys plus msgid entries from `./i18n`. */
+type EngramKey = Record<string, string>;
 
 export const zh: EngramKey = {
   nav: "Engram 记忆",
@@ -83,10 +86,14 @@ export const inject = ["slots", "locale", "sessions", "workspaces"];
  * wrap registrations so a slot absence degrades instead of breaking boot.
  */
 export function apply(ctx: EngramClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-engram: dictionaries");
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), "dsh-engram: dictionaries");
 
   const api = new EngramApi();
-  const t = ctx.locale.bind(NS) as (key: string) => string;
+  const t = ctx.locale.bind(NS);
+  // The active locale drives both dictionary lookup and locale-aware date
+  // formatting. Bind reads the live snapshot, so a locale switch needs no
+  // re-install — only the slots/DOM surfaces need to re-render.
+  installTranslator(t, ctx.locale.getLocale?.().active);
   // Settings transport, shared by the 设置 tab (Engram 记忆 page) and the legacy
   // Plugins → 配置 card registration below.
   const scope = new EngramScopeImpl<EngramConfigValue>(api, "dsh-engram");
@@ -106,6 +113,7 @@ export function apply(ctx: EngramClientContext): void {
           id: "todo",
           order: 0,
           priority: -1,
+          locale: NS,
           inject: () => ({ api }),
         },
         EngramTaskDock,
@@ -172,7 +180,7 @@ export function apply(ctx: EngramClientContext): void {
   // single-occupant). Guarded: a mount problem must never take the GUI down.
   try {
     ctx.effect(
-      () => mountEngramBoard(api),
+      () => mountEngramBoard(api, (onChange) => ctx.locale.subscribe?.(onChange) ?? (() => {})),
       "dsh-engram: ESR task board mount",
     );
   } catch (error) {

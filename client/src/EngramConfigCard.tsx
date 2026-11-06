@@ -26,6 +26,7 @@ import type { CSSProperties } from "react";
 import type { EngramScope, EngramScopeSnapshot } from "./scope";
 import { useEngramTheme } from "./theme";
 
+import { tr } from "./i18n";
 export interface EngramConfigValue {
   autoCapture?: boolean;
   /** 用户纠正/偏好学习（零 LLM）：识别 prefer/avoid/switch-to 句式沉淀 preference 记忆。 */
@@ -114,85 +115,85 @@ export interface EngramConfigGroup {
  * A setting group rendered inside the card's disclosure. Reading the ~12
  * knobs as four labelled units is easier than one flat list.
  */
-export const COMMON_FIELDS: EngramConfigField[] = [
-  { key: "autoCapture", label: "自动捕获", hint: "零 LLM 从工具结果提取记忆（git/关键文件/错误）", kind: "bool" },
-  { key: "autoCapturePreferences", label: "偏好捕获", hint: "用户纠正/偏好学习：检测消息里的「不要用X/改用Y/prefer/never use」句式，自动沉淀为 preference 记忆并置顶 [ENGRAM]（correx/PAHF 式，零 LLM）", kind: "bool" },
-  { key: "boundaryPrune", label: "边界剪枝", hint: "ResultPack L1：todo 完成/goal 终态边界主动剪掉超阈值旧工具结果（DSH 确定性 surface-replace、偿还门、零 LLM；默认开，关=opt-out）", kind: "bool" },
-  { key: "boundaryPruneAdaptive", label: "剪枝自适应", hint: "账本否决：该 workspace 真实剪枝后净收益为负（≥3 次）时自动停止继续剪；证据只能关、不会自行开", kind: "bool" },
-  { key: "boundaryPruneThresholdChars", label: "剪枝阈值(字符)", hint: "覆盖宿主 8192：设 2048 可更早开剪，并配 L2 归档找回被剪中段；留空=宿主默认。建议同时把保留边缘调小（如 1024/256）以获得最大节省", kind: "num", min: 256, max: 16384, step: 256 },
-  { key: "resultPack", label: "结果归档召回", hint: "ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；默认开，保证默认剪枝无损；需与边界剪枝一起开）", kind: "bool" },
-  { key: "autoRecallOnStart", label: "会话启动自动召回", hint: "新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取", kind: "bool" },
-  { key: "jitEnabled", label: "JIT 推送", hint: "错误复发 / 文件焦点 / goal 完成时，把已有记忆压成一行推进上下文（append-only、每会话≤3 行、无命中沉默；每次推送按前缀重写计入账本）", kind: "bool" },
-  { key: "episodeEnabled", label: "会话纪要", hint: "会话结束时用零 LLM 规则生成一条 episode（文件/命令/失败→修复/决策/未闭环），不进索引，供恢复简报使用；每 workspace 保留最近 20 条", kind: "bool" },
-  { key: "resumeBriefEnabled", label: "恢复简报", hint: "新会话启动时注入最近 7 天的最新 episode（≤240 字符 + engram_detail 指针），隔天继续不用重新交代背景", kind: "bool" },
-  { key: "entityCardsEnabled", label: "实体卡", hint: "[ENGRAM] 索引为活跃实体（有锚定记忆或未闭环任务）渲染一行「当前真相 + 打开任务 + engram_detail(entity=…) 指针」，最多 2 张，替代这些实体的平铺记忆行", kind: "bool" },
-  { key: "maxRecallPerSession", label: "每会话去重上限", hint: "recall 每会话最多保留 N 条（跨会话去重）", kind: "num", min: 1, max: 10 },
-  { key: "expireDays", label: "TTL（天）", hint: "0 = 不过期", kind: "num", min: 0, max: 3650 },
-  { key: "indexMaxChars", label: "索引字符上限", hint: "[ENGRAM] 块 token 预算", kind: "num", min: 0, max: 4000 },
+export const commonFields = (): EngramConfigField[] => [
+  { key: "autoCapture", label: tr("自动捕获"), hint: tr("零 LLM 从工具结果提取记忆（git/关键文件/错误）"), kind: "bool" },
+  { key: "autoCapturePreferences", label: tr("偏好捕获"), hint: tr("用户纠正/偏好学习：检测消息里的「不要用X/改用Y/prefer/never use」句式，自动沉淀为 preference 记忆并置顶 [ENGRAM]（correx/PAHF 式，零 LLM）"), kind: "bool" },
+  { key: "boundaryPrune", label: tr("边界剪枝"), hint: tr("ResultPack L1：todo 完成/goal 终态边界主动剪掉超阈值旧工具结果（DSH 确定性 surface-replace、偿还门、零 LLM；默认开，关=opt-out）"), kind: "bool" },
+  { key: "boundaryPruneAdaptive", label: tr("剪枝自适应"), hint: tr("账本否决：该 workspace 真实剪枝后净收益为负（≥3 次）时自动停止继续剪；证据只能关、不会自行开"), kind: "bool" },
+  { key: "boundaryPruneThresholdChars", label: tr("剪枝阈值(字符)"), hint: tr("覆盖宿主 8192：设 2048 可更早开剪，并配 L2 归档找回被剪中段；留空=宿主默认。建议同时把保留边缘调小（如 1024/256）以获得最大节省"), kind: "num", min: 256, max: 16384, step: 256 },
+  { key: "resultPack", label: tr("结果归档召回"), hint: tr("ResultPack L2：剪掉的中段脱敏归档，节点尾部附 handle，模型可用 result_recall(callId) 按页召回（完整 ObservationPack；默认开，保证默认剪枝无损；需与边界剪枝一起开）"), kind: "bool" },
+  { key: "autoRecallOnStart", label: tr("会话启动自动召回"), hint: tr("新会话按首条消息自动把最相关记忆注入 [RECALL] 块（无需模型想起调 engram_recall）；关掉=回到纯拉取"), kind: "bool" },
+  { key: "jitEnabled", label: tr("JIT 推送"), hint: tr("错误复发 / 文件焦点 / goal 完成时，把已有记忆压成一行推进上下文（append-only、每会话≤3 行、无命中沉默；每次推送按前缀重写计入账本）"), kind: "bool" },
+  { key: "episodeEnabled", label: tr("会话纪要"), hint: tr("会话结束时用零 LLM 规则生成一条 episode（文件/命令/失败→修复/决策/未闭环），不进索引，供恢复简报使用；每 workspace 保留最近 20 条"), kind: "bool" },
+  { key: "resumeBriefEnabled", label: tr("恢复简报"), hint: tr("新会话启动时注入最近 7 天的最新 episode（≤240 字符 + engram_detail 指针），隔天继续不用重新交代背景"), kind: "bool" },
+  { key: "entityCardsEnabled", label: tr("实体卡"), hint: tr("[ENGRAM] 索引为活跃实体（有锚定记忆或未闭环任务）渲染一行「当前真相 + 打开任务 + engram_detail(entity=…) 指针」，最多 2 张，替代这些实体的平铺记忆行"), kind: "bool" },
+  { key: "maxRecallPerSession", label: tr("每会话去重上限"), hint: tr("recall 每会话最多保留 N 条（跨会话去重）"), kind: "num", min: 1, max: 10 },
+  { key: "expireDays", label: tr("TTL（天）"), hint: tr("0 = 不过期"), kind: "num", min: 0, max: 3650 },
+  { key: "indexMaxChars", label: tr("索引字符上限"), hint: tr("[ENGRAM] 块 token 预算"), kind: "num", min: 0, max: 4000 },
 ];
 
-export const ADVANCED_GROUPS: EngramConfigGroup[] = [
+export const advancedGroups = (): EngramConfigGroup[] => [
   {
     id: "capture-adv",
-    title: "捕获与检索（高级）",
-    description: "其余捕获/搜索旋钮",
+    title: tr("捕获与检索（高级）"),
+    description: tr("其余捕获/搜索旋钮"),
     fields: [
-      { key: "autoCapturePerSession", label: "每会话捕获上限", hint: "单会话自动捕获条数上限", kind: "num", min: 0, max: 1000 },
-      { key: "boundaryPruneHeadChars", label: "剪枝保留头部(字符)", hint: "阈值覆盖生效时结果开头保留长度（默认 4096）；调小（如 1024）配合 T2048 更省", kind: "num", min: 0, max: 16384, step: 128 },
-      { key: "boundaryPruneTailChars", label: "剪枝保留尾部(字符)", hint: "阈值覆盖生效时结果结尾保留长度（默认 1024）；调小（如 256）配合 T2048 更省", kind: "num", min: 0, max: 16384, step: 128 },
-      { key: "boundaryPruneIdleCadence", label: "空闲步数边界", hint: "最多每 N 请求触发一次剪枝，覆盖无 todo/goal 的会话（约 62% 会话）；仍受偿还门约束；留空=仅事件边界", kind: "num", min: 10, max: 1000, step: 10 },
-      { key: "autoRecallLimit", label: "自动召回条数", hint: "[RECALL] 块最多注入的记忆条数（少而准）", kind: "num", min: 1, max: 8 },
-      { key: "sessionSearch", label: "会话历史搜索", hint: "engram_recall 支持跨会话 FTS 兜底", kind: "bool" },
-      { key: "recallScope", label: "召回范围", hint: "workspace=严格当前工作区隔离（默认，token 纪律）；global=本工作区命中弱/空时从其它工作区池召回并标 [W:<workspace>] 来源（会打破隔离）", kind: "select", options: ["workspace", "global"] },
+      { key: "autoCapturePerSession", label: tr("每会话捕获上限"), hint: tr("单会话自动捕获条数上限"), kind: "num", min: 0, max: 1000 },
+      { key: "boundaryPruneHeadChars", label: tr("剪枝保留头部(字符)"), hint: tr("阈值覆盖生效时结果开头保留长度（默认 4096）；调小（如 1024）配合 T2048 更省"), kind: "num", min: 0, max: 16384, step: 128 },
+      { key: "boundaryPruneTailChars", label: tr("剪枝保留尾部(字符)"), hint: tr("阈值覆盖生效时结果结尾保留长度（默认 1024）；调小（如 256）配合 T2048 更省"), kind: "num", min: 0, max: 16384, step: 128 },
+      { key: "boundaryPruneIdleCadence", label: tr("空闲步数边界"), hint: tr("最多每 N 请求触发一次剪枝，覆盖无 todo/goal 的会话（约 62% 会话）；仍受偿还门约束；留空=仅事件边界"), kind: "num", min: 10, max: 1000, step: 10 },
+      { key: "autoRecallLimit", label: tr("自动召回条数"), hint: tr("[RECALL] 块最多注入的记忆条数（少而准）"), kind: "num", min: 1, max: 8 },
+      { key: "sessionSearch", label: tr("会话历史搜索"), hint: tr("engram_recall 支持跨会话 FTS 兜底"), kind: "bool" },
+      { key: "recallScope", label: tr("召回范围"), hint: tr("workspace=严格当前工作区隔离（默认，token 纪律）；global=本工作区命中弱/空时从其它工作区池召回并标 [W:<workspace>] 来源（会打破隔离）"), kind: "select", options: ["workspace", "global"] },
     ],
   },
   {
     id: "index-adv",
-    title: "索引（高级）",
-    description: "行数、入索引信号与晋升规则",
+    title: tr("索引（高级）"),
+    description: tr("行数、入索引信号与晋升规则"),
     fields: [
-      { key: "indexMaxLines", label: "索引最大行数", hint: "[ENGRAM] 块最多显示的条目行数", kind: "num", min: 0, max: 50 },
-      { key: "minIndexSignal", label: "入索引信号阈值", hint: "signal ≥ 此值的自动捕获才进索引", kind: "num", min: 0, max: 1, step: 0.05 },
-      { key: "promoteHits", label: "晋升命中数", hint: "hit 数达此值的低信号条目进索引", kind: "num", min: 0, max: 20 },
+      { key: "indexMaxLines", label: tr("索引最大行数"), hint: tr("[ENGRAM] 块最多显示的条目行数"), kind: "num", min: 0, max: 50 },
+      { key: "minIndexSignal", label: tr("入索引信号阈值"), hint: tr("signal ≥ 此值的自动捕获才进索引"), kind: "num", min: 0, max: 1, step: 0.05 },
+      { key: "promoteHits", label: tr("晋升命中数"), hint: tr("hit 数达此值的低信号条目进索引"), kind: "num", min: 0, max: 20 },
     ],
   },
   {
     id: "retention-adv",
-    title: "生命周期与 GC（高级）",
-    description: "容量上限与定期回收（自动 GC = 替代 DSH 自动 compact）",
+    title: tr("生命周期与 GC（高级）"),
+    description: tr("容量上限与定期回收（自动 GC = 替代 DSH 自动 compact）"),
     fields: [
-      { key: "maxMemoriesPerWorkspace", label: "工作区记忆上限", hint: "单工作区容量上限（GC 归档超限条目）", kind: "num", min: 0, max: 10000 },
-      { key: "gcEnabled", label: "记忆 GC", hint: "定时回收（过期/超容量/stable 超窗/悬空链接）", kind: "bool" },
-      { key: "gcNarrative", label: "Context GC 叙事兜底", hint: "自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）", kind: "bool" },
-      { key: "gcStableRetentionDays", label: "stable 任务保留（天）", hint: "超窗后由 GC 归档、离开 [ESR] 表面", kind: "num", min: 0, max: 3650 },
-      { key: "verifyArtifact", label: "校验 artifact 存在", hint: "esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过", kind: "bool" },
-      { key: "autoSinkTodosOnEnd", label: "会话结束自动沉淀 todo", hint: "会话结束时仍 pending 的 todo 自动转成 ESR draft（按名去重、受任务上限约束）；关掉=随会话弃去", kind: "bool" },
-    { key: "autoWebCompaction", label: "web 面自动启用 Context GC", hint: "启动时把全部 stock 布局的 agent 预设（shipped + 自定义根）的 compaction 组自动换成 dsh-engram/compaction；关掉=不再自动接管（已接管的需 web-compaction:revert 还原）", kind: "bool" },
+      { key: "maxMemoriesPerWorkspace", label: tr("工作区记忆上限"), hint: tr("单工作区容量上限（GC 归档超限条目）"), kind: "num", min: 0, max: 10000 },
+      { key: "gcEnabled", label: tr("记忆 GC"), hint: tr("定时回收（过期/超容量/stable 超窗/悬空链接）"), kind: "bool" },
+      { key: "gcNarrative", label: tr("Context GC 叙事兜底"), hint: tr("自动 compact 时无锚轮次用 LLM 摘要；关掉=纯机械（零 LLM）"), kind: "bool" },
+      { key: "gcStableRetentionDays", label: tr("stable 任务保留（天）"), hint: tr("超窗后由 GC 归档、离开 [ESR] 表面"), kind: "num", min: 0, max: 3650 },
+      { key: "verifyArtifact", label: tr("校验 artifact 存在"), hint: tr("esr_close 的 artifact 须在工作区磁盘上真实存在（URL 豁免）；force:true/关掉可跳过"), kind: "bool" },
+      { key: "autoSinkTodosOnEnd", label: tr("会话结束自动沉淀 todo"), hint: tr("会话结束时仍 pending 的 todo 自动转成 ESR draft（按名去重、受任务上限约束）；关掉=随会话弃去"), kind: "bool" },
+    { key: "autoWebCompaction", label: tr("web 面自动启用 Context GC"), hint: tr("启动时把全部 stock 布局的 agent 预设（shipped + 自定义根）的 compaction 组自动换成 dsh-engram/compaction；关掉=不再自动接管（已接管的需 web-compaction:revert 还原）"), kind: "bool" },
     ],
   },
   {
     id: "semantics-adv",
-    title: "记忆语义（高级）",
-    description: "supersedes / contradict 的启发式",
+    title: tr("记忆语义（高级）"),
+    description: tr("supersedes / contradict 的启发式"),
     fields: [
-      { key: "autoSupersede", label: "自动 supersedes", hint: "实体锚定 + 替换式更新（改用/不再/no longer…）自动把旧记忆标为 superseded；旧行保留、召回降级。默认关，显式 supersedes 永远优先", kind: "bool" },
+      { key: "autoSupersede", label: tr("自动 supersedes"), hint: tr("实体锚定 + 替换式更新（改用/不再/no longer…）自动把旧记忆标为 superseded；旧行保留、召回降级。默认关，显式 supersedes 永远优先"), kind: "bool" },
     ],
   },
   {
     id: "security",
-    title: "安全",
-    description: "访问围栏与隧道授权",
+    title: tr("安全"),
+    description: tr("访问围栏与隧道授权"),
     fields: [
-      { key: "trustedHosts", label: "受信隧道域名", hint: "允许经隧道访问记忆查看器的域名，逗号分隔；留空 = 仅本机。改后需重启 dsh web 生效", kind: "text", width: 260 },
+      { key: "trustedHosts", label: tr("受信隧道域名"), hint: tr("允许经隧道访问记忆查看器的域名，逗号分隔；留空 = 仅本机。改后需重启 dsh web 生效"), kind: "text", width: 260 },
     ],
   },
 ];
 
 /** Flat field ledger — save/reset iterate every group's fields in order. */
-export const FIELDS: EngramConfigField[] = [...COMMON_FIELDS, ...ADVANCED_GROUPS.flatMap((group) => group.fields)];
+export const allFields = (): EngramConfigField[] => [...commonFields(), ...advancedGroups().flatMap((group) => group.fields)];
 
 /** One-line description under the card's name, mirroring the built-in cards. */
-const CARD_DESCRIPTION = "控制 engram 记忆的捕获、索引、保留与隧道访问";
+const cardDescription = (): string => tr("控制 engram 记忆的捕获、索引、保留与隧道访问");
 
 // The built-in plugin cards are styled with the platform's dsw-alias design
 // tokens; mirroring them here makes dsh-engram read as a sibling of the Shell /
@@ -388,7 +389,7 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
       // console (silently swallowing it is the anti-pattern issue #4 called
       // out for decodeZstd).
       if (next.status === "unavailable") {
-        console.warn("[dsh-engram] settings scope unavailable — Plugins 配置卡已隐藏:", next.reason ?? "no reason served");
+        console.warn(tr("[dsh-engram] settings scope unavailable — Plugins 配置卡已隐藏:"), next.reason ?? "no reason served");
       }
       const value = (next.value ?? next.base) as EngramConfigValue | undefined;
       if (value) setDraft((prev) => ({ ...value, ...prev }));
@@ -403,7 +404,7 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
 
   /** Effective stored values the draft is edited against. */
   const effective: EngramConfigValue = ((snap?.value ?? snap?.base) as EngramConfigValue | undefined) ?? {};
-  const anyDirty = FIELDS.some((field) => {
+  const anyDirty = allFields().some((field) => {
     const staged = draft[field.key];
     return staged !== undefined && staged !== (effective as Record<string, unknown>)[field.key];
   });
@@ -412,7 +413,7 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
     setSaving(true);
     setError(null);
     try {
-      for (const field of FIELDS) {
+      for (const field of allFields()) {
         const value = draft[field.key];
         if (value === undefined) continue;
         if (value === (effective as Record<string, unknown>)[field.key]) continue;
@@ -493,7 +494,7 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
                             style={{ ...s.input, width: field.width ?? 180 }}
                             value={Array.isArray(raw) ? raw.join(", ") : raw === undefined ? "" : String(raw)}
                             disabled={!writable}
-                            placeholder="host.domain, 另一域名…"
+                            placeholder={tr("host.domain, 另一域名…")}
                             onChange={(e) => {
                               const tokens = e.target.value
                                 .split(/[,\s]+/)
@@ -521,12 +522,11 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
                               ? { ...s.reset, color: "var(--dsw-alias-brand-primary, #2563eb)" }
                               : { ...s.reset, cursor: "default", opacity: 0.55 }
                           }
-                          title="重置为默认"
+                          title={tr("重置为默认")}
                           disabled={!writable || !overridden}
                           onClick={() => void resetField(field.key)}
                         >
-                          重置
-                        </button>
+                          {tr("重置")}</button>
                       </div>
                     </div>
                   );
@@ -549,25 +549,25 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
           type="button"
           style={s.header}
           aria-expanded={open}
-          aria-label={`${open ? "收起" : "展开"} dsh-engram 设置`}
+          aria-label={tr("{0} dsh-engram 设置", { "0": open ? tr("收起") : tr("展开") })}
           onClick={() => setOpen((prev) => !prev)}
         >
           <span style={s.headText}>
             <span style={s.name}>dsh-engram</span>
-            <span style={s.description}>{CARD_DESCRIPTION}</span>
+            <span style={s.description}>{cardDescription()}</span>
           </span>
-          {anyDirty && <span style={s.pending}>未保存</span>}
+          {anyDirty && <span style={s.pending}>{tr("未保存")}</span>}
           <Chevron open={open} />
         </button>
         {open && (
           <div style={s.body}>
-            {!writable && <p style={s.readOnly}>本部署的设置为只读（宿主未授权写入或需重启应用）。</p>}
+            {!writable && <p style={s.readOnly}>{tr("本部署的设置为只读（宿主未授权写入或需重启应用）。")}</p>}
             <div style={s.groupPanel}>
               <div style={s.groupHead}>
-                <div style={s.groupTitle}>常用</div>
-                <div style={s.groupDesc}>每天会碰到的旋钮 · 其余收在下方高级设置</div>
+                <div style={s.groupTitle}>{tr("常用")}</div>
+                <div style={s.groupDesc}>{tr("每天会碰到的旋钮 · 其余收在下方高级设置")}</div>
               </div>
-              {COMMON_FIELDS.map(renderField)}
+              {commonFields().map(renderField)}
             </div>
             <button
               type="button"
@@ -575,13 +575,12 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
               aria-expanded={advancedOpen}
               onClick={() => setAdvancedOpen((v) => !v)}
             >
-              <span style={s.advHeadLabel}>高级设置（{ADVANCED_GROUPS.reduce((n, g) => n + g.fields.length, 0)} 项）</span>
+              <span style={s.advHeadLabel}>{tr("高级设置（{0} 项）", { "0": advancedGroups().reduce((n, g) => n + g.fields.length, 0) })}</span>
               <Chevron open={advancedOpen} />
             </button>
-            {advancedOpen && ADVANCED_GROUPS.map(renderGroup)}
+            {advancedOpen && advancedGroups().map(renderGroup)}
             <div style={s.note}>
-              设置对新建会话即时生效；已冻结的 [ENGRAM] 块保持前缀稳定。
-            </div>
+              {tr("设置对新建会话即时生效；已冻结的 [ENGRAM] 块保持前缀稳定。")}</div>
             {error && <div style={s.failed}>{error}</div>}
             <div style={s.footer}>
               <button
@@ -590,15 +589,14 @@ export function EngramConfigCard({ scope, defaultOpen }: EngramConfigCardFace) {
                 disabled={!anyDirty || saving}
                 onClick={discard}
               >
-                放弃修改
-              </button>
+                {tr("放弃修改")}</button>
               <button
                 type="button"
                 style={{ ...s.save, ...((!anyDirty || saving) ? s.disabled : undefined) }}
                 disabled={!anyDirty || saving}
                 onClick={() => void save()}
               >
-                {saving ? "保存中…" : "保存"}
+                {saving ? tr("保存中…") : tr("保存")}
               </button>
             </div>
           </div>

@@ -15,6 +15,7 @@ import { useEngramTheme } from "./theme";
 import { POLL_MS } from "./esrModel";
 import { EvidenceRing } from "./EvidenceRing";
 
+import { tr } from "./i18n";
 interface EngramTelemetryFace {
   api: EngramApi;
   /** "" means all workspaces (stats(undefined)). */
@@ -85,7 +86,7 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
   }, [stats]);
 
   const dose = stats && stats.ratios ? stats.ratios : null;
-  const sampleText = stats && stats.ratios && stats.ratios.calls < 10 ? `样本不足（${stats.ratios.calls} 次），比例仅供参考` : null;
+  const sampleText = stats && stats.ratios && stats.ratios.calls < 10 ? tr("样本不足（{0} 次），比例仅供参考", { "0": stats.ratios.calls }) : null;
 
   // Context Ledger: per-workspace bucket when one is selected, totals otherwise.
   const ledger = stats?.ledger ?? null;
@@ -133,108 +134,98 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
   return (
     <div style={hb.root}>
       <div style={hb.head}>
-        <span style={hb.title}>agent 行为遥测仪表盘</span>
+        <span style={hb.title}>{tr("agent 行为遥测仪表盘")}</span>
         <span style={hb.sub}>
-          基于 /stats 真实调用累计（工作区 × 天滚动）· 20s 自动刷新{workspace === "" ? " · 全部工作区" : ` · ${workspace}`}
-        </span>
+          {tr("基于 /stats 真实调用累计（工作区 × 天滚动）· 20s 自动刷新{0}", { "0": workspace === "" ? tr(" · 全部工作区") : ` · ${workspace}` })}</span>
         {loading && <span style={hb.sub}>…</span>}
         <button
           style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 600, padding: "3px 10px", borderRadius: 7, cursor: "pointer", border: "1px solid var(--dsh-color-border, #d1d5db)", background: "transparent", color: "var(--dsh-color-muted-strong, #374151)" }}
           onClick={() => void refresh()}
           disabled={loading}
         >
-          刷新
-        </button>
+          {tr("刷新")}</button>
       </div>
 
       {error && <div style={hb.warn}>⚠ {error}</div>}
       {sampleText && stats && <div style={hb.warn}>{sampleText}</div>}
-      {!stats && !error && <div style={{ ...hb.sub, padding: 8 }}>加载中…</div>}
+      {!stats && !error && <div style={{ ...hb.sub, padding: 8 }}>{tr("加载中…")}</div>}
       {stats && (
         <>
           <div style={hb.grid}>
             <div style={hb.gaugeCard}>
-              <EvidenceRing artifact={false} evaluation={false} refs={false} size={64} fraction={dose?.esrRatio ?? 0} labelText={pct(dose?.esrRatio)} title={`ESR 主动性（目标 ≥ 34%）`} />
+              <EvidenceRing artifact={false} evaluation={false} refs={false} size={64} fraction={dose?.esrRatio ?? 0} labelText={pct(dose?.esrRatio)} title={tr(`ESR 主动性（目标 ≥ 34%）`)} />
               <div>
-                <div style={hb.gaugeLabel}>ESR 主动性</div>
-                <div style={hb.gaugeSub}>esr {dose?.esrCalls} / mem {dose?.memCalls} · 共 {dose?.calls}</div>
+                <div style={hb.gaugeLabel}>{tr("ESR 主动性")}</div>
+                <div style={hb.gaugeSub}>esr {dose?.esrCalls} / mem {dose?.memCalls} {tr(" · 共 {0}", { "0": dose?.calls })}</div>
                 <div style={{ fontSize: 10, color: (dose?.esrRatio ?? 0) >= 0.34 ? "#059669" : "#d97706", fontWeight: 700 }}>
-                  {(dose?.esrRatio ?? 0) >= 0.34 ? "健康" : "偏低 → 下会话注入 escalate 提醒"}
+                  {(dose?.esrRatio ?? 0) >= 0.34 ? tr("健康") : tr("偏低 → 下会话注入 escalate 提醒")}
                 </div>
               </div>
             </div>
             <div style={hb.gaugeCard}>
               <EvidenceRing artifact={false} evaluation={false} refs={false} size={64} fraction={dose?.recallHitRate ?? 0} labelText={pct(dose?.recallHitRate)} />
               <div>
-                <div style={hb.gaugeLabel}>召回命中率</div>
-                <div style={hb.gaugeSub}>有命中的 engram_recall 占比</div>
+                <div style={hb.gaugeLabel}>{tr("召回命中率")}</div>
+                <div style={hb.gaugeSub}>{tr("有命中的 engram_recall 占比")}</div>
               </div>
             </div>
             <div style={hb.gaugeCard}>
               <EvidenceRing artifact={false} evaluation={false} refs={false} size={64} fraction={dose?.detailFollowRate ?? 0} labelText={pct(dose?.detailFollowRate)} />
               <div>
-                <div style={hb.gaugeLabel}>detail 转化</div>
-                <div style={hb.gaugeSub}>命中召回后 8 事件内跟 engram_detail</div>
+                <div style={hb.gaugeLabel}>{tr("detail 转化")}</div>
+                <div style={hb.gaugeSub}>{tr("命中召回后 8 事件内跟 engram_detail")}</div>
               </div>
             </div>
           </div>
 
           <div style={hb.grid}>
-            <div style={hb.statCard}><div style={hb.statNum}>{dose?.calls ?? 0}</div><div style={hb.statLabel}>累计工具调用</div></div>
-            <div style={hb.statCard}><div style={hb.statNum}>{dose?.esrCalls ?? 0}</div><div style={hb.statLabel}>esr_* 调用</div></div>
-            <div style={hb.statCard}><div style={hb.statNum}>{dose?.memCalls ?? 0}</div><div style={hb.statLabel}>记忆类调用</div></div>
-            <div style={hb.statCard}><div style={hb.statNum}>{dose?.recallHitsPerQuery ?? "–"}</div><div style={hb.statLabel}>平均命中/查询</div></div>
-            <div style={hb.statCard}><div style={hb.statNum}>{stats.totals.failures ?? 0}</div><div style={hb.statLabel}>失败次数</div></div>
+            <div style={hb.statCard}><div style={hb.statNum}>{dose?.calls ?? 0}</div><div style={hb.statLabel}>{tr("累计工具调用")}</div></div>
+            <div style={hb.statCard}><div style={hb.statNum}>{dose?.esrCalls ?? 0}</div><div style={hb.statLabel}>{tr("esr_* 调用")}</div></div>
+            <div style={hb.statCard}><div style={hb.statNum}>{dose?.memCalls ?? 0}</div><div style={hb.statLabel}>{tr("记忆类调用")}</div></div>
+            <div style={hb.statCard}><div style={hb.statNum}>{dose?.recallHitsPerQuery ?? "–"}</div><div style={hb.statLabel}>{tr("平均命中/查询")}</div></div>
+            <div style={hb.statCard}><div style={hb.statNum}>{stats.totals.failures ?? 0}</div><div style={hb.statLabel}>{tr("失败次数")}</div></div>
           </div>
 
           <div style={hb.panel}>
             <div style={{ ...hb.panelTitle, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-              Context Ledger · 上下文净收益
-              <span style={hb.sub}>{workspace === "" ? "全部工作区" : workspace}</span>
+              {tr("Context Ledger · 上下文净收益")}<span style={hb.sub}>{workspace === "" ? tr("全部工作区") : workspace}</span>
             </div>
             {!ledger ? (
-              <div style={hb.sub}>账本未启用（`ledgerEnabled:false`）或宿主 API 未就绪。</div>
+              <div style={hb.sub}>{tr("账本未启用（`ledgerEnabled:false`）或宿主 API 未就绪。")}</div>
             ) : !ledgerBucket ? (
-              <div style={hb.sub}>该工作区还没有账本记录。</div>
+              <div style={hb.sub}>{tr("该工作区还没有账本记录。")}</div>
             ) : (
               <>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ ...hb.statNum, fontSize: 24, color: ledgerBucket.netTokens >= 0 ? "#059669" : "#dc2626" }}>
                     {tokenCount(ledgerBucket.netTokens)}
                   </span>
-                  <span style={hb.statLabel}>净 token（节省 − 注入 − 重写罚金）</span>
+                  <span style={hb.statLabel}>{tr("净 token（节省 − 注入 − 重写罚金）")}</span>
                   <span style={hb.gaugeSub}>
-                    请求 {ledgerBucket.requests} · 会话 {ledgerBucket.sessions} · open {ledger.openSessions}
-                    {stats.jit ? ` · JIT 推送 ${stats.jit.pushes}` : ""}
-                  </span>
+                    {tr("请求 {0} · 会话 {1} · open {2}{3}", { "0": ledgerBucket.requests, "1": ledgerBucket.sessions, "2": ledger.openSessions, "3": stats.jit ? tr(" · JIT 推送 {0}", { "0": stats.jit.pushes }) : "" })}</span>
                 </div>
                 <div style={{ ...hb.grid, marginTop: 8 }}>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#059669" }}>{tokenCount(ledgerBucket.avoidedTokens)}</div>
-                    <div style={hb.statLabel}>节省 · 剪枝/压缩（已入账）</div>
+                    <div style={hb.statLabel}>{tr("节省 · 剪枝/压缩（已入账）")}</div>
                   </div>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#d97706" }}>{tokenCount(-ledgerBucket.injectedTokens)}</div>
-                    <div style={hb.statLabel}>注入成本 · 索引/召回/ESR（每请求重计）</div>
+                    <div style={hb.statLabel}>{tr("注入成本 · 索引/召回/ESR（每请求重计）")}</div>
                   </div>
                   <div style={hb.statCard}>
                     <div style={{ ...hb.statNum, color: "#dc2626" }}>
                       {tokenCount(-Math.round(ledgerBucket.rewritesCostChars / ledger.charsPerToken))}
                     </div>
-                    <div style={hb.statLabel}>重写罚金 · {ledgerBucket.rewriteCount} 次</div>
+                    <div style={hb.statLabel}>{tr("重写罚金 · {0} 次", { "0": ledgerBucket.rewriteCount })}</div>
                   </div>
                 </div>
                 {ledgerBucket.avoidedTokens === 0 && (ledgerBucket.injectedTokens > 0 || ledgerBucket.rewriteCount > 0) && (
                   <div style={{ ...hb.sub, marginTop: 6 }}>
-                    节省仍为 0：本工作区还没有剪枝/压缩节省入账——L1 边界剪枝需要 host 平面的
-                    toolResultPruner（DSH ≥ 0.2.0 由 bundle patch 重新启用该行），压缩节省由 Context GC
-                    引擎在 checkpoint 时上报；净值为负 = 注入成本 + 重写罚金的合计。
-                  </div>
+                    {tr("节省仍为 0：本工作区还没有剪枝/压缩节省入账——L1 边界剪枝需要 host 平面的 toolResultPruner（DSH ≥ 0.2.0 由 bundle patch 重新启用该行），压缩节省由 Context GC 引擎在 checkpoint 时上报；净值为负 = 注入成本 + 重写罚金的合计。")}</div>
                 )}
                 <div style={{ ...hb.sub, marginTop: 6 }}>
-                  口径：chars/{ledger.charsPerToken} 估算 · 缓存折价 {Math.round(ledger.cacheDiscount * 100)}%
-                  （重写按 {Math.round((1 - ledger.cacheDiscount) * 100)}% 计）· 未计模型质量差
-                </div>
+                  {tr("口径：chars/{0} 估算 · 缓存折价 {1}% （重写按 {2}% 计）· 未计模型质量差", { "0": ledger.charsPerToken, "1": Math.round(ledger.cacheDiscount * 100), "2": Math.round((1 - ledger.cacheDiscount) * 100) })}</div>
                 {ledgerDays.length > 0 && (
                   <svg width={460} height={96} viewBox="0 0 460 96" style={{ display: "block", maxWidth: "100%", marginTop: 8 }}>
                     <line x1={0} y1={48} x2={460} y2={48} stroke={dark ? "rgba(148,163,184,.35)" : "rgba(107,114,128,.35)"} strokeDasharray="3 3" />
@@ -246,7 +237,7 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
                       return (
                         <g key={d.day}>
                           <rect x={x} y={positive ? 48 - h : 48} width={w} height={Math.max(1, h)} rx={2} fill={positive ? "#059669" : "#dc2626"}>
-                            <title>{`${d.day} · net ${d.netTokens} tok · 请求 ${d.requests}`}</title>
+                            <title>{tr("{0} · net {1} tok · 请求 {2}", { "0": d.day, "1": d.netTokens, "2": d.requests })}</title>
                           </rect>
                           <text x={x + w / 2} y={92} fontSize={8} fill={dark ? "#8b93a7" : "#6b7280"} textAnchor="middle">
                             {(d.day ?? "").slice(5).replace("-", "/")}
@@ -256,15 +247,15 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
                     })}
                   </svg>
                 )}
-                <div style={{ ...hb.sub, marginTop: 4 }}>绿 = 当日净省 · 红 = 当日净亏（按天滚动，最近 14 天）</div>
+                <div style={{ ...hb.sub, marginTop: 4 }}>{tr("绿 = 当日净省 · 红 = 当日净亏（按天滚动，最近 14 天）")}</div>
               </>
             )}
           </div>
 
           <div style={hb.panel}>
-            <div style={hb.panelTitle}>近 14 天每日活动 · mem vs esr</div>
+            <div style={hb.panelTitle}>{tr("近 14 天每日活动 · mem vs esr")}</div>
             {daily.rows.length === 0 ? (
-              <div style={hb.sub}>还没有按天数据（工具调用会实时累计）。</div>
+              <div style={hb.sub}>{tr("还没有按天数据（工具调用会实时累计）。")}</div>
             ) : (
               <svg width={BW} height={BH} viewBox={`0 0 ${BW} ${BH}`} style={{ display: "block", maxWidth: "100%" }}>
                 {daily.rows.map((d, i) => {
@@ -292,15 +283,15 @@ export function EngramTelemetry({ api, workspace }: EngramTelemetryFace) {
               </svg>
             )}
             <div style={{ display: "flex", gap: 14, marginTop: 6 }}>
-              <span style={hb.legend}><i style={{ width: 9, height: 9, borderRadius: 2, background: COLOR_MEM, display: "inline-block" }} /> 记忆类 (engram_*/loom_*)</span>
+              <span style={hb.legend}><i style={{ width: 9, height: 9, borderRadius: 2, background: COLOR_MEM, display: "inline-block" }} /> {tr(" 记忆类 (engram_*/loom_*)")}</span>
               <span style={hb.legend}><i style={{ width: 9, height: 9, borderRadius: 2, background: COLOR_ESR, display: "inline-block" }} /> ESR (esr_*)</span>
             </div>
           </div>
 
           <div style={hb.panel}>
-            <div style={hb.panelTitle}>工具调用分布（Top 8）</div>
+            <div style={hb.panelTitle}>{tr("工具调用分布（Top 8）")}</div>
             {toolRows.length === 0 ? (
-              <div style={hb.sub}>还没有工具调用记录。</div>
+              <div style={hb.sub}>{tr("还没有工具调用记录。")}</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {toolRows.map((r) => {

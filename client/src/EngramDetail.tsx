@@ -12,6 +12,7 @@ import type { EngramApi, EntityRecord, LinkRecord, MemoryRecord, TaskRecord } fr
 import { useEngramTheme } from "./theme";
 import { EvidenceRing } from "./EvidenceRing";
 
+import { tr } from "./i18n";
 export type DetailTarget =
   | { kind: "task"; id: string }
   | { kind: "memory"; memory: MemoryRecord }
@@ -45,15 +46,16 @@ const KIND_COLORS: Record<string, string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
-  preference: "偏好",
-  decision: "决定",
-  error: "错误",
-  procedure: "流程",
-  fact: "事实",
-  insight: "洞察",
-  handoff: "交接",
-  task: "任务",
+  preference: tr("偏好"),
+  decision: tr("决定"),
+  error: tr("错误"),
+  procedure: tr("流程"),
+  fact: tr("事实"),
+  insight: tr("洞察"),
+  handoff: tr("交接"),
+  task: tr("任务"),
 };
+const kindLabel = (kind: string): string => tr(KIND_LABEL[kind] ?? kind);
 
 const REL_COLORS: Record<string, string> = {
   depends_on: "#d97706",
@@ -74,7 +76,7 @@ function fmtDate(ts: number | undefined): string {
 function daysLeft(ts: number | null): string {
   if (ts === null || ts === undefined) return "∞";
   const days = Math.ceil((ts - Date.now()) / 86400000);
-  return days > 0 ? `${days}d` : "已过期";
+  return days > 0 ? `${days}d` : tr("已过期");
 }
 
 function gapsOf(t: TaskRecord): string[] {
@@ -173,10 +175,10 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
     try {
       const refs = gRefs.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
       const res = await api.closeTask(task.workspace, task.id, { artifact: gArt.trim() || undefined, evaluation: gEval.trim() || undefined, memoryRefs: refs.length ? refs : undefined });
-      setNotice(res.state === "stable" ? `已闭环 → STABLE ✓` : `仍有缺口：${(res.gaps ?? []).join(", ") || "—"}${res.artifactReason ? `（${res.artifactReason}）` : ""}`);
+      setNotice(res.state === "stable" ? tr(`已闭环 → STABLE ✓`) : tr("仍有缺口：{0}{1}", { "0": (res.gaps ?? []).join(", ") || "—", "1": res.artifactReason ? `（${res.artifactReason}）` : "" }));
       onChanged?.();
     } catch (e) {
-      setNotice(`关闭失败：${e instanceof Error ? e.message : String(e)}`);
+      setNotice(tr("关闭失败：{0}", { "0": e instanceof Error ? e.message : String(e) }));
     } finally {
       setBusy(false);
     }
@@ -192,20 +194,20 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
       : target.kind === "node" ? node?.name ?? target.id
       : link ? nameOf(link.source) : "";
   const headerKind =
-    target.kind === "task" ? (task?.state === "stable" ? { k: "task", label: "STABLE" } : task ? { k: "task", label: task.state === "draft" ? "DRAFT" : "任务" } : { k: "task", label: "任务" })
-      : target.kind === "memory" ? { k: target.memory.kind, label: KIND_LABEL[target.memory.kind] ?? target.memory.kind }
-      : target.kind === "node" ? { k: "node", label: node?.kind || "节点" }
-      : { k: "link", label: "关系" };
+    target.kind === "task" ? (task?.state === "stable" ? { k: "task", label: "STABLE" } : task ? { k: "task", label: task.state === "draft" ? "DRAFT" : tr("任务") } : { k: "task", label: tr("任务") })
+      : target.kind === "memory" ? { k: target.memory.kind, label: kindLabel(target.memory.kind) }
+      : target.kind === "node" ? { k: "node", label: node?.kind || tr("节点") }
+      : { k: "link", label: tr("关系") };
 
   return (
     <div style={hb.root}>
       <div style={hb.head}>
         {kindBadge(headerKind.k, headerKind.label)}
         <div style={hb.title} title={headerTitle}>{headerTitle}</div>
-        <button style={hb.close} onClick={onClose} aria-label="关闭详情">✕</button>
+        <button style={hb.close} onClick={onClose} aria-label={tr("关闭详情")}>✕</button>
       </div>
       <div style={hb.body}>
-        {target.kind === "task" && !task && <div style={hb.v}>任务不存在（可能已被关闭/归档）。</div>}
+        {target.kind === "task" && !task && <div style={hb.v}>{tr("任务不存在（可能已被关闭/归档）。")}</div>}
 
         {target.kind === "task" && task && (
           <>
@@ -217,24 +219,24 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
               </div>
             </div>
             <div style={hb.section}>
-              <div style={hb.k}>状态</div>
+              <div style={hb.k}>{tr("状态")}</div>
               <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", marginTop: 3 }}>
                 <span style={{ ...hb.badge, background: task.state === "stable" ? "#059669" : task.state === "draft" ? "#6b7280" : gapsOf(task).length === 0 ? "#2563eb" : "#d97706" }}>
                   {task.state === "stable" ? "STABLE" : task.state === "draft" ? "DRAFT" : gapsOf(task).length === 0 ? "READY" : "ACTIVE"}
                 </span>
-                <span style={hb.tag}>创建 {fmtDate(task.createdAt)}</span>
-                <span style={hb.tag}>更新 {fmtDate(task.updatedAt)}</span>
+                <span style={hb.tag}>{tr("创建 {0}", { "0": fmtDate(task.createdAt) })}</span>
+                <span style={hb.tag}>{tr("更新 {0}", { "0": fmtDate(task.updatedAt) })}</span>
               </div>
             </div>
             {task.description && (
               <div style={hb.section}>
-                <div style={hb.k}>描述</div>
+                <div style={hb.k}>{tr("描述")}</div>
                 <div style={{ ...hb.v, marginTop: 3 }}>{task.description}</div>
               </div>
             )}
             {task.state === "active" && gapsOf(task).length > 0 && (
               <div style={hb.section}>
-                <div style={hb.k}>证据缺口</div>
+                <div style={hb.k}>{tr("证据缺口")}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>
                   {gapsOf(task).map((g) => <span key={g} style={hb.tag}>{g} ✗</span>)}
                 </div>
@@ -244,10 +246,10 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
             {task.evaluation && <div style={hb.section}><div style={hb.k}>evaluation</div><div style={{ marginTop: 3, color: "#059669" }}>✓ {task.evaluation}</div></div>}
             {task.memoryRefs.length > 0 && (
               <div style={hb.section}>
-                <div style={hb.k}>记忆引用</div>
+                <div style={hb.k}>{tr("记忆引用")}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>
                   {task.memoryRefs.map((r) => (
-                    <span key={r} style={hb.chip} title={`打开记忆 ${r}`} onClick={() => onNavigateMemory(r)}>#{r.slice(0, 8)}</span>
+                    <span key={r} style={hb.chip} title={tr("打开记忆 {0}", { "0": r })} onClick={() => onNavigateMemory(r)}>#{r.slice(0, 8)}</span>
                   ))}
                 </div>
               </div>
@@ -255,18 +257,18 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
 
             {task.state === "active" && (
               <div style={{ marginTop: 4, padding: 8, border: "1px solid var(--dsh-color-border, #d1d5db)", borderRadius: 10, background: dark ? "rgba(15,23,42,.35)" : "rgba(15,23,42,.03)" }}>
-                <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>补齐证据 → 关闭（三项全齐转 STABLE）</div>
+                <div style={{ fontSize: 11, color: "var(--dsh-color-muted, #6b7280)", marginBottom: 6 }}>{tr("补齐证据 → 关闭（三项全齐转 STABLE）")}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <input style={hb.input} placeholder="artifact 产物（文件/PR/路）" value={gArt} onChange={(e) => setGArt(e.target.value)} />
-                  <input style={hb.input} placeholder="evaluation 评估（测试/评审/分数）" value={gEval} onChange={(e) => setGEval(e.target.value)} />
-                  <input style={hb.input} placeholder="memory_refs（#id, 逗号分隔）" value={gRefs} onChange={(e) => setGRefs(e.target.value)} />
+                  <input style={hb.input} placeholder={tr("artifact 产物（文件/PR/路）")} value={gArt} onChange={(e) => setGArt(e.target.value)} />
+                  <input style={hb.input} placeholder={tr("evaluation 评估（测试/评审/分数）")} value={gEval} onChange={(e) => setGEval(e.target.value)} />
+                  <input style={hb.input} placeholder={tr("memory_refs（#id, 逗号分隔）")} value={gRefs} onChange={(e) => setGRefs(e.target.value)} />
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button style={hb.btnPrimary} disabled={busy} onClick={() => setClosing(true)}>{busy ? "…" : "按证据闭环"}</button>
+                    <button style={hb.btnPrimary} disabled={busy} onClick={() => setClosing(true)}>{busy ? "…" : tr("按证据闭环")}</button>
                     {closing && !busy && (
                       <>
-                        <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", alignSelf: "center" }}>确认提交？</span>
-                        <button style={hb.btn} onClick={() => { void submitClose(); setClosing(false); }}>确认</button>
-                        <button style={hb.btn} onClick={() => setClosing(false)}>取消</button>
+                        <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)", alignSelf: "center" }}>{tr("确认提交？")}</span>
+                        <button style={hb.btn} onClick={() => { void submitClose(); setClosing(false); }}>{tr("确认")}</button>
+                        <button style={hb.btn} onClick={() => setClosing(false)}>{tr("取消")}</button>
                       </>
                     )}
                   </div>
@@ -274,7 +276,7 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
               </div>
             )}
             {task.state === "stable" && (
-              <div style={{ fontSize: 11.5, color: "#059669", fontWeight: 700 }}>已闭环 ✓ — 全部证据门已满足，可以从看板/清单移除</div>
+              <div style={{ fontSize: 11.5, color: "#059669", fontWeight: 700 }}>{tr("已闭环 ✓ — 全部证据门已满足，可以从看板/清单移除")}</div>
             )}
             {notice && <div style={{ fontSize: 11.5, fontWeight: 600, color: "#d97706" }}>{notice}</div>}
           </>
@@ -283,50 +285,46 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
         {target.kind === "memory" && (
           <>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-              {kindBadge(target.memory.kind, KIND_LABEL[target.memory.kind] ?? target.memory.kind)}
+              {kindBadge(target.memory.kind, kindLabel(target.memory.kind))}
               <span style={hb.tag}>signal {target.memory.signal.toFixed(2)}</span>
               <span style={hb.tag}>hits {target.memory.hits}</span>
               {target.memory.status === "archived" && <span style={hb.tag}>archived</span>}
             </div>
             <div style={hb.section}>
-              <div style={hb.k}>内容</div>
+              <div style={hb.k}>{tr("内容")}</div>
               <div style={{ ...hb.v, whiteSpace: "pre-wrap", background: dark ? "rgba(15,23,42,.5)" : "rgba(15,23,42,.05)", borderRadius: 8, padding: 8, marginTop: 3 }}>{target.memory.text}</div>
             </div>
             {target.memory.tags.length > 0 && (
               <div style={hb.section}>
-                <div style={hb.k}>标签</div>
+                <div style={hb.k}>{tr("标签")}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>{target.memory.tags.map((t) => <span key={t} style={hb.tag}>#{t}</span>)}</div>
               </div>
             )}
             {memoryLinks && (memoryLinks.m.supersedes || memoryLinks.m.contradicts || memoryLinks.replacedBy.length > 0 || memoryLinks.contradictedBy.length > 0) && (
               <div style={hb.section}>
-                <div style={hb.k}>替换 / 冲突</div>
+                <div style={hb.k}>{tr("替换 / 冲突")}</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3 }}>
                   {memoryLinks.m.supersedes && (
-                    <span style={hb.chipSup} title={`本条替代 ${memoryLinks.m.supersedes}（旧行保留、召回降级）`} onClick={() => onNavigateMemory(memoryLinks.m.supersedes as string)}>
-                      替代 #{memoryLinks.m.supersedes.slice(0, 8)}
-                    </span>
+                    <span style={hb.chipSup} title={tr("本条替代 {0}（旧行保留、召回降级）", { "0": memoryLinks.m.supersedes })} onClick={() => onNavigateMemory(memoryLinks.m.supersedes as string)}>
+                      {tr("替代 #{0}", { "0": memoryLinks.m.supersedes.slice(0, 8) })}</span>
                   )}
                   {memoryLinks.m.contradicts && (
-                    <span style={hb.chipDanger} title={`本条与 ${memoryLinks.m.contradicts} 冲突（两条都保留）`} onClick={() => onNavigateMemory(memoryLinks.m.contradicts as string)}>
-                      冲突 #{memoryLinks.m.contradicts.slice(0, 8)}
-                    </span>
+                    <span style={hb.chipDanger} title={tr("本条与 {0} 冲突（两条都保留）", { "0": memoryLinks.m.contradicts })} onClick={() => onNavigateMemory(memoryLinks.m.contradicts as string)}>
+                      {tr("冲突 #{0}", { "0": memoryLinks.m.contradicts.slice(0, 8) })}</span>
                   )}
                   {memoryLinks.replacedBy.map((x) => (
-                    <span key={x.id} style={hb.chipSup} title={`已被 ${x.text.slice(0, 40)}… 替代`} onClick={() => onNavigateMemory(x.id)}>
-                      ← 被 #{x.id.slice(0, 8)} 替代
-                    </span>
+                    <span key={x.id} style={hb.chipSup} title={tr("已被 {0}… 替代", { "0": x.text.slice(0, 40) })} onClick={() => onNavigateMemory(x.id)}>
+                      {tr("← 被 #{0} 替代", { "0": x.id.slice(0, 8) })}</span>
                   ))}
                   {memoryLinks.contradictedBy.map((x) => (
-                    <span key={x.id} style={hb.chipDanger} title={`${x.text.slice(0, 40)}… 与本条冲突`} onClick={() => onNavigateMemory(x.id)}>
-                      ⇄ #{x.id.slice(0, 8)} 冲突
-                    </span>
+                    <span key={x.id} style={hb.chipDanger} title={tr("{0}… 与本条冲突", { "0": x.text.slice(0, 40) })} onClick={() => onNavigateMemory(x.id)}>
+                      ⇄ #{x.id.slice(0, 8)} {tr(" 冲突")}</span>
                   ))}
                 </div>
               </div>
             )}
             <div style={hb.section}>
-              <div style={hb.k}>元数据</div>
+              <div style={hb.k}>{tr("元数据")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 3, fontSize: 11.5, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--dsh-color-muted, #6b7280)" }}>
                 <span>id   {target.memory.id}</span>
                 <span>ws   {target.memory.workspace}</span>
@@ -342,30 +340,30 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
           </>
         )}
 
-        {target.kind === "node" && !node && <div style={hb.v}>节点不存在。</div>}
+        {target.kind === "node" && !node && <div style={hb.v}>{tr("节点不存在。")}</div>}
         {target.kind === "node" && node && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {kindBadge("node", node.kind || "节点")}
+              {kindBadge("node", node.kind || tr("节点"))}
               <span style={{ fontWeight: 700, fontSize: 13 }}>{node.name}</span>
             </div>
             {node.description && (
               <div style={hb.section}>
-                <div style={hb.k}>描述</div>
+                <div style={hb.k}>{tr("描述")}</div>
                 <div style={{ ...hb.v, marginTop: 3 }}>{node.description}</div>
               </div>
             )}
             <div style={hb.section}>
-              <div style={hb.k}>元数据</div>
+              <div style={hb.k}>{tr("元数据")}</div>
               <div style={{ marginTop: 3, fontSize: 11.5, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--dsh-color-muted, #6b7280)", display: "flex", flexDirection: "column", gap: 2 }}>
                 <span>{node.id} · {node.workspace}</span>
                 <span>created {fmtDate(node.createdAt)}</span>
               </div>
             </div>
             <div style={hb.section}>
-              <div style={hb.k}>关联关系（{incident.length}）</div>
+              <div style={hb.k}>{tr("关联关系（{0}）", { "0": incident.length })}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 3 }}>
-                {incident.length === 0 && <div style={hb.v}>暂无关系 — 用 esr_link 关联</div>}
+                {incident.length === 0 && <div style={hb.v}>{tr("暂无关系 — 用 esr_link 关联")}</div>}
                 {incident.map(({ l, outgoing }) => {
                   const other = outgoing ? l.target : l.source;
                   const color = REL_COLORS[l.relation] ?? "#6b7280";
@@ -393,7 +391,7 @@ export function EngramDetail({ target, api, tasks, nodes, links, memories = [], 
               <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{nameOf(link.target)}</span>
             </div>
             <div style={hb.section}>
-              <div style={hb.k}>元数据</div>
+              <div style={hb.k}>{tr("元数据")}</div>
               <div style={{ marginTop: 3, fontSize: 11.5, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--dsh-color-muted, #6b7280)", display: "flex", flexDirection: "column", gap: 2 }}>
                 <span>id {link.id} · {link.workspace}</span>
                 <span>confidence {Math.round(link.confidence * 100)}%</span>

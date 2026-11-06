@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 
+import { tr } from "./i18n";
 export type GraphEntity = {
   id: string;
   name: string;
@@ -50,13 +51,14 @@ const W = 640;
 const H = 420;
 
 const REL_LABEL: Record<string, string> = {
-  depends_on: "依赖",
-  implements: "实现",
-  refines: "细化",
-  contradicts: "矛盾",
-  tracks: "追踪",
-  relates_to: "关联",
+  depends_on: tr("依赖"),
+  implements: tr("实现"),
+  refines: tr("细化"),
+  contradicts: tr("矛盾"),
+  tracks: tr("追踪"),
+  relates_to: tr("关联"),
 };
+const relLabel = (rel: string): string => tr(REL_LABEL[rel] ?? rel);
 
 const REL_COLOR: Record<string, string> = {
   depends_on: "#f59e0b",
@@ -399,22 +401,21 @@ export function EngramGraph({ workspace, entities, tasks, links, nameOf }: Engra
   if (graph.nodes.length === 0) {
     return (
       <div style={{ fontSize: 12.5, color: "var(--dsh-color-muted, #6b7280)", padding: "8px 0" }}>
-        暂无节点/关系可绘制 — 模型用 esr_node / esr_link 登记领域对象并互连后，这里会出现力导向关系图。
-      </div>
+        {tr("暂无节点/关系可绘制 — 模型用 esr_node / esr_link 登记领域对象并互连后，这里会出现力导向关系图。")}</div>
     );
   }
 
   return (
     <div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ ...s.chip }}>{graph.nodes.length} 节点</span>
-        <span style={{ ...s.chip }}>{graph.keptLinks.length} 关系</span>
-        {graph.dangling > 0 && <span style={{ ...s.chipWarn }}>{graph.dangling} 悬空链接（端点缺失，未绘制）</span>}
+        <span style={{ ...s.chip }}>{graph.nodes.length} {tr(" 节点")}</span>
+        <span style={{ ...s.chip }}>{graph.keptLinks.length} {tr(" 关系")}</span>
+        {graph.dangling > 0 && <span style={{ ...s.chipWarn }}>{graph.dangling} {tr(" 悬空链接（端点缺失，未绘制）")}</span>}
         <span style={{ flex: "1 1 auto" }} />
-        <span style={s.hint}>拖拽节点 · 滚轮缩放 · 空白处拖拽可平移</span>
+        <span style={s.hint}>{tr("拖拽节点 · 滚轮缩放 · 空白处拖拽可平移")}</span>
         <button type="button" style={s.btn} onClick={() => zoom(1.2)}>＋</button>
         <button type="button" style={s.btn} onClick={() => zoom(1 / 1.2)}>－</button>
-        <button type="button" style={s.btn} onClick={reLayout}>重组</button>
+        <button type="button" style={s.btn} onClick={reLayout}>{tr("重组")}</button>
       </div>
 
       <div style={{ position: "relative", border: "1px solid var(--dsh-color-border, #e5e7eb)", borderRadius: 12, overflow: "hidden", background: "var(--dsh-color-surface, #fff)" }}>
@@ -453,7 +454,7 @@ export function EngramGraph({ workspace, entities, tasks, links, nameOf }: Engra
                   />
                   {(activeEdge || hoverEdge === l.id) && (
                     <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2 - 5} fontSize={9.5} fill={color} textAnchor="middle" style={{ pointerEvents: "none" }}>
-                      {REL_LABEL[l.relation] ?? l.relation}
+                      {relLabel(l.relation)}
                     </text>
                   )}
                 </g>
@@ -504,29 +505,28 @@ export function EngramGraph({ workspace, entities, tasks, links, nameOf }: Engra
                 {selNode.kindType === "task" ? selNode.state : selNode.kind}
               </span>
               <span style={{ fontWeight: 700, fontSize: 13, flex: 1, overflowWrap: "anywhere" }}>{selNode.name}</span>
-              <button type="button" style={s.closeBtn} onClick={() => setSelected(null)} aria-label="关闭">✕</button>
+              <button type="button" style={s.closeBtn} onClick={() => setSelected(null)} aria-label={tr("关闭")}>✕</button>
             </div>
             {selNode.description && <div style={{ fontSize: 12, color: "var(--dsh-color-muted, #6b7280)", marginTop: 4 }}>{selNode.description}</div>}
             <div style={{ ...s.mono, marginTop: 4, fontSize: 11 }}>{selNode.id}</div>
             <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)", marginTop: 2 }}>
-              {selNode.degree} 条关联 · {selEdges.length} 条关系
-            </div>
+              {selNode.degree} {tr(" 条关联 · {0} 条关系", { "0": selEdges.length })}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-              {selEdges.length === 0 && <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>暂无关系</div>}
+              {selEdges.length === 0 && <div style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>{tr("暂无关系")}</div>}
               {selEdges.slice(0, 8).map((l) => {
                 const out = l.source === selNode.id;
                 const other = out ? l.target : l.source;
                 return (
                   <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
                     <span style={{ ...s.relChip, color: relColor(l.relation), borderColor: relColor(l.relation) }}>
-                      {REL_LABEL[l.relation] ?? l.relation}
+                      {relLabel(l.relation)}
                     </span>
                     <span style={{ color: "var(--dsh-color-muted, #6b7280)" }}>{out ? "→" : "←"}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>{nameOf(other)}</span>
                   </div>
                 );
               })}
-              {selEdges.length > 8 && <div style={{ fontSize: 11, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>+{selEdges.length - 8} 条更多…</div>}
+              {selEdges.length > 8 && <div style={{ fontSize: 11, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>+{selEdges.length - 8} {tr(" 条更多…")}</div>}
             </div>
           </div>
         )}
@@ -534,18 +534,16 @@ export function EngramGraph({ workspace, entities, tasks, links, nameOf }: Engra
 
       {incidentKinds.size > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>图例：</span>
+          <span style={{ fontSize: 11.5, color: "var(--dsh-color-muted-weak, #9ca3af)" }}>{tr("图例：")}</span>
           {[...incidentKinds].sort().map((rel) => (
             <span key={rel} style={{ ...s.relChip, color: relColor(rel), borderColor: relColor(rel) }}>
-              {REL_LABEL[rel] ?? rel}
+              {relLabel(rel)}
             </span>
           ))}
           <span style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)" }}>
-            <circle r={5} fill={TASK_COLOR} /> 任务
-          </span>
+            <circle r={5} fill={TASK_COLOR} /> {tr(" 任务")}</span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--dsh-color-muted, #6b7280)" }}>
-            <circle r={5} fill={NODE_DEFAULT} /> 实体
-          </span>
+            <circle r={5} fill={NODE_DEFAULT} /> {tr(" 实体")}</span>
         </div>
       )}
     </div>
