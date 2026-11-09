@@ -68,12 +68,20 @@ export function apply(ctx) {
       result.config = status.config;
     } catch (error) { result.statusError = String(error?.message ?? error); }
     try {
+      // Enough of the Session surface for the real token meter to fold an empty
+      // log: it walks \`seq\` through \`eventAt()\` and lazily builds projection
+      // cells through \`snapshotEvents()\`. Without these it throws before the
+      // engine ever reads its own ctx, which would prove nothing.
       const agent = {
         session: {
           id: "probe-session",
-          header: { cwd: "/tmp" },
+          header: { id: "probe-session", cwd: "/tmp" },
+          inheritedEventCount: 0,
+          seq: 0,
           messages: [],
           events: [],
+          eventAt: () => void 0,
+          snapshotEvents: () => [],
           requestHeader: () => ({ config: { provider: "deepseek-official", model: "deepseek-flash" } }),
         },
         options: {},
@@ -81,7 +89,7 @@ export function apply(ctx) {
       const out = await ctx.compaction.compactIfNeeded(agent, "pressure", new AbortController().signal);
       result.pressure = { ok: true, result: out ?? null };
     } catch (error) {
-      result.pressure = { ok: false, error: String(error?.message ?? error) };
+      result.pressure = { ok: false, error: String(error?.message ?? error), stack: String(error?.stack ?? "").split("\\n").slice(0, 6) };
     }
     fs.writeFileSync(OUT, JSON.stringify(result, null, 1));
   }, 8000);
