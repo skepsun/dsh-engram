@@ -13,6 +13,9 @@ node_modules/
 # generated typecheck overlay (client/typecheck.mjs)
 client/tsconfig.build.json
 
+# local-only TypeScript 5 compiler API used by tools/i18n/wrap.mjs
+tools/.toolchain/
+
 # package manager is pnpm (see "packageManager" in package.json); pnpm-lock.yaml is committed.
 # keep guarding against accidental npm usage
 package-lock.json

@@ -24,6 +24,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { EngramApi } from "./api";
 import { EngramBoard } from "./EngramBoard";
 
+import { tr } from "./i18n";
 export { EngramBoard } from "./EngramBoard";
 export { buildTasksMarkdown, buildCloseEvidence } from "./EngramBoard";
 
@@ -107,7 +108,12 @@ function centerColumn(): HTMLElement | undefined {
  * Mount the ESR board surfaces. Returns a disposer.
  * @param api - the loopback-fenced EngramApi used for data + mutations.
  */
-export function mountEngramBoard(api: EngramApi): () => void {
+export function mountEngramBoard(
+  api: EngramApi,
+  /** Optional shell hook: calls back on every locale switch so already-mounted
+   *  DOM surfaces re-render with the new dictionary. */
+  subscribeLocale?: (onChange: () => void) => () => void,
+): () => void {
   ensureBoardStyles();
   if (typeof document === "undefined") return () => {};
 
@@ -117,6 +123,7 @@ export function mountEngramBoard(api: EngramApi): () => void {
   let container: HTMLDivElement | undefined;
   let entry: HTMLButtonElement | undefined;
   let boardUnmounted = false;
+  let lastTotal = 0;
 
   const close = (): void => {
     if (!open) return;
@@ -134,13 +141,16 @@ export function mountEngramBoard(api: EngramApi): () => void {
 
   // --- sidebar entry ---
 
+  /** Sidebar entry copy; re-applied on locale switches. */
+  const entryLabel = (): string => tr("ESR 看板");
+
   /** Build the entry row (plain DOM button; label + live badge). */
   const createEntryRow = (): HTMLButtonElement => {
     const row = document.createElement("button");
     row.type = "button";
     row.dataset.dshEngramEntry = "";
-    row.setAttribute("aria-label", "ESR 看板");
-    row.innerHTML = `<span style="display:inline-flex;flex:0 0 auto;color:var(--dsw-alias-label-primary-bluish,#4338ca);">${ICON}</span><span class="engram-entry-label">ESR 看板</span><span class="engram-entry-badge">0</span>`;
+    row.setAttribute("aria-label", entryLabel());
+    row.innerHTML = `<span style="display:inline-flex;flex:0 0 auto;color:var(--dsw-alias-label-primary-bluish,#4338ca);">${ICON}</span><span class="engram-entry-label"></span><span class="engram-entry-badge">0</span>`;
     row.addEventListener("click", (e) => {
       e.stopPropagation();
       toggle();
@@ -148,6 +158,15 @@ export function mountEngramBoard(api: EngramApi): () => void {
     return row;
   };
   entry = createEntryRow();
+
+  const refreshEntryText = (): void => {
+    if (entry === undefined) return;
+    entry.setAttribute("aria-label", entryLabel());
+    const label = entry.querySelector<HTMLElement>(".engram-entry-label");
+    if (label !== null) label.textContent = entryLabel();
+    entry.title = tr("ESR 看板 · {0} 个进行中任务", { "0": lastTotal });
+  };
+  refreshEntryText();
 
   const placeEntry = (rootEl: HTMLElement): boolean => {
     const button = newSessionButton(rootEl);
@@ -194,12 +213,12 @@ export function mountEngramBoard(api: EngramApi): () => void {
     if (!entry || !entry.isConnected) return;
     try {
       const ov = await api.overview();
-      const total = Object.values(ov.workspaces).reduce((a, w) => a + (w.tasks ?? 0), 0);
+      lastTotal = Object.values(ov.workspaces).reduce((a, w) => a + (w.tasks ?? 0), 0);
       const badge = entry.querySelector<HTMLElement>(".engram-entry-badge");
       if (badge) {
-        badge.textContent = String(total);
-        entry.toggleAttribute("data-dsh-engram-idle", total === 0);
-        entry.title = `ESR 看板 · ${total} 个进行中任务`;
+        badge.textContent = String(lastTotal);
+        entry.toggleAttribute("data-dsh-engram-idle", lastTotal === 0);
+        entry.title = tr("ESR 看板 · {0} 个进行中任务", { "0": lastTotal });
       }
     } catch {
       entry.toggleAttribute("data-dsh-engram-idle", true);
@@ -217,11 +236,19 @@ export function mountEngramBoard(api: EngramApi): () => void {
     container.dataset.dshEngramBoard = "";
     column.appendChild(container);
     root = createRoot(container);
-    root.render(<EngramBoard api={api} onRequestClose={close} />);
+    renderBoard();
+  };
+  const renderBoard = (): void => {
+    root?.render(<EngramBoard api={api} onRequestClose={close} />);
   };
   const boardWatcher = new MutationObserver(() => ensureContainer());
   boardWatcher.observe(document.body, { childList: true, subtree: true });
   ensureContainer();
+
+  const offLocale = subscribeLocale?.(() => {
+    refreshEntryText();
+    renderBoard();
+  });
 
   // --- cross-panel + sidebar-row behavior ---
   const onOtherActivate = (event: Event): void => {
@@ -238,6 +265,7 @@ export function mountEngramBoard(api: EngramApi): () => void {
   // --- disposer ---
   return () => {
     boardUnmounted = true;
+    offLocale?.();
     window.clearInterval(badgeTimer);
     bodyObserver.disconnect();
     boardWatcher.disconnect();

@@ -17,6 +17,7 @@ import { EvidenceRing } from "./EvidenceRing";
 import { EngramGraph } from "./EngramGraph";
 import type { CompactionStatus, EntityRecord, LinkRecord, MentalModelRecord, ObservationRecord, TaskRecord } from "./api";
 import { blockedBy, buildTasksMarkdown, fmtDateShort, POLL_MS, shortAgent, shortId, taskGaps } from "./esrModel";
+import { tr } from "./i18n";
 // EngramBoardMount re-exports this for consumers; keep the board as a stable facade.
 export { buildTasksMarkdown } from "./esrModel";
 
@@ -37,11 +38,11 @@ export interface EngramBoardProps {
   onRequestClose: () => void;
 }
 
-const COLUMNS = [
-  { key: "draft", title: "草稿", sub: "未被激活", color: "#94a3b8", match: (t: TaskRecord) => t.state === "draft" },
-  { key: "gapped", title: "进行中", sub: "证据有缺口", color: "#f59e0b", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length > 0 },
-  { key: "ready", title: "就绪", sub: "证据齐，可闭环", color: "#10b981", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length === 0 },
-  { key: "stable", title: "已闭环", sub: "凭据齐备", color: "#6366f1", match: (t: TaskRecord) => t.state === "stable" },
+const columns = () => [
+  { key: "draft", title: tr("草稿"), sub: tr("未被激活"), color: "#94a3b8", match: (t: TaskRecord) => t.state === "draft" },
+  { key: "gapped", title: tr("进行中"), sub: tr("证据有缺口"), color: "#f59e0b", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length > 0 },
+  { key: "ready", title: tr("就绪"), sub: tr("证据齐，可闭环"), color: "#10b981", match: (t: TaskRecord) => t.state === "active" && taskGaps(t).length === 0 },
+  { key: "stable", title: tr("已闭环"), sub: tr("凭据齐备"), color: "#6366f1", match: (t: TaskRecord) => t.state === "stable" },
 ] as const;
 
 /** Compose per-task close evidence from bulk form values + existing task gates. */
@@ -54,12 +55,21 @@ export function buildCloseEvidence(bulkArtifact: string, bulkEval: string, bulkR
   };
 }
 
-const TREND_LABEL: Record<string, string> = {
-  new: "新",
-  strengthening: "增强",
-  stable: "稳定",
-  weakening: "减弱",
-  stale: "陈旧",
+const trendLabel = (trend: string | undefined): string => {
+  switch (trend) {
+    case "new":
+      return tr("新");
+    case "strengthening":
+      return tr("增强");
+    case "stable":
+      return tr("稳定");
+    case "weakening":
+      return tr("减弱");
+    case "stale":
+      return tr("陈旧");
+    default:
+      return trend ?? "";
+  }
 };
 
 /**
@@ -70,9 +80,9 @@ const TREND_LABEL: Record<string, string> = {
 function ContextGcChip({ compaction }: { compaction?: CompactionStatus }) {
   const host = compaction?.host ?? "unknown";
   const hostLabel =
-    host === "context-gc" ? "Context GC·主机" : host === "default" ? "默认摘要" : host === "unavailable" ? "GC 不可用" : "GC 状态…";
+    host === "context-gc" ? tr("Context GC·主机") : host === "default" ? tr("默认摘要") : host === "unavailable" ? tr("GC 不可用") : tr("GC 状态…");
   const wired = (compaction?.web?.presets ?? []).filter((p) => p.action === "swapped" || p.action === "already").length;
-  const webLabel = wired > 0 ? `·${wired} 预设` : "";
+  const webLabel = wired > 0 ? tr("·{0} 预设", { "0": wired }) : "";
   const color = host === "context-gc"
     ? "var(--dsw-alias-success-strong, #059669)"
     : host === "default" || host === "unavailable"
@@ -80,7 +90,7 @@ function ContextGcChip({ compaction }: { compaction?: CompactionStatus }) {
       : "var(--dsw-alias-label-tertiary, #9ca3af)";
   return (
     <span
-      title={`host 平面：${host}\nweb 平面：${compaction?.web?.action ?? "?"}（${wired} 个预设已接管）\n关掉自动装配见设置卡「web 面自动启用 Context GC」；还原用 npx dsh-engram revert`}
+      title={tr("host 平面：{0}\nweb 平面：{1}（{2} 个预设已接管）\n关掉自动装配见设置卡「web 面自动启用 Context GC」；还原用 npx dsh-engram revert", { "0": host, "1": compaction?.web?.action ?? "?", "2": wired })}
       style={{ fontSize: 11, fontWeight: 600, color, border: `1px solid ${color}55`, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}
     >
       {hostLabel}{webLabel}
@@ -226,7 +236,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
 
   const columnCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const col of COLUMNS) counts[col.key] = filtered.filter(col.match).length;
+    for (const col of columns()) counts[col.key] = filtered.filter(col.match).length;
     counts.all = filtered.length;
     return counts;
   }, [filtered]);
@@ -277,7 +287,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         fail += 1;
       }
     }
-    setBulkMsg(ok > 0 ? `批量完成：${ok} 个任务已闭环${fail > 0 ? ` · ${fail} 个未达证据门（见单卡表单补）` : ""}` : `未闭环：${fail} 个未达证据门（见单卡表单补）`);
+    setBulkMsg(ok > 0 ? tr("批量完成：{0} 个任务已闭环{1}", { "0": ok, "1": fail > 0 ? tr(" · {0} 个未达证据门（见单卡表单补）", { "0": fail }) : "" }) : tr("未闭环：{0} 个未达证据门（见单卡表单补）", { "0": fail }));
     setBulkBusy(false);
     setSelectedIds(new Set());
     setBulkOpen(false);
@@ -308,7 +318,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       const refs = closeRefs.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
       const res = await api.closeTask(t.workspace, t.id, { artifact: closeArtifact, evaluation: closeEval, memoryRefs: refs });
       if (res.state === "active") {
-        setError(`证据仍有缺口：${(res.gaps ?? []).join(", ") || "—"}${res.artifactReason ? `（${res.artifactReason}）` : ""} — 任务保持 ACTIVE`);
+        setError(tr("证据仍有缺口：{0}{1} — 任务保持 ACTIVE", { "0": (res.gaps ?? []).join(", ") || "—", "1": res.artifactReason ? `（${res.artifactReason}）` : "" }));
         return;
       }
       setClosingFor(null);
@@ -334,31 +344,31 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             <rect x="2" y="2.5" width="12" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
             <path d="M5.2 8.1l1.8 1.8 3.8-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span style={hb.title}>ESR 任务看板</span>
-          <span style={hb.sub}>draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门</span>
-          <span style={hb.legendChip}>仅 ESR · 会话内 todo 见输入框上方任务条</span>
+          <span style={hb.title}>{tr("ESR 任务看板")}</span>
+          <span style={hb.sub}>{tr("draft → active(证据) → stable · 跨工作区 · 与 esr_task/esr_close 同一证据门")}</span>
+          <span style={hb.legendChip}>{tr("仅 ESR · 会话内 todo 见输入框上方任务条")}</span>
           <ContextGcChip compaction={overview?.compaction} />
           <span style={hb.seg}>
-            <button type="button" style={viewMode === "board" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("board")} title="四列任务看板">看板</button>
-            <button type="button" style={viewMode === "graph" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("graph")} title="实体关系图谱（esr_node / esr_link）">图谱</button>
+            <button type="button" style={viewMode === "board" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("board")} title={tr("四列任务看板")}>{tr("看板")}</button>
+            <button type="button" style={viewMode === "graph" ? hb.segActive : hb.segBtn} onClick={() => setViewMode("graph")} title={tr("实体关系图谱（esr_node / esr_link）")}>{tr("图谱")}</button>
           </span>
           {loading && <span style={hb.loading}>…</span>}
           <span style={{ flex: "1 1 auto" }} />
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={`证据完备度 ${Math.round(evidenceGauge.frac * 100)}% · ${evidenceGauge.ready}/${evidenceGauge.active} 个进行中任务证据齐 · ${evidenceGauge.stable} 已闭环`}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={tr("证据完备度 {0}% · {1}/{2} 个进行中任务证据齐 · {3} 已闭环", { "0": Math.round(evidenceGauge.frac * 100), "1": evidenceGauge.ready, "2": evidenceGauge.active, "3": evidenceGauge.stable })}>
             <EvidenceRing artifact={false} evaluation={false} refs={false} size={30} showLabel={false} fraction={evidenceGauge.frac} />
             <span style={{ fontSize: 11.5, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted, #6b7280))", fontWeight: 600 }}>
-              {evidenceGauge.active === 0 ? "无进行中" : `${evidenceGauge.ready} 就绪 · 完备 ${Math.round(evidenceGauge.frac * 100)}%`}
+              {evidenceGauge.active === 0 ? tr("无进行中") : tr("{0} 就绪 · 完备 {1}%", { "0": evidenceGauge.ready, "1": Math.round(evidenceGauge.frac * 100) })}
             </span>
           </span>
-          <select style={hb.select} value={ws} onChange={(e) => setWs(e.target.value)} title="工作区筛选">
-            <option value="">全部工作区 · {totalActive} 进行中</option>
+          <select style={hb.select} value={ws} onChange={(e) => setWs(e.target.value)} title={tr("工作区筛选")}>
+            <option value="">{tr("全部工作区 · {0} 进行中", { "0": totalActive })}</option>
             {workspaces.map(([w, c]) => (
-              <option key={w} value={w}>{w.replace(/^.*[\\/]/, "")} · {c.tasks} 进行中</option>
+              <option key={w} value={w}>{w.replace(/^.*[\\/]/, "")} · {c.tasks} {tr(" 进行中")}</option>
             ))}
           </select>
           <input
             style={{ ...hb.input, width: 170 }}
-            placeholder="搜索任务…"
+            placeholder={tr("搜索任务…")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -366,21 +376,17 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
             <>
               {selectedIds.size > 0 && (
                 <button type="button" style={{ ...hb.btn, background: "var(--dsw-alias-state-business-tertiary, rgba(99,102,241,.12))" }} onClick={() => { setBulkOpen(true); setCreating(false); }}>
-                  批量闭环（{selectedIds.size}）
-                </button>
+                  {tr("批量闭环（{0}）", { "0": selectedIds.size })}</button>
               )}
-              <button type="button" style={hb.btn} onClick={exportMd} title="导出当前筛选为 markdown">
-                导出
-              </button>
+              <button type="button" style={hb.btn} onClick={exportMd} title={tr("导出当前筛选为 markdown")}>
+                {tr("导出")}</button>
               <button type="button" style={hb.btn} onClick={() => { setCreating((v) => !v); setClosingFor(null); }}>
-                ＋ 新建
-              </button>
+                {tr("＋ 新建")}</button>
             </>
           )}
-          <button type="button" style={hb.btn} onClick={() => void refresh()} disabled={loading} title="刷新">
-            刷新
-          </button>
-          <button type="button" style={hb.close} onClick={onRequestClose} aria-label="关闭看板">✕</button>
+          <button type="button" style={hb.btn} onClick={() => void refresh()} disabled={loading} title={tr("刷新")}>
+            {tr("刷新")}</button>
+          <button type="button" style={hb.close} onClick={onRequestClose} aria-label={tr("关闭看板")}>✕</button>
         </div>
       </div>
 
@@ -388,32 +394,26 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       <>
       {/* 分栏说明：原生 todo（会话内）与 ESR（跨会话闭环）不是同一平面 */}
       <div style={hb.partition}>
-        <span style={hb.partitionTag}>原生 todo · 会话内</span>
+        <span style={hb.partitionTag}>{tr("原生 todo · 会话内")}</span>
         <span>
-          由 todo_write 驱动，随会话结束，不跨会话保留；要长期沉淀的多步工作，请用
-          <strong> esr_task / 本板「新建」</strong>建为 ESR 任务（
-          <span style={hb.partitionTagEsr}>ESR · 跨会话闭环</span>
-          ），闭环（artifact + evaluation + memory_refs 证据门）后进 [ENGRAM]。
-        </span>
+          {tr("由 todo_write 驱动，随会话结束，不跨会话保留；要长期沉淀的多步工作，请用")}<strong> {tr(" esr_task / 本板「新建」")}</strong>{tr("建为 ESR 任务（")}<span style={hb.partitionTagEsr}>{tr("ESR · 跨会话闭环")}</span>
+          {tr("），闭环（artifact + evaluation + memory_refs 证据门）后进 [ENGRAM]。")}</span>
       </div>
 
       {showModelHint && (
         <div style={hb.modelHint}>
-          <span style={hb.partitionTagEsr}>实体建模</span>
+          <span style={hb.partitionTagEsr}>{tr("实体建模")}</span>
           <span>
-            该范围还没有实体图 — 用 <strong>esr_node</strong> 建模反复出现的领域对象（包/服务/文档/概念），
-            再用 <strong>esr_link</strong> 关联到任务与节点，上方切到「图谱」即可查看完整实体关系图。
-          </span>
+            {tr("该范围还没有实体图 — 用 ")}<strong>esr_node</strong> {tr(" 建模反复出现的领域对象（包/服务/文档/概念）， 再用 ")}<strong>esr_link</strong> {tr(" 关联到任务与节点，上方切到「图谱」即可查看完整实体关系图。")}</span>
         </div>
       )}
 
       {model && (
         <div style={hb.obsBar}>
-          <button type="button" style={hb.obsHead} onClick={() => setModelOpen((v) => !v)} aria-expanded={modelOpen} aria-label="切换常驻摘要">
-            <span style={hb.partitionTagEsr}>常驻摘要 · {String(model.ws || "全部工作区").replace(/^.*[\\/]/, "") || "全部"}</span>
+          <button type="button" style={hb.obsHead} onClick={() => setModelOpen((v) => !v)} aria-expanded={modelOpen} aria-label={tr("切换常驻摘要")}>
+            <span style={hb.partitionTagEsr}>{tr("常驻摘要 · {0}", { "0": String(model.ws || tr("全部工作区")).replace(/^.*[\\/]/, "") || tr("全部") })}</span>
             <span style={hb.obsMeta}>
-              生成于 {Math.max(0, Math.floor((Date.now() - model.generated_at) / 60000))} 分钟前 {modelOpen ? "▾" : "▸"}
-            </span>
+              {tr("生成于 {0} 分钟前 {1}", { "0": Math.max(0, Math.floor((Date.now() - model.generated_at) / 60000)), "1": modelOpen ? "▾" : "▸" })}</span>
           </button>
           {modelOpen && (
             <div style={{ ...hb.obsBody, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 11, lineHeight: "16px" }}>
@@ -425,18 +425,17 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
 
       {obsItems && obsItems.length > 0 && (
         <div style={hb.obsBar}>
-          <button type="button" style={hb.obsHead} onClick={() => setObsOpen((v) => !v)} aria-expanded={obsOpen} aria-label="切换观测列表">
-            <span style={hb.partitionTagEsr}>观测 · 信念 {obsItems.length}</span>
+          <button type="button" style={hb.obsHead} onClick={() => setObsOpen((v) => !v)} aria-expanded={obsOpen} aria-label={tr("切换观测列表")}>
+            <span style={hb.partitionTagEsr}>{tr("观测 · 信念 {0}", { "0": obsItems.length })}</span>
             <span style={hb.obsMeta}>
-              累计 {obsItems.reduce((sum, o) => sum + (o.proof?.count ?? 0), 0)} 条证据 · {TREND_LABEL[obsItems[0]?.trend ?? "new"]} {obsOpen ? "▾" : "▸"}
-            </span>
+              {tr("累计 {0} 条证据 · {1} {2}", { "0": obsItems.reduce((sum, o) => sum + (o.proof?.count ?? 0), 0), "1": trendLabel(obsItems[0]?.trend ?? "new"), "2": obsOpen ? "▾" : "▸" })}</span>
           </button>
           {obsOpen && (
             <div style={hb.obsBody}>
               {obsItems.slice(0, 20).map((o) => (
-                <div key={o.id} style={hb.obsRow} title={`证据 ${o.proof.count} 条：${(o.proof.sources ?? []).join(", ")}`}>
+                <div key={o.id} style={hb.obsRow} title={tr("证据 {0} 条：{1}", { "0": o.proof.count, "1": (o.proof.sources ?? []).join(", ") })}>
                   <span>{(o.negations ?? 0) > 0 ? "¬ " : ""}{o.text}</span>
-                  <span style={hb.obsMeta}>×{o.proof.count} · {TREND_LABEL[o.trend] ?? o.trend}{(o.negations ?? 0) > 0 ? ` · 反证${o.negations}` : ""}</span>
+                  <span style={hb.obsMeta}>×{o.proof.count} · {trendLabel(o.trend)}{(o.negations ?? 0) > 0 ? tr(" · 反证{0}", { "0": o.negations }) : ""}</span>
                 </div>
               ))}
             </div>
@@ -447,36 +446,34 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       <div style={{ padding: "0 14px" }}>
         {denied && (
           <div style={hb.warn}>
-            ESR 看板数据不可达（loopback-only 守卫）— 任务/关系将无法加载；请通过本机访问 GUI，或放入受信网络访问。
-          </div>
+            {tr("ESR 看板数据不可达（loopback-only 守卫）— 任务/关系将无法加载；请通过本机访问 GUI，或放入受信网络访问。")}</div>
         )}
         {error && <div style={hb.error}>⚠ {error}</div>}
 
         {creating && (
           <div style={hb.createForm}>
             <select style={hb.select} value={newWs} onChange={(e) => setNewWs(e.target.value)}>
-              <option value="">选择工作区…</option>
+              <option value="">{tr("选择工作区…")}</option>
               {workspaces.map(([w]) => <option key={w} value={w}>{w.replace(/^.*[\\/]/, "")}</option>)}
             </select>
-            <input style={{ ...hb.input, flex: "1 1 200px" }} placeholder="任务名…" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submitCreate(); }} autoFocus />
-            <input style={{ ...hb.input, flex: "1 1 240px" }} placeholder="要产出 / 满足什么（可选）" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-            <button type="button" style={hb.btnSolid} disabled={busy || !newName.trim() || !(newWs || workspaces.length > 0)} onClick={() => void submitCreate()}>{busy ? "…" : "创建"}</button>
-            <button type="button" style={hb.btn} onClick={() => setCreating(false)}>取消</button>
+            <input style={{ ...hb.input, flex: "1 1 200px" }} placeholder={tr("任务名…")} value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submitCreate(); }} autoFocus />
+            <input style={{ ...hb.input, flex: "1 1 240px" }} placeholder={tr("要产出 / 满足什么（可选）")} value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+            <button type="button" style={hb.btnSolid} disabled={busy || !newName.trim() || !(newWs || workspaces.length > 0)} onClick={() => void submitCreate()}>{busy ? "…" : tr("创建")}</button>
+            <button type="button" style={hb.btn} onClick={() => setCreating(false)}>{tr("取消")}</button>
           </div>
         )}
 
         {bulkOpen && (
           <div style={hb.createForm}>
             <div style={{ fontSize: 11, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-              批量闭环 {selectedIds.size} 个任务 — 三项证据应用到所有选中项（单卡已有的证据自动保留）
-            </div>
-            <input style={hb.input} placeholder="产物 artifact（文件/PR/路径）" value={bulkArtifact} onChange={(e) => setBulkArtifact(e.target.value)} />
-            <input style={hb.input} placeholder="评估 evaluation（测试/评审/分数）" value={bulkEval} onChange={(e) => setBulkEval(e.target.value)} />
-            <input style={hb.input} placeholder="记忆引用 memory_refs（#id, 逗号分隔）" value={bulkRefs} onChange={(e) => setBulkRefs(e.target.value)} />
-            {bulkMsg && <div style={{ fontSize: 11, color: bulkMsg.startsWith("批量完成") ? "#059669" : "#b45309" }}>{bulkMsg}</div>}
+              {tr("批量闭环 {0} 个任务 — 三项证据应用到所有选中项（单卡已有的证据自动保留）", { "0": selectedIds.size })}</div>
+            <input style={hb.input} placeholder={tr("产物 artifact（文件/PR/路径）")} value={bulkArtifact} onChange={(e) => setBulkArtifact(e.target.value)} />
+            <input style={hb.input} placeholder={tr("评估 evaluation（测试/评审/分数）")} value={bulkEval} onChange={(e) => setBulkEval(e.target.value)} />
+            <input style={hb.input} placeholder={tr("记忆引用 memory_refs（#id, 逗号分隔）")} value={bulkRefs} onChange={(e) => setBulkRefs(e.target.value)} />
+            {bulkMsg && <div style={{ fontSize: 11, color: bulkMsg.startsWith(tr("批量完成")) ? "#059669" : "#b45309" }}>{bulkMsg}</div>}
             <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" style={hb.btnSolid} disabled={bulkBusy || selectedIds.size === 0} onClick={() => void closeSelected()}>{bulkBusy ? "…" : "按证据批量闭环"}</button>
-              <button type="button" style={hb.btn} onClick={() => { setBulkOpen(false); setBulkMsg(null); }}>取消</button>
+              <button type="button" style={hb.btnSolid} disabled={bulkBusy || selectedIds.size === 0} onClick={() => void closeSelected()}>{bulkBusy ? "…" : tr("按证据批量闭环")}</button>
+              <button type="button" style={hb.btn} onClick={() => { setBulkOpen(false); setBulkMsg(null); }}>{tr("取消")}</button>
             </div>
           </div>
         )}
@@ -484,7 +481,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
 
       {/* Columns */}
       <div style={hb.columns}>
-        {COLUMNS.map((col) => (
+        {columns().map((col) => (
           <div key={col.key} data-col={col.key} style={{ ...hb.column, borderTop: `2px solid ${col.color}` }}>
             <div style={hb.colHead}>
               <span style={{ fontWeight: 700, fontSize: 12.5 }}>{col.title}</span>
@@ -497,7 +494,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
                     <input
                       type="checkbox"
-                      aria-label={`选择 ${t.name}`}
+                      aria-label={tr("选择 {0}", { "0": t.name })}
                       checked={selectedIds.has(t.id)}
                       disabled={col.key === "stable" || col.key === "draft"}
                       onChange={() => toggleSelect(t.id)}
@@ -507,7 +504,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 12.5, lineHeight: "17px", overflowWrap: "anywhere" }}>{t.name}</div>
                       {t.summary && (
-                        <div style={hb.compacted} title="已压缩 · 原文保留在快照中（可回看）">🗜 {t.summary}</div>
+                        <div style={hb.compacted} title={tr("已压缩 · 原文保留在快照中（可回看）")}>🗜 {t.summary}</div>
                       )}
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 3, alignItems: "center" }}>
                         <EvidenceRing
@@ -520,7 +517,7 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                         <span style={hb.meta}>{shortId(t.id)}</span>
                         {ws === "" && <span style={hb.meta}>{t.workspace.replace(/^.*[\\/]/, "")}</span>}
                         {blockedBy(t, allTasks) > 0 && (
-                          <span style={hb.lock} title={`被 ${blockedBy(t, allTasks)} 个未闭环任务阻塞，先完成它们的 deps`}>🔒 {blockedBy(t, allTasks)}</span>
+                          <span style={hb.lock} title={tr("被 {0} 个未闭环任务阻塞，先完成它们的 deps", { "0": blockedBy(t, allTasks) })}>🔒 {blockedBy(t, allTasks)}</span>
                         )}
                         {t.assignee && <span style={hb.meta} title={`claimed by ${t.assignee}`}>@{shortAgent(t.assignee)}</span>}
                         {(col.key === "gapped" || col.key === "ready") && taskGaps(t).map((g) => (
@@ -537,30 +534,30 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                   </div>
 
                   {col.key === "draft" && (
-                    <div style={hb.cardHint}>草稿 · 用 esr_task 可将其推进为 active</div>
+                    <div style={hb.cardHint}>{tr("草稿 · 用 esr_task 可将其推进为 active")}</div>
                   )}
                   {(col.key === "gapped" || col.key === "ready") && closingFor === t.id ? (
                     <div style={{ ...hb.closeForm, borderColor: col.color }}>
-                      <input style={hb.input} placeholder="产物 artifact（文件/PR/路）" value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
-                      <input style={hb.input} placeholder="评估 evaluation（测试/评审/分数）" value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
-                      <input style={hb.input} placeholder="记忆引用 memory_refs（#id, 逗号分隔）" value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
+                      <input style={hb.input} placeholder={tr("产物 artifact（文件/PR/路）")} value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
+                      <input style={hb.input} placeholder={tr("评估 evaluation（测试/评审/分数）")} value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
+                      <input style={hb.input} placeholder={tr("记忆引用 memory_refs（#id, 逗号分隔）")} value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button type="button" style={hb.btnSolid} disabled={busy} onClick={() => void submitClose(t)}>{busy ? "…" : "按证据闭环"}</button>
-                        <button type="button" style={hb.btn} onClick={() => setClosingFor(null)}>取消</button>
+                        <button type="button" style={hb.btnSolid} disabled={busy} onClick={() => void submitClose(t)}>{busy ? "…" : tr("按证据闭环")}</button>
+                        <button type="button" style={hb.btn} onClick={() => setClosingFor(null)}>{tr("取消")}</button>
                       </div>
                     </div>
                   ) : (
                     (col.key === "gapped" || col.key === "ready") && (
-                      <button type="button" style={hb.advance} onClick={() => { setClosingFor(t.id); }}>补齐证据 → 关闭</button>
+                      <button type="button" style={hb.advance} onClick={() => { setClosingFor(t.id); }}>{tr("补齐证据 → 关闭")}</button>
                     )
                   )}
                 </div>
               ))}
               {filtered.filter(col.match).length > 20 && (
-                <div style={hb.more}>+{filtered.filter(col.match).length - 20} 更多…</div>
+                <div style={hb.more}>+{filtered.filter(col.match).length - 20} {tr(" 更多…")}</div>
               )}
               {filtered.filter(col.match).length === 0 && (
-                <div style={hb.empty}>{col.key === "stable" ? "还没有闭环任务" : "暂无任务"}</div>
+                <div style={hb.empty}>{col.key === "stable" ? tr("还没有闭环任务") : tr("暂无任务")}</div>
               )}
             </div>
           </div>
@@ -571,16 +568,14 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
         <div style={hb.graphWrap}>
           {denied && (
             <div style={hb.warn}>
-              ESR 看板数据不可达（loopback-only 守卫）— 任务/关系/图谱将无法加载；请通过本机访问 GUI，或放入受信网络访问。
-            </div>
+              {tr("ESR 看板数据不可达（loopback-only 守卫）— 任务/关系/图谱将无法加载；请通过本机访问 GUI，或放入受信网络访问。")}</div>
           )}
           {error && <div style={hb.error}>⚠ {error}</div>}
           <div style={hb.graphPanel}>
             <div style={hb.graphHead}>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>关系图谱（esr_node / esr_link 力导向图）</span>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{tr("关系图谱（esr_node / esr_link 力导向图）")}</span>
               <span style={{ fontSize: 11.5, fontWeight: 400, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-                {ws === "" ? "全部工作区" : ws.replace(/^.*[\\/]/, "")} · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细
-              </span>
+                {ws === "" ? tr("全部工作区") : ws.replace(/^.*[\\/]/, "")} {tr(" · 实体为圆形节点，任务为勾选徽标；点选节点查看关系明细")}</span>
             </div>
             <EngramGraph workspace={ws} entities={allNodes} tasks={allTasks} links={allLinks} nameOf={nameOf} />
           </div>
@@ -590,8 +585,8 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
       <div style={hb.footer}>
         <span>
           {viewMode === "board"
-            ? `${columnCounts.all} 个任务（当前筛选）· 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json`
-            : `${allNodes.length} 个实体 · ${allLinks.length} 条关系 · ${allTasks.length} 个任务 · 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json`}
+            ? tr("{0} 个任务（当前筛选）· 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json", { "0": columnCounts.all })
+            : tr("{0} 个实体 · {1} 条关系 · {2} 个任务 · 每 20s 自动刷新 · 数据源 ~/.dsh/storages/dsh_engram.json", { "0": allNodes.length, "1": allLinks.length, "2": allTasks.length })}
         </span>
       </div>
     </div>

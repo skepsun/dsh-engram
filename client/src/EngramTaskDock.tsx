@@ -35,6 +35,7 @@ import type { EngramApi, LinkRecord, TaskRecord, EntityRecord, ToolStats } from 
 import { useEngramTheme } from "./theme";
 import { POLL_MS, taskGaps } from "./esrModel";
 
+import { tr } from "./i18n";
 /** Status of one built-in plan item (mirrors @deepseek-ai/dsh-tool-todo/client). */
 export type PlanItemStatus = "pending" | "in_progress" | "completed";
 export interface PlanItem {
@@ -374,7 +375,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     const failed: string[] = [];
     for (const it of toPromote) {
       try {
-        await api.createTask(effWs, it.content, "源自会话计划（todo_write 一键沉淀）");
+        await api.createTask(effWs, it.content, tr("源自会话计划（todo_write 一键沉淀）"));
         done.push(it.content);
       } catch {
         failed.push(it.content);
@@ -387,8 +388,8 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
     if (failed.length > 0) {
       setPromoteNote(
         failed.length === done.length
-          ? `沉淀失败：${failed.length} 项未能创建（工作区已满或服务不可达），请刷新后重试`
-          : `部分失败：${failed.length}/${toPromote.length} 项未能创建`,
+          ? tr("沉淀失败：{0} 项未能创建（工作区已满或服务不可达），请刷新后重试", { "0": failed.length })
+          : tr("部分失败：{0}/{1} 项未能创建", { "0": failed.length, "1": toPromote.length }),
       );
     }
     setPromoteBusy(false);
@@ -407,7 +408,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
       if (out.state === "active") {
         setData((prev) => ({
           ...prev,
-          error: `证据仍有缺口：${(out.gaps ?? []).join(", ")}${out.artifactReason ? `（${out.artifactReason}）` : ""} — 任务保持 ACTIVE`,
+          error: tr("证据仍有缺口：{0}{1} — 任务保持 ACTIVE", { "0": (out.gaps ?? []).join(", "), "1": out.artifactReason ? `（${out.artifactReason}）` : "" }),
         }));
       } else {
         setClosingFor(null);
@@ -492,14 +493,13 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           <IconChecklist />
         </span>
         <span style={{ flex: "none", fontSize: 13, fontWeight: 600, lineHeight: "20px", color: "var(--dsw-alias-label-primary, inherit)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-          任务
-          <span style={{ ...chip, ...chipNeutral, fontSize: 9.5, padding: "0 6px", lineHeight: "15px", fontWeight: 700, letterSpacing: ".02em" }}>ESR</span>
+          {tr("任务")}<span style={{ ...chip, ...chipNeutral, fontSize: 9.5, padding: "0 6px", lineHeight: "15px", fontWeight: 700, letterSpacing: ".02em" }}>ESR</span>
         </span>
         <span ref={wsMenuRef} onClick={(e) => e.stopPropagation()} style={{ position: "relative", display: "inline-flex", flex: "none", alignItems: "center" }}>
           <span
             role="button"
             tabIndex={0}
-            title={following ? `跟随当前会话 · 工作区 ${wsBasename || "—"}（点击切换 ESR 任务来源）` : `已固定到 ${effLabel}（点击切换）`}
+            title={following ? tr("跟随当前会话 · 工作区 {0}（点击切换 ESR 任务来源）", { "0": wsBasename || "—" }) : tr("已固定到 {0}（点击切换）", { "0": effLabel })}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setWsOpen((v) => !v); }}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setWsOpen((v) => !v); } }}
             style={wsChip}
@@ -511,7 +511,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
             <span
               role="button"
               tabIndex={0}
-              title="恢复跟随当前会话"
+              title={tr("恢复跟随当前会话")}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFocusWs(""); setWsOpen(false); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); setFocusWs(""); setWsOpen(false); } }}
               style={wsClear}
@@ -522,10 +522,9 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           {wsOpen && (
             <div style={wsMenu} role="menu">
               <div role="menuitem" style={wsItem(following)} onClick={() => { setFocusWs(""); setWsOpen(false); }}>
-                跟随会话 · {wsBasename || "—"}{following ? " ✓" : ""}
-              </div>
+                {tr("跟随会话 · {0}{1}", { "0": wsBasename || "—", "1": following ? " ✓" : "" })}</div>
               {wsOptions.length === 0 && (
-                <div style={{ ...wsItem(false), cursor: "default", color: "var(--dsh-color-muted-weak, #9ca3af)" }}>暂无其他工作区</div>
+                <div style={{ ...wsItem(false), cursor: "default", color: "var(--dsh-color-muted-weak, #9ca3af)" }}>{tr("暂无其他工作区")}</div>
               )}
               {wsOptions.map((o) => (
                 <div key={o.path} role="menuitem" style={wsItem(effWs === o.path && !following)} onClick={() => { setFocusWs(o.path); setWsOpen(false); }}>
@@ -533,8 +532,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                 </div>
               ))}
               <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid var(--dsh-color-border, #e5e7eb)", fontSize: 10.5, color: "var(--dsh-color-muted-weak, #9ca3af)", padding: "3px 9px" }}>
-                仅切换 ESR 任务/关系来源；内置 todo 仍属本会话
-              </div>
+                {tr("仅切换 ESR 任务/关系来源；内置 todo 仍属本会话")}</div>
             </div>
           )}
         </span>
@@ -549,19 +547,19 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           }}
         >
           {planItems.length > 0 && (
-            <span style={{ ...chip, ...chipNeutral }}>本轮计划 {planItems.length}</span>
+            <span style={{ ...chip, ...chipNeutral }}>{tr("本轮计划 {0}", { "0": planItems.length })}</span>
           )}
           {gappedTasks.length > 0 && (
-            <span style={{ ...chip, ...STATUS.gap }}>进行中 {gappedTasks.length}</span>
+            <span style={{ ...chip, ...STATUS.gap }}>{tr("进行中 {0}", { "0": gappedTasks.length })}</span>
           )}
           {readyTasks.length > 0 && (
-            <span style={{ ...chip, ...STATUS.ready }}>就绪 {readyTasks.length}</span>
+            <span style={{ ...chip, ...STATUS.ready }}>{tr("就绪 {0}", { "0": readyTasks.length })}</span>
           )}
           {stableCount > 0 && (
-            <span style={{ ...chip, ...STATUS.stable }}>已闭环 {stableCount}</span>
+            <span style={{ ...chip, ...STATUS.stable }}>{tr("已闭环 {0}", { "0": stableCount })}</span>
           )}
           {data.error && (
-            <span style={{ ...chip, ...chipError }} title={data.error}>API 失败</span>
+            <span style={{ ...chip, ...chipError }} title={data.error}>{tr("API 失败")}</span>
           )}
         </span>
         <span style={{ display: "grid", placeItems: "center", flex: "none", color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))" }}>
@@ -576,22 +574,19 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           )}
           {data.denied && (
             <div style={{ fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))", lineHeight: 1.5 }}>
-              ESR 工作区数据不可达（loopback-only 守卫）— 本轮计划照常展示；完整任务与关系见 设置 → Engram 记忆。
-            </div>
+              {tr("ESR 工作区数据不可达（loopback-only 守卫）— 本轮计划照常展示；完整任务与关系见 设置 → Engram 记忆。")}</div>
           )}
 
           {toolStats && (
             <div style={statsRow}>
               <span>
-                近 {toolStats.days} 天 · todo <strong>{toolStats.tools.todo_write ?? 0}</strong>
+                {tr("近 {0} 天 · todo ", { "0": toolStats.days })}<strong>{toolStats.tools.todo_write ?? 0}</strong>
                 {" · "}ESR <strong>{esrToolSum(toolStats)}</strong>
-                {" · "}记忆 <strong>{memToolSum(toolStats)}</strong>
-                {" · "}调用 {toolStats.events}
-              </span>
+                {" · "}{tr("记忆 ")}<strong>{memToolSum(toolStats)}</strong>
+                {" · "}{tr("调用 {0}", { "0": toolStats.events })}</span>
               {esrToolSum(toolStats) === 0 && toolStats.tools.todo_write > 0 && (
                 <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
-                  — ESR 为零，todo 可用「沉淀到 ESR」转草稿
-                </span>
+                  {tr("— ESR 为零，todo 可用「沉淀到 ESR」转草稿")}</span>
               )}
             </div>
           )}
@@ -602,13 +597,11 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
-                    本轮计划
-                  </span>
-                  <span style={badgeTodo}>原生 todo · 会话内</span>
+                    {tr("本轮计划")}</span>
+                  <span style={badgeTodo}>{tr("原生 todo · 会话内")}</span>
                 </span>
                 <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
-                  {planItems.filter((p) => p.status === "completed").length}/{planItems.length} 完成 · 跟随会话自动更新
-                </span>
+                  {planItems.filter((p) => p.status === "completed").length}/{planItems.length} {tr(" 完成 · 跟随会话自动更新")}</span>
               </div>
               <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                 {planItems.map((item, i) => (
@@ -620,10 +613,10 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
               </ul>
               {(toPromote.length > 0 || promoted.size > 0) && (
                 <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 1 }}>
-                  <button type="button" className="ed-btn" style={{ ...btn, ...btnSolid, padding: "3px 9px", fontSize: 11.5 }} disabled={promoteBusy || toPromote.length === 0} onClick={() => void promoteAll()} title="把本轮待办转成 ESR 任务草稿（跨会话保留）">
-                    {promoteBusy ? "…" : promoted.size > 0 ? (toPromote.length > 0 ? `已沉淀 ${promoted.size} 项 · 再沉淀 ${toPromote.length} 项` : `已沉淀 ${promoted.size} 项`) : `沉淀到 ESR（${toPromote.length} 项）`}
+                  <button type="button" className="ed-btn" style={{ ...btn, ...btnSolid, padding: "3px 9px", fontSize: 11.5 }} disabled={promoteBusy || toPromote.length === 0} onClick={() => void promoteAll()} title={tr("把本轮待办转成 ESR 任务草稿（跨会话保留）")}>
+                    {promoteBusy ? "…" : promoted.size > 0 ? (toPromote.length > 0 ? tr("已沉淀 {0} 项 · 再沉淀 {1} 项", { "0": promoted.size, "1": toPromote.length }) : tr("已沉淀 {0} 项", { "0": promoted.size })) : tr("沉淀到 ESR（{0} 项）", { "0": toPromote.length })}
                   </button>
-                  <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>转草稿 · 跨会话闭环</span>
+                  <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>{tr("转草稿 · 跨会话闭环")}</span>
                 </div>
               )}
               {promoteNote && (
@@ -633,9 +626,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                 <div style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted, #6b7280))", paddingTop: 2 }}>
                   <span aria-hidden style={{ color: badgeEsr.color }}>↳</span>
                   <span>
-                    本轮计划是<strong>会话内</strong>原生 todo，随会话结束；多步/需长期保留的工作建议
-                    <strong>用 esr_task 建 ESR 任务</strong>（跨会话闭环，带证据门）沉淀下来。
-                  </span>
+                    {tr("本轮计划是")}<strong>{tr("会话内")}</strong>{tr("原生 todo，随会话结束；多步/需长期保留的工作建议")}<strong>{tr("用 esr_task 建 ESR 任务")}</strong>{tr("（跨会话闭环，带证据门）沉淀下来。")}</span>
                 </div>
               )}
             </div>
@@ -647,22 +638,19 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-secondary, var(--dsh-color-muted-strong, #4b5563))" }}>
-                工作区 ESR 任务 · {activeTasks.length} 进行中
-              </span>
-              <span style={badgeEsr}>ESR · 跨会话闭环</span>
+                {tr("工作区 ESR 任务 · {0} 进行中", { "0": activeTasks.length })}</span>
+              <span style={badgeEsr}>{tr("ESR · 跨会话闭环")}</span>
               {planItems.length > 0 && (
                 <span style={{ fontSize: 10.5, color: "var(--dsw-alias-label-dimmed, var(--dsh-color-muted-weak, #9ca3af))" }}>
-                  计划 {planItems.length} 条 todo
-                </span>
+                  {tr("计划 {0} 条 todo", { "0": planItems.length })}</span>
               )}
             </span>
             <span style={{ flex: "1 1 auto" }} />
             <button type="button" className="ed-btn" style={{ ...btn }}
               onClick={() => { setCreating((v) => !v); setClosingFor(null); }}>
-              <IconPlus /> 新建
-            </button>
-            <button type="button" className="ed-btn" style={{ ...btn }} onClick={refreshNow} disabled={data.loading} title="刷新">
-              <IconRefresh /> {data.loading ? "…" : "刷新"}
+              <IconPlus /> {tr(" 新建")}</button>
+            <button type="button" className="ed-btn" style={{ ...btn }} onClick={refreshNow} disabled={data.loading} title={tr("刷新")}>
+              <IconRefresh /> {data.loading ? "…" : tr("刷新")}
             </button>
           </div>
 
@@ -671,22 +659,22 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
               <input
                 autoFocus
                 style={input}
-                placeholder="任务名…"
+                placeholder={tr("任务名…")}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void submitCreate(); if (e.key === "Escape") setCreating(false); }}
               />
               <input
                 style={{ ...input, fontSize: 12 }}
-                placeholder="要产出 / 满足什么（可选）"
+                placeholder={tr("要产出 / 满足什么（可选）")}
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
               />
               <div style={{ display: "flex", gap: 6 }}>
                 <button type="button" className="ed-btn" style={{ ...btn, ...btnSolid }} disabled={actionBusy || !newName.trim()} onClick={() => void submitCreate()}>
-                  {actionBusy ? "…" : "创建"}
+                  {actionBusy ? "…" : tr("创建")}
                 </button>
-                <button type="button" className="ed-btn" style={btn} onClick={() => setCreating(false)}>取消</button>
+                <button type="button" className="ed-btn" style={btn} onClick={() => setCreating(false)}>{tr("取消")}</button>
               </div>
             </div>
           )}
@@ -695,8 +683,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
               stay compact instead of stacking into a tall strip. */}
           {activeTasks.length === 0 && data.tasks.length === 0 && (
             <div style={{ fontSize: 12, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", padding: "2px 0" }}>
-              暂无活动任务 — 点「新建」或在对话中让 agent 用 esr_task 建任务
-            </div>
+              {tr("暂无活动任务 — 点「新建」或在对话中让 agent 用 esr_task 建任务")}</div>
           )}
           {data.tasks.length > 0 && (
             <div style={taskGrid}>
@@ -718,14 +705,14 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                       className="ed-task-row"
                       style={{ flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "1px 0", color: "var(--dsw-alias-label-primary, inherit)", fontSize: 12.5, fontWeight: 600, lineHeight: "20px", overflowWrap: "anywhere" }}
                       onClick={() => setExpandedId(expanded ? null : task.id)}
-                      title={expanded ? "收起详情" : "展开详情"}
+                      title={expanded ? tr("收起详情") : tr("展开详情")}
                     >
                       <span style={{ fontSize: 10, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))", flex: "none" }}>{expanded ? "▾" : "▸"}</span>
                       <span style={{ color: isStable ? "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" : "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.name}</span>
                       {/* status as a tiny color dot — full label/missing list lives in the tooltip */}
                       <span
                         style={{ flex: "none", width: 7, height: 7, borderRadius: "50%", background: statusColor.fg }}
-                        title={gaps.length > 0 ? `${label} · 证据缺口: ${gaps.join(", ")}` : label}
+                        title={gaps.length > 0 ? tr("{0} · 证据缺口: {1}", { "0": label, "1": gaps.join(", ") }) : label}
                       />
                     </button>
                   </div>
@@ -738,7 +725,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                       )}
                       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
                         {gaps.map((g) => (
-                          <span key={g} style={{ ...chip, ...chipGap }} title="证据缺口">{g} ✗</span>
+                          <span key={g} style={{ ...chip, ...chipGap }} title={tr("证据缺口")}>{g} ✗</span>
                         ))}
                         {task.memoryRefs.map((r) => (
                           <span key={r} style={{ ...chip, ...chipRef }} title={`memory_ref ${r}`}>#{r.slice(0, 8)}</span>
@@ -760,7 +747,7 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                               setCreating(false);
                             }}
                           >
-                            {open ? "收起" : "补齐证据"}
+                            {open ? tr("收起") : tr("补齐证据")}
                           </button>
                         </div>
                       )}
@@ -769,14 +756,13 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
                   {open && (
                     <div style={{ border: "1px dashed var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 8, padding: 7, display: "flex", flexDirection: "column", gap: 5, marginTop: 2 }}>
                       <div style={{ fontSize: 10.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted, #6b7280))" }}>
-                        提供三项证据后转 STABLE（artifact · evaluation · memory_ref）
-                      </div>
+                        {tr("提供三项证据后转 STABLE（artifact · evaluation · memory_ref）")}</div>
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder="artifact 路径/URL" value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
-                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder="evaluation 证据" value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
-                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder="memory_refs 逗号分隔" value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
+                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder={tr("artifact 路径/URL")} value={closeArtifact} onChange={(e) => setCloseArtifact(e.target.value)} />
+                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder={tr("evaluation 证据")} value={closeEval} onChange={(e) => setCloseEval(e.target.value)} />
+                        <input style={{ ...input, width: "auto", flex: "1 1 130px" }} placeholder={tr("memory_refs 逗号分隔")} value={closeRefs} onChange={(e) => setCloseRefs(e.target.value)} />
                         <button type="button" className="ed-btn" style={{ ...btn, ...btnSolid }} disabled={actionBusy} onClick={() => void submitClose(task)}>
-                          {actionBusy ? "…" : "提交关闭"}
+                          {actionBusy ? "…" : tr("提交关闭")}
                         </button>
                       </div>
                     </div>
@@ -789,13 +775,11 @@ export function EngramTaskDock({ sessionId, useSessions, useWorkspaces, useProje
           )}
           {data.tasks.length > TASK_PAGE_SIZE && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", fontSize: 11.5, color: "var(--dsw-alias-label-tertiary, var(--dsh-color-muted-weak, #9ca3af))" }}>
-              <span>共 {data.tasks.length} · {taskPage + 1}/{totalPages}</span>
+              <span>{tr("共 {0} · {1}/{2}", { "0": data.tasks.length, "1": taskPage + 1, "2": totalPages })}</span>
               <button type="button" className="ed-btn" style={{ ...btn, padding: "2px 8px", fontSize: 11.5 }} disabled={taskPage === 0} onClick={() => setTaskPage((v) => Math.max(0, v - 1))}>
-                ‹ 上一页
-              </button>
+                {tr("‹ 上一页")}</button>
               <button type="button" className="ed-btn" style={{ ...btn, padding: "2px 8px", fontSize: 11.5 }} disabled={taskPage >= totalPages - 1} onClick={() => setTaskPage((v) => Math.min(totalPages - 1, v + 1))}>
-                下一页 ›
-              </button>
+                {tr("下一页 ›")}</button>
             </div>
           )}
 

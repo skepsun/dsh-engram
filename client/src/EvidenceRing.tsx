@@ -8,6 +8,7 @@
  * bundle stays clean; used on ESR task cards and aggregate gauges.
  */
 
+import { tr } from "./i18n";
 interface EvidenceRingFace {
   artifact: boolean;
   evaluation: boolean;
@@ -52,8 +53,8 @@ export function EvidenceRing({ artifact, evaluation, refs, size = 24, showLabel 
       title={
         title ??
         (isFraction
-          ? `证据完备度 ${Math.round((fraction as number) * 100)}%`
-          : `证据闭环：artifact${artifact ? "✓" : "✗"} · evaluation${evaluation ? "✓" : "✗"} · memory_ref${refs ? "✓" : "✗"} (${filled}/3)`)
+          ? tr("证据完备度 {0}%", { "0": Math.round((fraction as number) * 100) })
+          : tr("证据闭环：artifact{0} · evaluation{1} · memory_ref{2} ({3}/3)", { "0": artifact ? "✓" : "✗", "1": evaluation ? "✓" : "✗", "2": refs ? "✓" : "✗", "3": filled }))
       }
       style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", width: size, height: size, lineHeight: 1 }}
     >
