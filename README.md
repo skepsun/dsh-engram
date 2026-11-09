@@ -1269,9 +1269,12 @@ Defaults are token-conscious; override any key via the profile patch
 ## Development
 
 ```sh
-npm test            # 381 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
+npm test            # 532 tests: core + web API + GC + usage-observability + Context GC + ESR triggers + BoundaryPrune + preference learning + Context Ledger + JIT push (node:test)
 npm run eval        # offline recall + structure benchmark (deterministic)
 npm run build:client
+npm run host:probe  # boot a throwaway real dsh host and assert the compaction engine's
+                    # pressure path end to end (no model call; --gc for GC mode, --tgz <old>
+                    # for the regression control) — issues #12/#13
 ```
 
 ### Testing & evaluation (two layers of real testing)
