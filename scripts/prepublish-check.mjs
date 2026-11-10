@@ -33,6 +33,14 @@ function sh(cmd, args, cwd) {
   execFileSync(cmd, args, { cwd, stdio: "inherit" });
 }
 
+/** The repo-relative file a package.json script runs (`eval` → eval/recall-bench.mjs). */
+function pathFromScripts(script) {
+  const command = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts?.[script];
+  const match = typeof command === "string" ? command.match(/([A-Za-z0-9_./-]+\.m?js)(?=\s|$)/) : null;
+  if (match === null) throw new Error(`scripts.${script} invokes no local file: ${String(command)}`);
+  return match[1];
+}
+
 /** Newest mtime (ms) of any client source file under `dir` (recursive). */
 function newestSourceMtime(dir, acc = 0) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -101,8 +109,18 @@ try {
   if (clientStats.size < 10 * 1024) {
     throw new Error(`suspiciously small client bundle: ${clientStats.size} bytes`);
   }
+  // 5. The bench a reporting user is told to run must execute from the
+  //    INSTALLED fileset, not just from a checkout (issue #9: `scripts.eval`
+  //    pointed at eval/recall-bench.mjs while files[] shipped only
+  //    eval/gate-audit.mjs — import checks never touch eval/, so the tarball
+  //    looked healthy while `npm run eval` died with MODULE_NOT_FOUND).
+  const benchRel = pathFromScripts("eval");
+  const bench = execFileSync(process.execPath, [benchRel], { cwd: installed, encoding: "utf8" });
+  if (!/BENCH PASS/.test(bench)) {
+    throw new Error(`${benchRel} ran from the installed package but did not pass:\n${bench.slice(-800)}`);
+  }
   console.log(
-    `✓ packed ${tarball}: host(${actual}) import OK, client bundle present (${clientStats.size} bytes)`,
+    `✓ packed ${tarball}: host(${actual}) import OK, client bundle present (${clientStats.size} bytes), ${benchRel} runs`,
   );
 } finally {
   rmSync(tmp, { recursive: true, force: true });

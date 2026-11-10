@@ -305,7 +305,13 @@ async function printStatus(presetsDirFlag) {
     if (declarative > 0) {
       log(`  预设布局：声明式（dsh-web-app/presets/*.patch.yml，DSH ≥ 0.2.0）`);
     } else {
-      log("  预设布局：旧版组合文件（agent.cordis.yml，DSH ≤ 0.1.x）");
+      // Say only what was read. Reaching this branch proves that no
+      // `*.patch.yml` was scanned — nothing more; a legacy root holds either
+      // `agent.cordis.yml` or `agent.json` (COMPOSITION_NAMES), so naming one
+      // of them as a fact is how `status` came to report a file that did not
+      // exist on the machine (issue #9).
+      const observed = [...new Set(presets.map((preset) => basename(preset.path)))].slice(0, 3);
+      log(`  预设布局：没有发现声明式预设（*.patch.yml），按 DSH ≤ 0.1.x 布局处理；实际读到 ${observed.join(" / ")}`);
     }
     log(`  ── web 预设现场（${presets.length} 个）──`);
     for (const preset of presets) {

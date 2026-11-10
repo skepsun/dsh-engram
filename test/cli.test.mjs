@@ -61,6 +61,25 @@ test("cli status: declarative layout is discovered and classified", async () => 
   }
 });
 
+test("cli status: the legacy-layout line names only files it actually read", async () => {
+  const box = await sandbox();
+  try {
+    // A legacy root holding `agent.json` — the other legal composition name.
+    // Reaching this branch only proves "no *.patch.yml was scanned", yet the
+    // line used to assert `agent.cordis.yml`, a file this sandbox (like the
+    // machine in issue #9) does not have.
+    const legacy = join(box.home, ".agent-presets", "legacy-one");
+    await mkdir(legacy, { recursive: true });
+    await writeFile(join(legacy, "agent.json"), JSON.stringify({ plugins: [] }));
+    const { stdout } = await box.run("status", "--presets-dir", join(box.root, "decoy-presets"));
+    assert.match(stdout, /预设布局：没有发现声明式预设（\*\.patch\.yml），按 DSH ≤ 0\.1\.x 布局处理/);
+    assert.match(stdout, /实际读到 agent\.json/);
+    assert.doesNotMatch(stdout, /agent\.cordis\.yml/);
+  } finally {
+    await box.close();
+  }
+});
+
 test("cli enable → already → status wired → revert (flag discovery)", async () => {
   const box = await sandbox();
   try {
