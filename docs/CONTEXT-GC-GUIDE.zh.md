@@ -172,6 +172,13 @@ Fetch the exact records that are still in the store:
 | `npx dsh-engram enable` | 手动重跑启动时的自动装配（通常 no-op） |
 | `npx dsh-engram revert` | 把全部预设还原成 stock `compaction-basic` 行 |
 | `npx dsh-engram status --presets-dir <dir>` | 声明式预设目录探测失败时手动指定（如 `DSH_WEB_PRESETS_DIR`） |
+| `DSH_ENGRAM_LEGACY_PRESET_ROOTS=<dir>[:<dir>]` | 限定旧版预设根（按路径分隔符分隔；空串 = 一个都不扫）。**说出口的范围就是全部**：设了它就不再猜兄弟目录 |
+
+- 旧版根的默认探测包含一个**约定俗成的兄弟目录**
+  （`<repo>/../deepseek-harness/apps/cli/config/agent-presets`）。那是开发布局的便利，
+  但 `enable`/`revert` 是**写操作**：仓库旁边放着 harness checkout 时，它们会去改那份
+  checkout 的预设文件。只想操作自己指定的目录（CI、测试、别人的机器）时，把
+  `DSH_ENGRAM_LEGACY_PRESET_ROOTS` 显式设成一个目录或空串即可，无需依赖「猜得准」。
 
 - 仓库内 `npm run web-compaction:*` 是同一 CLI 的别名。
 - 每个被改写文件旁有 `.engram.bak`（create-only，保留首次原件）：

@@ -2,9 +2,16 @@
  * CLI integration: the shipped `dsh-engram` bin against a sandboxed DSH home
  * and a declarative preset directory (DSH ≥ 0.2.0 layout).
  *
- * Every run points `DSH_WEB_PRESETS_DIR` at a decoy directory (or at the
- * sandbox itself for the env-discovery case), so the tests can never read or
- * rewrite the presets of the real `dsh` installation on the machine.
+ * Every run scopes BOTH preset generations to the sandbox: `DSH_WEB_PRESETS_DIR`
+ * at a decoy directory (or at the sandbox itself for the env-discovery case)
+ * and `DSH_ENGRAM_LEGACY_PRESET_ROOTS` at nothing, so the tests can never read
+ * or rewrite the presets of the real `dsh` installation on the machine.
+ *
+ * The second scope is not decoration. `enable`/`revert` write, and with the
+ * legacy scope unset the scan starts from a hardcoded sibling checkout reached
+ * by absolute path — so on a machine holding `deepseek-harness` beside this repo
+ * `npm test` used to rewrite that checkout's preset files (and `status` failed
+ * the legacy-layout test by reporting files only that checkout had).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +37,7 @@ async function sandbox() {
   await mkdir(decoy, { recursive: true });
   await writeFile(join(presets, "standard.patch.yml"), DECLARATIVE_STOCK);
   await writeFile(join(presets, "minimal.patch.yml"), DECLARATIVE_MINIMAL);
-  const env = { ...process.env, DSH_HOME: home, DSH_WEB_PRESETS_DIR: decoy };
+  const env = { ...process.env, DSH_HOME: home, DSH_WEB_PRESETS_DIR: decoy, DSH_ENGRAM_LEGACY_PRESET_ROOTS: "" };
   const run = (...args) => exec(process.execPath, [CLI, ...args], { env, encoding: "utf8" });
   const writeStatus = async (configSource, web = { action: "swapped", presets: [] }) => {
     await mkdir(join(home, "engram"), { recursive: true });
@@ -68,13 +75,52 @@ test("cli status: the legacy-layout line names only files it actually read", asy
     // Reaching this branch only proves "no *.patch.yml was scanned", yet the
     // line used to assert `agent.cordis.yml`, a file this sandbox (like the
     // machine in issue #9) does not have.
-    const legacy = join(box.home, ".agent-presets", "legacy-one");
+    const roots = join(box.root, "legacy-presets");
+    const legacy = join(roots, "legacy-one");
     await mkdir(legacy, { recursive: true });
     await writeFile(join(legacy, "agent.json"), JSON.stringify({ plugins: [] }));
-    const { stdout } = await box.run("status", "--presets-dir", join(box.root, "decoy-presets"));
+    // A root the unset guess WOULD scan (`$DSH_HOME/.agent-presets`). Naming the
+    // roots is the whole truth, so this one must stay out of the report even
+    // though it sits exactly where the guess looks.
+    const shadowed = join(box.home, ".agent-presets", "home-one");
+    await mkdir(shadowed, { recursive: true });
+    await writeFile(join(shadowed, "agent.cordis.yml"), DECLARATIVE_STOCK);
+
+    const env = { ...box.env, DSH_ENGRAM_LEGACY_PRESET_ROOTS: roots };
+    const { stdout } = await exec(process.execPath, [CLI, "status", "--presets-dir", join(box.root, "decoy-presets")], {
+      env,
+      encoding: "utf8",
+    });
     assert.match(stdout, /预设布局：没有发现声明式预设（\*\.patch\.yml），按 DSH ≤ 0\.1\.x 布局处理/);
     assert.match(stdout, /实际读到 agent\.json/);
     assert.doesNotMatch(stdout, /agent\.cordis\.yml/);
+    assert.match(stdout, /legacy-one: custom/);
+    assert.doesNotMatch(stdout, /home-one/);
+  } finally {
+    await box.close();
+  }
+});
+
+test("cli enable/revert: an empty legacy scope keeps $DSH_HOME presets out of reach", async () => {
+  // The write half of the same bug: `enable`/`revert` act on every discovered
+  // preset, so a legacy root the caller never named — here the guess's own
+  // `$DSH_HOME/.agent-presets`, on a dev box the sibling checkout — could be
+  // rewritten by a test run. Planting the canary where the guess looks is what
+  // makes this bite if the scope is ever dropped from the sandbox.
+  const box = await sandbox();
+  try {
+    const canaryDir = join(box.home, ".agent-presets", "canary");
+    await mkdir(canaryDir, { recursive: true });
+    const canary = join(canaryDir, "agent.cordis.yml");
+    await writeFile(canary, DECLARATIVE_STOCK);
+
+    const enable = await box.run("enable", "--presets-dir", box.presets);
+    assert.doesNotMatch(enable.stdout, /canary/);
+    assert.equal(await readFile(canary, "utf8"), DECLARATIVE_STOCK, "enable rewrote a legacy root it was not given");
+
+    const revert = await box.run("revert", "--presets-dir", box.presets);
+    assert.doesNotMatch(revert.stdout, /canary/);
+    assert.equal(await readFile(canary, "utf8"), DECLARATIVE_STOCK, "revert rewrote a legacy root it was not given");
   } finally {
     await box.close();
   }
@@ -188,7 +234,7 @@ test("status prints the two ledger legs and calls out a host-only ledger", async
   ledger.tick("s1", "/tmp/ws-legs"); // a row only lands once the delta is non-empty
   ledger.flush();
   const { stdout } = await exec(process.execPath, [CLI, "status"], {
-    env: { ...process.env, DSH_HOME: home, DSH_WEB_PRESETS_DIR: join(home, "presets") },
+    env: { ...process.env, DSH_HOME: home, DSH_WEB_PRESETS_DIR: join(home, "presets"), DSH_ENGRAM_LEGACY_PRESET_ROOTS: "" },
     encoding: "utf8",
   });
   assert.match(stdout, /账本两条腿：engram 剪枝 7841 字符 · 宿主自剪 64200 字符/);

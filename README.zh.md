@@ -561,7 +561,9 @@ Context GC 的装配在**两个平面**，但两个开关都是 opt-in（默认�
     所以**设置卡对 web 平面同样生效**，不再硬编码 true/true。
   - 手动的完全等价物（预览 / 审计 / 卸载前回归，随 npm 包发布的 CLI，自动发现两代预设布局——
     旧版根、出厂声明式预设与上次启动记录的路径；`--presets-dir <dir>` 覆盖声明式目录探测、
-    `--file` 指定单个）：
+    `--file` 指定单个；`DSH_ENGRAM_LEGACY_PRESET_ROOTS` 限定旧版根——按路径分隔符分隔，
+    空串表示「一个都不扫」。**说出口的范围就是全部**：设了它就不再猜目录，故
+    `enable`/`revert` 不会越界改写你没点名的兄弟 `deepseek-harness` checkout）：
     ```bash
     npx dsh-engram status     # stock → 未动；wired → 已接管；custom → 不碰
     npx dsh-engram doctor     # status + 按缺口排序的下一步建议

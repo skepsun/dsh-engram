@@ -18,11 +18,18 @@
  * presets (`@deepseek-ai/dsh-web-app/presets/<id>.patch.yml`, DSH ≥ 0.2.0).
  * `enable`/`revert` act on the discovered presets (or a single file via
  * `--file <path>`; `--presets-dir <path>` overrides discovery).
+ *
+ * Both generations can be scoped by the operator, and a scope stated is the
+ * whole truth — nothing else is guessed: `--presets-dir` / `DSH_WEB_PRESETS_DIR`
+ * for the declarative scan, `DSH_ENGRAM_LEGACY_PRESET_ROOTS` (path-delimited,
+ * empty string for "none") for the legacy roots. `enable` and `revert` WRITE,
+ * so on a machine holding a harness checkout beside this repo the unset guess
+ * is what makes them reach outside the tree the caller named.
  */
 import { readFile, readdir, access } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, basename, resolve, join } from "node:path";
+import { delimiter, dirname, basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { describePushLegs, readPushLegsHealth } from "../lib/push-legs.js";
@@ -65,10 +72,26 @@ async function compositionIn(dir) {
   return undefined;
 }
 
+/**
+ * The legacy roots, path-delimited (`:` on POSIX, `;` on Windows).
+ *
+ * Set — even to the empty string — it is the WHOLE truth: the named roots are
+ * the only ones scanned, and nothing is guessed. That is a caller stating
+ * "do not go looking for checkouts next to me", which is what test sandboxes
+ * and locked-down machines need: the guess below reaches a sibling checkout by
+ * absolute path, past every `--presets-dir` / `DSH_WEB_PRESETS_DIR` scope.
+ */
+const LEGACY_ROOTS_ENV = "DSH_ENGRAM_LEGACY_PRESET_ROOTS";
+
 /** Well-known LEGACY preset roots (DSH ≤ 0.1.x: one directory per preset). */
 function legacyPresetRoots() {
+  const named = process.env[LEGACY_ROOTS_ENV];
+  if (typeof named === "string") {
+    return named.split(delimiter).map((root) => root.trim()).filter((root) => root.length > 0).map((root) => resolve(root));
+  }
   const dshHome = process.env.DSH_HOME ?? join(homedir(), ".dsh");
   return [
+    // The conventional sibling layout: dsh-engram developed beside the harness.
     resolve(REPO_ROOT, "..", "deepseek-harness/apps/cli/config/agent-presets"),
     join(dshHome, ".agent-presets"),
   ];

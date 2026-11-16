@@ -790,7 +790,11 @@ default):
   - A fully equivalent manual CLI, shipped in the npm package
     (scans both preset generations — legacy roots, the shipped declarative
     presets, and the paths recorded at boot; `--presets-dir <dir>` overrides
-    declarative discovery, `--file <path>` targets one):
+    declarative discovery, `--file <path>` targets one, and
+    `DSH_ENGRAM_LEGACY_PRESET_ROOTS` scopes the legacy roots — path-delimited,
+    empty string for "none". A scope you state is the whole truth: with it set
+    nothing else is guessed, so `enable`/`revert` cannot reach the sibling
+    `deepseek-harness` checkout that the unset default looks for):
     ```bash
     npx dsh-engram status     # stock = untouched · wired = active · custom = hands-off
     npx dsh-engram doctor     # status + ranked next steps for every gap found
