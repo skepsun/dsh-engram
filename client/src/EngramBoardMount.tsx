@@ -23,6 +23,7 @@
 import { createRoot, type Root } from "react-dom/client";
 import type { EngramApi } from "./api";
 import { EngramBoard } from "./EngramBoard";
+import { placeEntryRow } from "./sidebarEntry";
 
 import { tr } from "./i18n";
 export { EngramBoard } from "./EngramBoard";
@@ -41,8 +42,6 @@ const CENTER_COLUMN_SELECTOR = '[data-pane="conversation"], [class*="centerCol"]
 /** Rows whose click should hand the center column back to the conversation. */
 const SIDEBAR_ROW_SELECTOR =
   '[class*="sessionRow"], [class*="projectRow"], [class*="searchResultRow"], [class*="searchResultWorkspace"], [class*="newSession"]';
-/** Sibling injected rows (keep relative order stable across re-renders). */
-const FAMILY_SELECTOR = "[data-dsh-taskboard-entry], [data-dsh-ssh-entry], [data-dsh-engram-entry]";
 
 const ICON =
   '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2.5"/><path d="M5.2 8.1l1.8 1.8 3.8-4"/></svg>';
@@ -172,22 +171,12 @@ export function mountEngramBoard(
     const button = newSessionButton(rootEl);
     if (button === undefined) return false;
     if (entry!.parentElement === rootEl) return true;
-    const row = button.closest('[class*="logoRow"]');
-    const base = row !== null && row.parentElement === rootEl ? row : button;
-    const family = Array.from(rootEl.children).filter(
-      (el): el is HTMLElement => el instanceof HTMLElement && el.matches(FAMILY_SELECTOR),
-    );
-    const lastSibling = family[family.length - 1];
-    if (lastSibling !== undefined && lastSibling.nextSibling !== null) {
-      rootEl.insertBefore(entry!, lastSibling.nextSibling);
-    } else {
-      rootEl.insertBefore(entry!, base.nextSibling ?? null);
-    }
-    return true;
+    return placeEntryRow(rootEl, entry!, button);
   };
 
   let entryRoot: HTMLElement | undefined;
   let entryPlaced = false;
+  let warnedPlaceFailure = false;
   const tryPlaceEntry = (): void => {
     if (!entry) return;
     if (entryRoot !== undefined && !entryRoot.isConnected) {
@@ -201,7 +190,20 @@ export function mountEngramBoard(
     }
     entryRoot ??= sidebarRoot();
     if (entryRoot === undefined) return;
-    entryPlaced = placeEntry(entryRoot);
+    try {
+      entryPlaced = placeEntry(entryRoot);
+    } catch (error) {
+      // This runs inside a MutationObserver: an uncaught throw repeats on every
+      // DOM mutation, so one bad guess about the shell's shape becomes a console
+      // flood (issue #14: 500+ exception entries per session). Report it once and
+      // keep the retry — placement self-heals when the shell's DOM changes — but
+      // never let the exception escape.
+      if (!warnedPlaceFailure) {
+        warnedPlaceFailure = true;
+        console.warn("[dsh-engram] ESR sidebar entry placement failed:", error);
+      }
+      entryPlaced = false;
+    }
   };
   const bodyObserver = new MutationObserver(() => tryPlaceEntry());
   bodyObserver.observe(document.body, { childList: true, subtree: true });
