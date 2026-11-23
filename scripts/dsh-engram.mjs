@@ -26,7 +26,7 @@
  * so on a machine holding a harness checkout beside this repo the unset guess
  * is what makes them reach outside the tree the caller named.
  */
-import { readFile, readdir, access } from "node:fs/promises";
+import { readFile, readdir, access, writeFile, rename } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { delimiter, dirname, basename, resolve, join } from "node:path";
@@ -43,6 +43,8 @@ import { contextGcStatusPath, readContextGcStatus, readPruneAttempts } from "../
 import { readLedger } from "../lib/ledger.js";
 import { defaultSkillDir, exportSkills, skillDescription, skillName, planSkillExport } from "../lib/skill-export.js";
 import { approvedIds, isApproved, loadApprovals, recordApproval, revokeApproval } from "../lib/approvals.js";
+import { openEngramDomain } from "../lib/store.js";
+import { applyConsolidation, formatConsolidationPlan, planConsolidation } from "../lib/consolidate.js";
 import { isProvenProcedure, invalidatedProcedure } from "../lib/status-insights.js";
 import { workspaceKey } from "../lib/util.js";
 import { ENGRAM_PRUNE_ROW_NAME, swapCompactionRow } from "../lib/web-provision.js";
@@ -643,6 +645,55 @@ async function readPlaybookInsights(workspaceArg) {
   }
 }
 
+async function runConsolidate({ workspace, home, apply = false, minSimilarity }) {
+  const storage = join(home, "storages", "dsh_engram.json");
+  let raw;
+  try {
+    raw = JSON.parse(await readFile(storage, "utf8"));
+  } catch (err) {
+    throw new Error(`无法读取记忆库 ${storage}：${err?.message ?? err}`);
+  }
+  const tablesObj = raw?.tables && typeof raw.tables === "object" ? raw.tables : {};
+  const maps = new Map();
+  const facility = {
+    open(spec) {
+      for (const name of Object.keys(spec.tables)) {
+        const src = tablesObj[name] && typeof tablesObj[name] === "object" ? tablesObj[name] : {};
+        maps.set(name, new Map(Object.entries(src)));
+      }
+      return Promise.resolve({
+        table(name) {
+          const map = maps.get(name);
+          return {
+            get: (k) => map.get(k),
+            put: (k, v) => Promise.resolve(map.set(k, v)),
+            delete: (k) => Promise.resolve(map.delete(k)),
+            entries: () => map.entries(),
+          };
+        },
+        close: () => Promise.resolve(),
+      });
+    },
+  };
+  const domain = await openEngramDomain(facility);
+  const ws = workspaceKey(workspace);
+  const plan = planConsolidation(domain, ws, { minSimilarity });
+  let applied = false;
+  if (apply && (plan.summary.duplicateCount > 0 || plan.summary.rollupCount > 0)) {
+    const out = await applyConsolidation(domain, ws, plan);
+    applied = out.applied;
+    const nextTables = { ...tablesObj };
+    for (const [name, map] of maps.entries()) {
+      nextTables[name] = Object.fromEntries(map.entries());
+    }
+    const nextRaw = { ...raw, tables: nextTables };
+    await writeFile(`${storage}.tmp`, `${JSON.stringify(nextRaw, null, 2)}\n`, "utf8");
+    await rename(`${storage}.tmp`, storage);
+  }
+  await domain.close();
+  log(formatConsolidationPlan(plan, { applied }));
+}
+
 async function main() {
   const [, , rawCommand, ...rest] = process.argv;
   const command = rawCommand ?? "status";
@@ -677,6 +728,19 @@ async function main() {
       if (id === undefined || id.startsWith("--")) throw new Error(`skill ${sub} 需要一个记忆 id`);
       await runSkillApprove({ ...shared, id, note: flag("--note"), revoke: sub === "revoke" });
     }
+  } else if (command === "consolidate") {
+    const flag = (name) => {
+      const at = rest.indexOf(name);
+      return at >= 0 ? rest[at + 1] : undefined;
+    };
+    const simRaw = flag("--min-sim");
+    const minSimilarity = simRaw !== undefined ? Number(simRaw) : undefined;
+    await runConsolidate({
+      workspace: flag("--workspace") ?? process.cwd(),
+      home: flag("--home") ?? process.env.DSH_HOME ?? join(homedir(), ".dsh"),
+      apply: rest.includes("--apply"),
+      minSimilarity,
+    });
   } else if (command === "status") {
     await printStatus(presetsDirFlag);
   } else if (command === "doctor") {
@@ -684,7 +748,7 @@ async function main() {
   } else if (command === "enable" || command === "revert") {
     await runEnableRevert(command, fileFlag, presetsDirFlag);
   } else {
-    throw new Error(`未知命令 "${command}"（用 status | doctor | enable | revert）`);
+    throw new Error(`未知命令 "${command}"（用 status | doctor | enable | revert | skill | consolidate）`);
   }
 }
 
