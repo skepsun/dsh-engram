@@ -17,7 +17,13 @@ import assert from "node:assert/strict";
 
 import { openEngramDomain } from "../lib/store.js";
 import { buildEsrSnapshot } from "../lib/index-block.js";
-import { pendingTodosFromSession, planTodoSink, sinkPendingTodos, SINK_DESCRIPTION } from "../lib/todo-sink.js";
+import {
+  DEFAULT_STABLE_DEDUPE_DAYS,
+  pendingTodosFromSession,
+  planTodoSink,
+  sinkPendingTodos,
+  SINK_DESCRIPTION,
+} from "../lib/todo-sink.js";
 
 /** In-memory storage-domain stand-in (mirrors test/basic.test.mjs). */
 function fakeFacility() {
@@ -205,5 +211,96 @@ test("auto-sunk drafts stay out of the [ESR] active count (draft row, never coun
   assert.ok(block.includes("fix boot") && block.includes("DRAFT"), "sunk plan visible as a DRAFT row (not active)");
   assert.ok(!/1 active/.test(block), "the draft never contributes to the active count");
   assert.ok(block.includes("esr_status"), "snapshot still points at the pull tool");
+  await domain.close();
+});
+
+// ── Issue #17: dedupe recently-closed (stable) tasks ─────────────────────────
+test("planTodoSink dedupes recently-closed stable tasks without counting them toward active cap", () => {
+  const DAY = 86_400_000;
+  const now = 100 * DAY;
+  const plan = planTodoSink(
+    ["Run Health Check", "Old Recurring", "Brand New"],
+    [
+      { name: "run health check", state: "stable", stateChangedAt: now - 2 * DAY },
+      { name: "old recurring", state: "stable", stateChangedAt: now - (DEFAULT_STABLE_DEDUPE_DAYS + 1) * DAY },
+      { name: "unrelated closed", state: "stable", updatedAt: now - DAY },
+    ],
+    { maxTasks: 2, now },
+  );
+  assert.deepEqual(plan.existed, ["Run Health Check"]);
+  assert.deepEqual(plan.toCreate, ["Old Recurring", "Brand New"], "stable tasks do not consume active cap");
+  assert.deepEqual(plan.atCap, []);
+});
+
+test("planTodoSink respects stableDedupeDays=0 and falls back to updatedAt/createdAt or conservative dedupe", () => {
+  const DAY = 86_400_000;
+  const now = 50 * DAY;
+  const disabled = planTodoSink(
+    ["a"],
+    [{ name: "a", state: "stable", stateChangedAt: now - 1000 }],
+    { maxTasks: 10, now, stableDedupeDays: 0 },
+  );
+  assert.deepEqual(disabled.toCreate, ["a"]);
+
+  const noTimestamp = planTodoSink(
+    ["a", "b"],
+    [
+      { name: "a", state: "stable" },
+      { name: "b", state: "stable", stateChangedAt: 0, updatedAt: now - DAY },
+    ],
+    { maxTasks: 10, now },
+  );
+  assert.deepEqual(noTimestamp.toCreate, []);
+  assert.deepEqual(noTimestamp.existed, ["a", "b"]);
+});
+
+test("sinkPendingTodos does not resurrect a recently-closed draft on next session end (issue #17)", async () => {
+  const DAY = 86_400_000;
+  const t0 = 1_700_000_000_000;
+  const name = "跑 manual-health.mjs 手册体检 + 资产索引盘点";
+  const domain = await openEngramDomain(fakeFacility());
+
+  // Session 1 ends → creates draft
+  const first = await sinkPendingTodos(domain, "/w", [name], {
+    sessionId: "sess-1",
+    maxTasks: 1,
+    now: t0,
+  });
+  assert.deepEqual(first.created, [name]);
+  const [draft] = domain.listTasks("/w", { includeStable: false });
+  assert.equal(draft.state, "draft");
+
+  // User closes the draft → stable
+  await domain.putTask({
+    ...draft,
+    state: "stable",
+    artifact: "report.md",
+    evaluation: "ok",
+    memoryRefs: ["mem_1"],
+    updatedAt: t0 + DAY,
+    stateChangedAt: t0 + DAY,
+  });
+
+  // Session 2 ends 2 days later with the same pending todo → must NOT recreate
+  const second = await sinkPendingTodos(domain, "/w", [name, "另一个新任务"], {
+    sessionId: "sess-2",
+    maxTasks: 1,
+    now: t0 + 3 * DAY,
+  });
+  assert.deepEqual(second.existed, [name]);
+  assert.deepEqual(second.created, ["另一个新任务"], "closed task does not block cap for unrelated todo");
+  assert.equal(
+    domain.listTasks("/w", { includeStable: false }).filter((t) => t.name === name).length,
+    0,
+    "no duplicate draft resurrected",
+  );
+
+  // After the dedupe window expires, a genuinely recurring todo may sink again
+  const third = await sinkPendingTodos(domain, "/w", [name], {
+    sessionId: "sess-3",
+    maxTasks: 10,
+    now: t0 + (DEFAULT_STABLE_DEDUPE_DAYS + 2) * DAY,
+  });
+  assert.deepEqual(third.created, [name]);
   await domain.close();
 });
