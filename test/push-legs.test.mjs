@@ -78,3 +78,43 @@ test("never throws on a bad home or a corrupt line", () => {
   writeFileSync(pushLegsPath(h), "{not json\n", "utf8");
   assert.equal(readPushLegsHealth(h), undefined);
 });
+
+test("records render-leg char counts, aggregates indexChars, and flags silent empty renders", () => {
+  const h = engramDir();
+  noteSessionEventsSource({
+    engramDir: h,
+    source: "snapshotEvents",
+    sessionId: "s1",
+    workspace: "/repo",
+    render: { engramChars: 540, resumeChars: 120, recallChars: 310, workspaceMemories: 42 },
+    now: 1000,
+  });
+  noteSessionEventsSource({
+    engramDir: h,
+    source: "snapshotEvents",
+    sessionId: "s2",
+    workspace: "/repo",
+    render: { engramChars: 680, resumeChars: 0, recallChars: 200, workspaceMemories: 42 },
+    now: 2000,
+  });
+  const health = readPushLegsHealth(h);
+  assert.equal(health.workspace, "/repo");
+  assert.deepEqual(health.render, { engramChars: 680, resumeChars: 0, recallChars: 200, workspaceMemories: 42 });
+  assert.deepEqual(health.indexChars, { max: 680, latest: 680, samples: 2, workspace: "/repo", at: 2000 });
+  const line = describePushLegs(health);
+  assert.match(line, /渲染 \[ENGRAM\]=680c \[RESUME\]=0c \[RECALL\]=200c/);
+  assert.doesNotMatch(line, /⚠ 库有/);
+
+  // Silent empty render (the #9/#10 failure mode: store has memories, render produced 0c)
+  noteSessionEventsSource({
+    engramDir: h,
+    source: "snapshotEvents",
+    sessionId: "s3",
+    workspace: "/repo",
+    render: { engramChars: 0, resumeChars: 0, recallChars: 0, workspaceMemories: 1415 },
+    now: 3000,
+  });
+  const broken = readPushLegsHealth(h);
+  assert.equal(broken.indexChars.samples, 2, "0c renders do not enter non-empty G5 indexChars");
+  assert.match(describePushLegs(broken), /⚠ 库有 1415 条记忆但 \[ENGRAM\]=0c/);
+});

@@ -33,6 +33,7 @@ import path from "node:path";
 
 import { decodeZstd, readToolResult, recallStatsFromOutput, sessionLogFile, sessionsRoot } from "../lib/usage.js";
 import { readLedger } from "../lib/ledger.js";
+import { readPushLegsHealth } from "../lib/push-legs.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LONG_SESSION_REQUESTS = 200;
@@ -305,6 +306,10 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
   // The gate's credit side: without an armed savings path, `avoided` is 0 by
   // construction and NetTokens measures only what engram costs.
   const credit = readCreditPaths(engramHome, live);
+  // Render-leg telemetry (push-legs.jsonl): lets G5 be audited offline from
+  // real session renders when --api is not supplied.
+  const pushHealth = readPushLegsHealth(engramHome ?? path.join(dshHome, "engram"));
+  const offlineIndex = pushHealth?.indexChars ?? null;
 
   // ── G1 NetTokens: per-session distribution (rows only; no rows = no claim)
   const rows = ledger.sessions.filter((row) => row.requests > 0);
@@ -455,10 +460,14 @@ export function auditGates({ days = 14, now = Date.now(), home = void 0, api = n
       {
         id: "G5",
         name: "索引 ≤ 700 chars",
-        value: "未测",
+        value: api === null && offlineIndex !== null ? `${offlineIndex.max}c` : "未测",
         target: "≤ 700c",
-        verdict: "未测",
-        note: api === null ? "pass --api <base>?workspace=<ws> to read the rendered block size" : `via ${api}/preview`,
+        verdict: api === null && offlineIndex !== null ? verdict(offlineIndex.max <= 700) : "未测",
+        note: api !== null
+          ? `via ${api}/preview`
+          : offlineIndex !== null
+            ? `push-legs.jsonl · max ${offlineIndex.max}c / latest ${offlineIndex.latest}c (${offlineIndex.samples} samples)`
+            : "no render telemetry in push-legs.jsonl yet — run a session or pass --api <base>?workspace=<ws>",
       },
       {
         id: "G6",
@@ -576,7 +585,7 @@ function renderMarkdown(report) {
   out.push(renderRows({ sessions: report.ledgerRows ?? [] }));
   out.push("");
   out.push("> 口径：token = chars/4（与 GUI 一致）；rewrites 罚金 = 前缀字符 ×（1 − cacheDiscount），默认 0.1。");
-  out.push("> 未测即未测——不猜。G5 需要运行中的宿主（`--api`），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，");
+  out.push("> 未测即未测——不猜。G5 离线读 `push-legs.jsonl` 的真实渲染字符数（或用 `--api` 实时拉取），G7 需要 `npm run bench:ledger` + `--g7 <pct>`，");
   out.push("> G6 需要配对实验：`npm run quality:ab -- run …`（协议见 docs/G6-quality-ab.zh.md，< 10 对配对一律报未测）。");
   out.push("> G1 的分母是「有节省机会」的会话（`prunedChars + compactedChars > 0`）：没有任何剪枝/压缩的会话结构上必为负，");
   out.push("> 把它们算进分母测的是激活率而不是收益。机会会话 < 5 时只报数值、不给判定：一个会话不是分布。");

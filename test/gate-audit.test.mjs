@@ -15,6 +15,7 @@ import path from "node:path";
 import { zstdCompressSync } from "node:zlib";
 
 import { auditGates } from "../eval/gate-audit.mjs";
+import { noteSessionEventsSource } from "../lib/push-legs.js";
 import { ledgerFile } from "../lib/ledger.js";
 
 function tmpDir(prefix) {
@@ -232,4 +233,57 @@ test("G2's opportunity row only counts sessions whose workspace has memories", (
   // The point of the row: the workspace WITHOUT memories is not a push miss, so
   // it must not dilute the opportunity denominator.
   assert.equal(byId.G2c.note, "0/1 sessions whose workspace has ≥1 memory");
+});
+
+test("G5 evaluates offline from push-legs.jsonl render telemetry (PASS / FAIL / 未测)", () => {
+  const home = tmpDir("engram-home-");
+  const root = tmpDir("engram-sessions-");
+
+  // Without render telemetry → 未测
+  noteSessionEventsSource({ engramDir: home, source: "snapshotEvents", sessionId: "s0", now: 1000 });
+  assert.equal(auditGates({ home, root, days: 14 }).gates.find((g) => g.id === "G5").verdict, "未测");
+
+  // Non-empty renders within 700c → PASS (using max across samples)
+  noteSessionEventsSource({
+    engramDir: home,
+    source: "snapshotEvents",
+    sessionId: "s1",
+    workspace: "/w",
+    render: { engramChars: 510, resumeChars: 100, recallChars: 200, workspaceMemories: 10 },
+    now: 2000,
+  });
+  noteSessionEventsSource({
+    engramDir: home,
+    source: "snapshotEvents",
+    sessionId: "s2",
+    workspace: "/w",
+    render: { engramChars: 640, resumeChars: 0, recallChars: 0, workspaceMemories: 10 },
+    now: 3000,
+  });
+  const passGate = auditGates({ home, root, days: 14 }).gates.find((g) => g.id === "G5");
+  assert.equal(passGate.verdict, "PASS");
+  assert.equal(passGate.value, "640c");
+  assert.match(passGate.note, /max 640c \/ latest 640c \(2 samples\)/);
+
+  // One over-budget render → FAIL even if a later render is smaller
+  noteSessionEventsSource({
+    engramDir: home,
+    source: "snapshotEvents",
+    sessionId: "s3",
+    workspace: "/w",
+    render: { engramChars: 742, resumeChars: 0, recallChars: 0, workspaceMemories: 10 },
+    now: 4000,
+  });
+  noteSessionEventsSource({
+    engramDir: home,
+    source: "snapshotEvents",
+    sessionId: "s4",
+    workspace: "/w",
+    render: { engramChars: 480, resumeChars: 0, recallChars: 0, workspaceMemories: 10 },
+    now: 5000,
+  });
+  const failGate = auditGates({ home, root, days: 14 }).gates.find((g) => g.id === "G5");
+  assert.equal(failGate.verdict, "FAIL");
+  assert.equal(failGate.value, "742c");
+  assert.match(failGate.note, /max 742c \/ latest 480c \(4 samples\)/);
 });
