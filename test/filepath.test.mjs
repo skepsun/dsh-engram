@@ -112,7 +112,8 @@ test("filePath: engram_store file_path arg lands + recall renders it", async () 
   );
   assert.match(out, /stored|memory/);
 
-  const mems = d.listMemories("/w");
+  const { workspaceKey } = await import("../lib/util.js");
+  const mems = d.listMemories(workspaceKey("/w"));
   assert.equal(mems.length, 1);
   assert.equal(mems[0].filePath, "/src/handlers.ts");
 
@@ -135,7 +136,8 @@ test("filePath: auto-capture stamps file edits and errors", async () => {
     { isError: true, value: { stderr: "oops syntax" } },
   );
   await sleep(60);
-  const mems = d.listMemories("/ws");
+  const { workspaceKey } = await import("../lib/util.js");
+  const mems = d.listMemories(workspaceKey("/ws"));
   const edit = mems.find((m) => m.text.includes("AGENTS.md"));
   const err = mems.find((m) => m.text.includes("failed"));
   assert.equal(edit?.filePath, "/ws/AGENTS.md");

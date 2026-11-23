@@ -85,8 +85,8 @@ test("scoreRecord ranks exact tag > substring > fuzzy", () => {
 });
 
 test("workspaceKey normalizes trailing separators; win32 case not simulated on linux", () => {
-  assert.equal(workspaceKey("/a/b/"), "/a/b");
-  assert.equal(workspaceKey("/a/b"), "/a/b");
+  assert.equal(workspaceKey("/a/b/"), workspaceKey("/a/b"));
+  if (process.platform !== "win32") assert.equal(workspaceKey("/a/b"), "/a/b");
 });
 
 // ── store ───────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ test("capture handler extracts git commits and never throws", async () => {
     { isError: false },
   );
   await new Promise((r) => setTimeout(r, 50));
-  const memories = domain.listMemories("/ws");
+  const memories = domain.listMemories(workspaceKey("/ws"));
   const texts = memories.map((m) => m.text);
   assert.ok(texts.some((t) => t.includes("git commit")));
   assert.ok(texts.some((t) => t.includes("failed: tsc")));
@@ -297,8 +297,10 @@ test("escalationHint: live-balance nudge appears on the pull path, then disappea
   const { esrHintLines } = await import("../lib/index-block.js");
   const domain = await openEngramDomain(fakeFacility());
   const rec = makeTriggerRecorder();
+  const w = workspaceKey("/w");
+  const w2 = workspaceKey("/w2");
   const feed = (name) => rec.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w" } } }, arguments: {} }, {});
-  const pull = () => esrHintLines(domain, "/w", CONFIG, { recorder: rec, sessionId: "s1" }).filter((h) => h.kind === "escalate").map((h) => h.line);
+  const pull = () => esrHintLines(domain, w, CONFIG, { recorder: rec, sessionId: "s1" }).filter((h) => h.kind === "escalate").map((h) => h.line);
   // under-proactive: 4 mem ops vs 1 esr call (ratio 20% < 34%)
   for (let i = 0; i < 4; i++) feed("engram_store");
   feed("esr_node");
@@ -306,26 +308,26 @@ test("escalationHint: live-balance nudge appears on the pull path, then disappea
   assert.ok(escalated.some((l) => l.includes("escalate:")), "under-proactive workspace gets the nudge on pull");
   assert.ok(escalated.some((l) => /4 mem ops vs 1 esr calls/.test(l)));
   // the frozen block never carries the nudge
-  assert.ok(!renderEsr(domain, "/w", CONFIG).includes("escalate:"), "frozen [ESR] block is hint-free");
+  assert.ok(!renderEsr(domain, w, CONFIG).includes("escalate:"), "frozen [ESR] block is hint-free");
   // too little signal (fewer than 3 mem ops) → no nudge
   const rec2 = makeTriggerRecorder();
   const feed2 = (name) => rec2.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w2" } } }, arguments: {} }, {});
   feed2("engram_store");
-  assert.deepEqual(esrHintLines(domain, "/w2", CONFIG, { recorder: rec2, sessionId: "s1" }).filter((h) => h.kind === "escalate"), [], "below sample floor: no nudge");
+  assert.deepEqual(esrHintLines(domain, w2, CONFIG, { recorder: rec2, sessionId: "s1" }).filter((h) => h.kind === "escalate"), [], "below sample floor: no nudge");
   // healthy balance (esr ≥ ~half of mem ops) → nudge disappears (closed loop)
   feed("esr_task");
   feed("esr_task");
   feed("esr_link");
   assert.deepEqual(pull(), [], "healthy after escalation: nudge gone");
   // with an active task, the snapshot lists it; the nudge still appears on pull when under-proactive
-  await domain.putTask({ id: "tsk_9", workspace: "/w", name: "t9", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
+  await domain.putTask({ id: "tsk_9", workspace: w, name: "t9", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1 });
   const rec3 = makeTriggerRecorder();
   const feed3 = (name) => rec3.handle({ name, agent: { session: { id: "s1", header: { cwd: "/w" } } }, arguments: {} }, {});
   for (let i = 0; i < 4; i++) feed3("engram_store");
   feed3("esr_node");
-  const esr3 = renderEsr(domain, "/w", CONFIG);
+  const esr3 = renderEsr(domain, w, CONFIG);
   assert.ok(esr3.includes("tsk_9"));
-  assert.ok(esrHintLines(domain, "/w", CONFIG, { recorder: rec3, sessionId: "s1" }).some((h) => h.kind === "escalate"), "nudge coexists with open tasks on pull");
+  assert.ok(esrHintLines(domain, w, CONFIG, { recorder: rec3, sessionId: "s1" }).some((h) => h.kind === "escalate"), "nudge coexists with open tasks on pull");
   await domain.close();
 });
 
@@ -363,12 +365,13 @@ test("bm25Rank: recency factor is gentle — relevance still wins, ties go fresh
 test("engram_recall: entity neighborhood appended from the ESR relation table", async () => {
   const domain = await openEngramDomain(fakeFacility());
   const service = { config: CONFIG, getDomain: () => Promise.resolve(domain), openedDomain: () => domain, log: { warn: () => {} } };
-  await domain.putEntity({ id: "ent_a", workspace: "/ws", name: "dsh-engram", description: "", kind: "package", sessionId: "s", createdAt: 1, updatedAt: 1 });
-  await domain.putEntity({ id: "ent_b", workspace: "/ws", name: "agent", description: "", kind: "concept", sessionId: "s", createdAt: 2, updatedAt: 2 });
-  await domain.putEntity({ id: "ent_c", workspace: "/ws", name: "other", description: "", kind: "", sessionId: "s", createdAt: 3, updatedAt: 3 });
-  await domain.addLink({ id: "lk1", workspace: "/ws", source: "ent_a", relation: "depends_on", target: "ent_b", confidence: 0.9, sessionId: "s", createdAt: 1 });
-  await domain.addLink({ id: "lk2", workspace: "/ws", source: "ent_c", relation: "implements", target: "ent_a", confidence: 0.5, sessionId: "s", createdAt: 2 });
-  await domain.storeMemory({ workspace: "/ws", kind: "fact", text: "dsh-engram reuses the harness session index", tags: [], entity: "ent_a", sessionId: "s", seq: 1, signal: 0.6 }, CONFIG);
+  const ws = workspaceKey("/ws");
+  await domain.putEntity({ id: "ent_a", workspace: ws, name: "dsh-engram", description: "", kind: "package", sessionId: "s", createdAt: 1, updatedAt: 1 });
+  await domain.putEntity({ id: "ent_b", workspace: ws, name: "agent", description: "", kind: "concept", sessionId: "s", createdAt: 2, updatedAt: 2 });
+  await domain.putEntity({ id: "ent_c", workspace: ws, name: "other", description: "", kind: "", sessionId: "s", createdAt: 3, updatedAt: 3 });
+  await domain.addLink({ id: "lk1", workspace: ws, source: "ent_a", relation: "depends_on", target: "ent_b", confidence: 0.9, sessionId: "s", createdAt: 1 });
+  await domain.addLink({ id: "lk2", workspace: ws, source: "ent_c", relation: "implements", target: "ent_a", confidence: 0.5, sessionId: "s", createdAt: 2 });
+  await domain.storeMemory({ workspace: ws, kind: "fact", text: "dsh-engram reuses the harness session index", tags: [], entity: "ent_a", sessionId: "s", seq: 1, signal: 0.6 }, CONFIG);
 
   const tools = new Map();
   const ctx = {

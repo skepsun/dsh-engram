@@ -15,6 +15,7 @@ import path from "node:path";
 import { openEngramDomain } from "../lib/store.js";
 import { makeEngramRoutes, API_PREFIX } from "../lib/api.js";
 import { collectToolCounts, collectUsageStats, dayKey, decodeZstd, readToolResult, recallStatsFromOutput, sessionLogFile } from "../lib/usage.js";
+import { workspaceKey as wk } from "../lib/util.js";
 
 const CONFIG = {
   autoCapture: true,
@@ -124,7 +125,7 @@ test("collectUsageStats rebuilds the rollup from session logs (call+result pairi
   const r = collectUsageStats({ root, days: 14 });
   assert.equal(r.files, 1);
   assert.equal(r.events, 5);
-  const row = r.rows.find((x) => x.workspace === "/ws/a");
+  const row = r.rows.find((x) => x.workspace === wk("/ws/a"));
   assert.ok(row, "row for the session workspace");
   assert.equal(row.counts.engram_store, 1);
   assert.equal(row.counts.engram_recall, 1);
@@ -259,8 +260,8 @@ test("a stale legacy log never shadows the v4 log the host is appending to", () 
   const r = collectUsageStats({ root, days: 14 });
   assert.equal(r.files, 1, "one session directory → exactly one log scanned");
   assert.equal(r.events, 5);
-  assert.ok(r.rows.some((x) => x.workspace === "/ws/a"), "rows come from the v4 log");
-  assert.ok(!r.rows.some((x) => x.workspace === "/ws/stale"), "the legacy log was not read");
+  assert.ok(r.rows.some((x) => x.workspace === wk("/ws/a")), "rows come from the v4 log");
+  assert.ok(!r.rows.some((x) => x.workspace === wk("/ws/stale")), "the legacy log was not read");
 });
 
 /** Loopback request stand-in (mirrors api.test.mjs helpers). */

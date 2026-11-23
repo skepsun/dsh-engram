@@ -18,6 +18,7 @@ import {
   normalizeWorkspaceKey,
   boundaryPruneAvailability,
 } from "../lib/boundary-prune.js";
+import { workspaceKey as wk } from "../lib/util.js";
 
 test("completedCount counts completed todos only", () => {
   assert.equal(completedCount(null), 0);
@@ -81,10 +82,11 @@ test("expectedSessionRequests: floor for unknown, empirical prior for known work
 });
 
 test("normalizeWorkspaceKey: bucket names and absolute paths collapse to one key", () => {
-  assert.equal(normalizeWorkspaceKey("/Users/x/proj"), "Users-x-proj");
-  assert.equal(normalizeWorkspaceKey("Users-x-proj"), "Users-x-proj");
-  assert.equal(normalizeWorkspaceKey("--Users-x-proj--"), "Users-x-proj");
-  assert.equal(normalizeWorkspaceKey("/Users/x/proj/"), "Users-x-proj");
+  const want = process.platform === "win32" ? "users-x-proj" : "Users-x-proj";
+  assert.equal(normalizeWorkspaceKey("/Users/x/proj"), want);
+  assert.equal(normalizeWorkspaceKey("Users-x-proj"), want);
+  assert.equal(normalizeWorkspaceKey("--Users-x-proj--"), want);
+  assert.equal(normalizeWorkspaceKey("/Users/x/proj/"), want);
   assert.equal(normalizeWorkspaceKey(""), "");
   assert.equal(normalizeWorkspaceKey(undefined), "");
 });
@@ -103,7 +105,8 @@ test("workspaceHistory: a real bucket is found by the live cwd (the bug that sil
     fs.writeFileSync(path.join(sessionDir, "session.jsonl.zstd"), "x");
     const history = workspaceHistory(root);
     assert.equal(history.size, 1);
-    assert.ok(history.get("Users-x-proj"), "stored under the normalised bucket key");
+    const want = process.platform === "win32" ? "users-x-proj" : "Users-x-proj";
+    assert.ok(history.get(want), "stored under the normalised bucket key");
     assert.equal(expectedSessionRequests(10, history, "/Users/x/proj", 50), 120);
     // and the gate now has headroom where it used to skip unconditionally
     const gate = (requests, minRemaining, total) => requests + minRemaining <= total;
@@ -152,7 +155,7 @@ test("installBoundaryPrune: ResultPack onPruned hook fires after a real prune (L
     { boundaryPrune: true, boundaryPruneMinRemaining: 5 },
     { warn: (x) => warn.push(x), info: () => {} },
     { onPruned: (session, report) => { hooked = { session, report }; } },
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
 
   const onEvent = listeners.get("session/event");
@@ -214,7 +217,7 @@ test("installBoundaryPrune: the ledger gate vetoes fires; adaptive:false bypasse
       config,
       { warn: () => {}, info: (x) => infos.push(x) },
       { onPruned: () => {} },
-      { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]), allowFire },
+      { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]), allowFire },
     );
     return { listeners, calls: () => calls, infos, dispose };
   };
@@ -273,7 +276,7 @@ test("installBoundaryPrune: a throwing onPruned hook is contained inside the lis
     { boundaryPrune: true, boundaryPruneMinRemaining: 5 },
     { warn: (x) => warns.push(x), info: () => {} },
     { onPruned: () => { throw new Error("archive exploded"); } },
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
   const session = { id: "sess-throw", header: { cwd: "/ws" } };
   // must not throw into the pipeline
@@ -349,7 +352,7 @@ test("installBoundaryPrune: threshold override clones the pruner at a lower budg
       // not the host's 8192 ones
       lastReport = report;
     } },
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
   let lastReport = null;
   const session = { id: "sess-t2048", header: { cwd: "/ws" } };
@@ -386,7 +389,7 @@ test("installBoundaryPrune: invalid threshold override falls back to host pruner
     { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneThresholdChars: 0 },
     { warn: (m) => warns.push(m), info: () => {} },
     {},
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
   d1();
   // no warn about fallback since 0 is treated as "no override"
@@ -413,7 +416,7 @@ test("installBoundaryPrune: request-count cadence fires in sessions with no todo
     { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneIdleCadence: 20 },
     { warn: () => {}, info: (m) => info.push(m) },
     { onPruned: (_s, _r, boundary) => fired.push(boundary.kind) },
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
   const onEvent = listeners.get("session/event");
   const session = { id: "sess-idle", header: { cwd: "/ws" } };
@@ -450,7 +453,7 @@ test("installBoundaryPrune: cadence off (null/0) never fires the step boundary",
     { boundaryPrune: true, boundaryPruneMinRemaining: 5, boundaryPruneIdleCadence: null },
     { warn: () => {}, info: () => {} },
     { onPruned: (_s, _r, boundary) => fired.push(boundary.kind) },
-    { history: new Map([["/ws", { sessions: 7, medianRequests: null }]]) },
+    { history: new Map([[normalizeWorkspaceKey(wk("/ws")), { sessions: 7, medianRequests: null }]]) },
   );
   const onEvent = listeners.get("session/event");
   const session = { id: "sess-idle-off", header: { cwd: "/ws" } };

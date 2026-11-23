@@ -175,8 +175,9 @@ test("apply() with enabled:false registers nothing", async (t) => {
 });
 
 test("index section renders [ENGRAM] + [RECALL] on a 0.2.x session (no `.events`)", async (t) => {
+  const { workspaceKey } = await import("../lib/util.js");
   const facility = makeFacility();
-  const workspace = "/ws/wiring";
+  const workspace = workspaceKey("/ws/wiring");
   const query = "wiring harness seed memory";
 
   // Seed one memory through the real domain, then let apply() open its own.
@@ -226,7 +227,9 @@ test("compaction credit comes from the committed summary, not from summarize()",
     summary: [{ type: "text", text: "## Primary Request and Intent\n- someone else's summary" }],
     shadowedTokenCount: 50000,
   });
-  const row = () => (ledger.summary().sessions ?? []).find((s) => s.workspace === "/repo/compaction");
+  const { workspaceKey } = await import("../lib/util.js");
+  const wsComp = workspaceKey("/repo/compaction");
+  const row = () => (ledger.summary().sessions ?? []).find((s) => s.workspace === wsComp);
   assert.equal(row()?.compactedChars ?? 0, 0, "foreign summary credits nothing");
 
   // DSH's REAL event shape: the payload lives under `data`. The flat shape

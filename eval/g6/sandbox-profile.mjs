@@ -255,7 +255,7 @@ export function buildConfinedProfile({ home, nodeDir, dshHome, ws, otherArmProfi
     // corpus outright, so it goes after every allow (round 6, seam #7).
     ...(docsToHide ?? []).map((docs) => `(deny file-read* (subpath ${JSON.stringify(docs)}))`),
     ...(hideStore
-      ? [`(deny file-read* (subpath ${JSON.stringify(path.join(path.dirname(path.dirname(dshHome)), "storages"))}))`]
+      ? [`(deny file-read* (subpath ${JSON.stringify(path.posix.join(path.posix.dirname(path.posix.dirname(dshHome)), "storages"))}))`]
       : []),
     "",
   ];
@@ -355,7 +355,7 @@ export function buildBwrapArgs({
   // The seeded store, when this arm must not have it: the rename that hides it
   // stays on the same filesystem, so the fence has to make the directory itself
   // unreachable (an empty mount, not a missing one).
-  if (hideStore) args.push("--tmpfs", path.join(experimentHome, "storages"));
+  if (hideStore) args.push("--tmpfs", path.posix.join(experimentHome, "storages"));
   args.push("--unshare-pid", "--unshare-ipc", "--die-with-parent", "--chdir", ws);
   return args;
 }

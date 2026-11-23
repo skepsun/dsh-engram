@@ -22,8 +22,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE = path.join(ROOT, "eval", "fixtures", "ledger-kata-blind");
 const CHECK = path.join(ROOT, "eval", "g6", "check.mjs");
 const TASKS = path.join(ROOT, "eval", "g6", "tasks-blind.json");

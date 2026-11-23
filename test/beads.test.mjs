@@ -206,9 +206,11 @@ test("registerTools exposes esr_dep / esr_claim / esr_unclaim / esr_ready", asyn
 
 test("esr_drop dismisses draft tasks without closure evidence and refuses active without force", async () => {
   const { registerTools } = await import("../lib/tools.js");
+  const { workspaceKey } = await import("../lib/util.js");
   const { domain } = await makeDomain();
-  await domain.putTask({ id: "tsk_d1", workspace: "/ws/A", name: "auto draft", description: "", state: "draft", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
-  await domain.putTask({ id: "tsk_a1", workspace: "/ws/A", name: "active task", description: "", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
+  const ws = workspaceKey("/ws/A");
+  await domain.putTask({ id: "tsk_d1", workspace: ws, name: "auto draft", description: "", state: "draft", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
+  await domain.putTask({ id: "tsk_a1", workspace: ws, name: "active task", description: "", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
   const tools = [];
   const ctx = {
     tools: { register: (t) => { tools.push(t); return () => {}; } },
@@ -220,15 +222,15 @@ test("esr_drop dismisses draft tasks without closure evidence and refuses active
 
   const outDraft = await drop.execute({ task_id: "tsk_d1" }, exec);
   assert.match(outDraft, /dropped tsk_d1 \[draft\]/);
-  assert.equal(domain.listTasks("/ws/A", { includeStable: true }).some((t) => t.id === "tsk_d1"), false);
+  assert.equal(domain.listTasks(ws, { includeStable: true }).some((t) => t.id === "tsk_d1"), false);
 
   const outActive = await drop.execute({ task_id: "tsk_a1" }, exec);
   assert.match(outActive, /only dismisses DRAFT tasks/);
-  assert.equal(domain.listTasks("/ws/A", { includeStable: true }).some((t) => t.id === "tsk_a1"), true);
+  assert.equal(domain.listTasks(ws, { includeStable: true }).some((t) => t.id === "tsk_a1"), true);
 
   const outForce = await drop.execute({ task_id: "tsk_a1", force: true }, exec);
   assert.match(outForce, /dropped tsk_a1 \[active\]/);
-  assert.equal(domain.listTasks("/ws/A", { includeStable: true }).some((t) => t.id === "tsk_a1"), false);
+  assert.equal(domain.listTasks(ws, { includeStable: true }).some((t) => t.id === "tsk_a1"), false);
 });
 
 test("compactOnClose archives long closed tasks and leaves shorts alone", async () => {

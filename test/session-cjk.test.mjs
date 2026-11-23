@@ -40,9 +40,15 @@ test("hasCJK detects CJK ideographs and ignores ASCII-only text", () => {
 });
 
 test("bucketFromCwd flattens the absolute cwd into the sessions bucket name", () => {
-  assert.equal(bucketFromCwd("/d1/chuxiong/code/dsh-loom"), "--d1-chuxiong-code-dsh-loom--");
-  assert.equal(bucketFromCwd("/a/b/"), "--a-b--");
-  assert.equal(bucketFromCwd("/a/b/c/"), "--a-b-c--");
+  if (process.platform === "win32") {
+    assert.match(bucketFromCwd("/d1/chuxiong/code/dsh-loom"), /^--[a-z]-d1-chuxiong-code-dsh-loom--$/);
+    assert.equal(bucketFromCwd("/a/b/"), bucketFromCwd("/a/b"));
+    assert.ok(!bucketFromCwd("C:\\Users\\Me\\Proj").includes(":"), "no illegal drive colon in NTFS bucket name");
+  } else {
+    assert.equal(bucketFromCwd("/d1/chuxiong/code/dsh-loom"), "--d1-chuxiong-code-dsh-loom--");
+    assert.equal(bucketFromCwd("/a/b/"), "--a-b--");
+    assert.equal(bucketFromCwd("/a/b/c/"), "--a-b-c--");
+  }
 });
 
 test("countMatches counts contiguous occurrences, case-folding only ASCII", () => {

@@ -91,65 +91,73 @@ test("wireTaskEntity creates node (ent_<slug>, kind concept) + edge; idempotent"
 
 // ── esr_task(entity=…) ───────────────────────────────────────────────────────
 test("esr_task(entity=…) one call → task + node + edge, wired report", async () => {
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
   const domain = await openEngramDomain(fakeFacility());
   const tools = registeredTools(domain);
   const out = await tools.get("esr_task").execute({ name: "fix boot", entity: "bootloader" }, execOf());
   assert.match(out, /task tsk_/);
   assert.match(out, /wired: tsk_[\s\S]* --relates_to--> ent_bootloader \(node created\)/);
-  assert.ok(domain.listTasks("/ws", { includeStable: true }).length === 1);
-  assert.equal(domain.listEntities("/ws")[0]?.id, "ent_bootloader");
-  assert.equal(domain.allLinks("/ws")[0]?.relation, "relates_to");
+  assert.ok(domain.listTasks(ws, { includeStable: true }).length === 1);
+  assert.equal(domain.listEntities(ws)[0]?.id, "ent_bootloader");
+  assert.equal(domain.allLinks(ws)[0]?.relation, "relates_to");
 
   // updating the same task with the same entity must not duplicate edge/node
-  const beforeLinks = domain.allLinks("/ws").length;
-  const out2 = await tools.get("esr_task").execute({ name: "fix boot v2", id: domain.listTasks("/ws", { includeStable: true })[0].id, entity: "bootloader" }, execOf());
+  const beforeLinks = domain.allLinks(ws).length;
+  const out2 = await tools.get("esr_task").execute({ name: "fix boot v2", id: domain.listTasks(ws, { includeStable: true })[0].id, entity: "bootloader" }, execOf());
   assert.match(out2, /edge already exists/);
-  assert.equal(domain.allLinks("/ws").length, beforeLinks);
+  assert.equal(domain.allLinks(ws).length, beforeLinks);
   await domain.close();
 });
 
 test("esr_task without entity → isolated task, modeling hint still teaches the one-call wire", async () => {
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
   const domain = await openEngramDomain(fakeFacility());
   const tools = registeredTools(domain);
   const out = await tools.get("esr_task").execute({ name: "plain task" }, execOf());
   assert.ok(!out.includes("wired:"), "no wiring, no entity");
   assert.match(out, /no entity graph/);
-  assert.equal(domain.allLinks("/ws").length, 0);
+  assert.equal(domain.allLinks(ws).length, 0);
   await domain.close();
 });
 
 // ── esr_dep double-write (fix A) ─────────────────────────────────────────────
 test("esr_dep writes BOTH task.deps and the links table (graphed)", async () => {
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
   const domain = await openEngramDomain(fakeFacility());
   const tools = registeredTools(domain);
   const create = (name) => tools.get("esr_task").execute({ name }, execOf());
   const t1 = await create("task A");
   const t2 = await create("task B");
-  const id1 = domain.listTasks("/ws", { includeStable: true }).find((t) => t.name === "task A").id;
-  const id2 = domain.listTasks("/ws", { includeStable: true }).find((t) => t.name === "task B").id;
+  const id1 = domain.listTasks(ws, { includeStable: true }).find((t) => t.name === "task A").id;
+  const id2 = domain.listTasks(ws, { includeStable: true }).find((t) => t.name === "task B").id;
 
   const out = await tools.get("esr_dep").execute({ task_id: id1, dep_id: id2, kind: "blocks" }, execOf());
   assert.match(out, /now graphed/);
-  const a = domain.listTasks("/ws", { includeStable: true }).find((t) => t.id === id1);
+  const a = domain.listTasks(ws, { includeStable: true }).find((t) => t.id === id1);
   assert.equal(a.deps.length, 1, "deps written for blocker logic");
-  assert.ok(domain.allLinks("/ws").some((l) => l.source === id1 && l.target === id2 && l.relation === "blocks"), "edge visible in links table");
+  assert.ok(domain.allLinks(ws).some((l) => l.source === id1 && l.target === id2 && l.relation === "blocks"), "edge visible in links table");
 
   // same dependency again → neither deps nor links duplicate
   await tools.get("esr_dep").execute({ task_id: id1, dep_id: id2, kind: "blocks" }, execOf());
-  const a2 = domain.listTasks("/ws", { includeStable: true }).find((t) => t.id === id1);
+  const a2 = domain.listTasks(ws, { includeStable: true }).find((t) => t.id === id1);
   assert.equal(a2.deps.length, 1);
-  assert.equal(domain.allLinks("/ws").filter((l) => l.source === id1 && l.target === id2).length, 1);
+  assert.equal(domain.allLinks(ws).filter((l) => l.source === id1 && l.target === id2).length, 1);
   await domain.close();
 });
 
 // ── modeling hint evolution ──────────────────────────────────────────────────
 test("modeling hint flips once a node exists (esr_task(entity=…) creates it)", async () => {
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
   const domain = await openEngramDomain(fakeFacility());
   const tools = registeredTools(domain);
   const empty = await tools.get("esr_task").execute({ name: "t" }, execOf());
   assert.match(empty, /no entity graph/);
   await tools.get("esr_task").execute({ name: "t2", entity: "svc" }, execOf());
-  const withGraph = esrModelingHint(domain, "/ws");
+  const withGraph = esrModelingHint(domain, ws);
   assert.match(withGraph, /entities svc \/ links 1/);
   assert.match(withGraph, /esr_task\(entity=…\) hangs new work onto a node/);
   await domain.close();

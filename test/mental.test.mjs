@@ -215,6 +215,6 @@ test("esr_model tool parses mode + max_chars", async () => {
   assert.ok(brief.length <= 260, "bounded output");
   assert.match(brief, /mode=brief/);
   const full = await tool.execute({}, execCtx);
-  assert.match(full, /## A · 常驻摘要/);
+  assert.match(full, /## [Aa] · 常驻摘要/);
   assert.ok(full.length > brief.length, "full is the detailed markdown");
 });

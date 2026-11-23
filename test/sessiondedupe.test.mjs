@@ -135,7 +135,8 @@ function makeService(domain, config) {
 test("engram_recall: max_per_session arg & config default appear in header + limit rows", async () => {
   const domain = await openEngramDomain(fakeFacility());
   const cfg = { ...CONFIG };
-  const base = { workspace: "/ws", kind: "error", tags: ["error"], entity: null, signal: 0.4 };
+  const { workspaceKey } = await import("../lib/util.js");
+  const base = { workspace: workspaceKey("/ws"), kind: "error", tags: ["error"], entity: null, signal: 0.4 };
   const longtexts = [
     'ci failed on the handlers module of the build system after a config change',
     'the ci nightly failed again because the store schema migrated without a backfill',

@@ -82,7 +82,8 @@ test("prune entry: a todo boundary prunes through the realm's pruner and credits
     await flushLog();
     assert.equal(pruner.calls, 1, "realm pruner was invoked after commit()");
     assert.equal(credits.length, 1, "ledger credited the prune");
-    assert.equal(credits[0][1], "/tmp/ws-preset", "credited under the workspace key");
+    const { workspaceKey } = await import("../lib/util.js");
+    assert.equal(credits[0][1], workspaceKey("/tmp/ws-preset"), "credited under the workspace key");
     assert.equal(credits[0][2].charsRemoved, 9000);
 
     await flushLog();

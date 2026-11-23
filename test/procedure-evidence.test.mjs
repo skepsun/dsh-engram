@@ -14,6 +14,9 @@ import assert from "node:assert/strict";
 import { openEngramDomain } from "../lib/store.js";
 import { makeCaptureHandler, procedureOutcome } from "../lib/capture.js";
 import { renderIndex, selectIndexMemories, procedureInvalidated, isProvenProcedure } from "../lib/index-block.js";
+import { workspaceKey as wk } from "../lib/util.js";
+
+const WS = wk("/ws");
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -70,9 +73,9 @@ async function seeded() {
   return { domain, handler };
 }
 
-const procedures = (domain) => domain.listMemories("/ws").filter((m) => m.kind === "procedure");
+const procedures = (domain) => domain.listMemories(WS).filter((m) => m.kind === "procedure");
 const indexed = (domain, config = CONFIG) =>
-  selectIndexMemories(domain, "/ws", config).filter((m) => m.kind === "procedure");
+  selectIndexMemories(domain, WS, config).filter((m) => m.kind === "procedure");
 
 test("a fix closure starts with one evidence point and does NOT enter the index", async () => {
   const { domain } = await seeded();
@@ -80,7 +83,7 @@ test("a fix closure starts with one evidence point and does NOT enter the index"
   assert.equal(procedure.evidenceCount, 1, "one observed success is one data point");
   assert.ok(procedure.lastVerifiedAt > 0);
   assert.equal(indexed(domain).length, 0, "n=1 never earns an index line");
-  assert.ok(!renderIndex(domain, "/ws", "/ws", CONFIG).includes("fb fixed:"), "not rendered in [ENGRAM]");
+  assert.ok(!renderIndex(domain, WS, WS, CONFIG).includes("fb fixed:"), "not rendered in [ENGRAM]");
   await domain.close();
 });
 
@@ -93,7 +96,7 @@ test("three verified successes promote it into the index", async () => {
   const [procedure] = procedures(domain);
   assert.equal(procedure.evidenceCount, 3);
   assert.equal(indexed(domain).length, 1, "3 verified successes earn the line");
-  assert.match(renderIndex(domain, "/ws", "/ws", CONFIG), /✓.*fixed: npm test|fixed: npm test/);
+  assert.match(renderIndex(domain, WS, WS, CONFIG), /✓.*fixed: npm test|fixed: npm test/);
   await domain.close();
 });
 

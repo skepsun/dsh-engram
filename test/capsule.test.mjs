@@ -115,7 +115,8 @@ test("capture stores a long subagent report as a handoff capsule", async () => {
     { isError: false, value: REPORT },
   );
   await settle();
-  const rows = domain.listMemories("/ws");
+  const { workspaceKey } = await import("../lib/util.js");
+  const rows = domain.listMemories(workspaceKey("/ws"));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].kind, "handoff");
   assert.ok(rows[0].tags.includes("subagent-capsule"));

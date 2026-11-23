@@ -6,14 +6,18 @@
  * copy, setup, per-arm runs, check command, pairing) is verified without
  * spending tokens.
  */
-import { test } from "node:test";
+import { test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const HARNESS = new URL("../eval/quality-ab.mjs", import.meta.url).pathname;
+// Stub runner writes `#!/bin/bash` scripts — POSIX-only test harness.
+const test = (name, fn) => nodeTest(name, { skip: process.platform === "win32" ? "stub runner uses #!/bin/bash" : false }, fn);
+
+const HARNESS = fileURLToPath(new URL("../eval/quality-ab.mjs", import.meta.url));
 
 /** Stub runner: the profile name decides whether the task "succeeds". */
 function stubDir(mode) {

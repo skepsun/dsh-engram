@@ -32,15 +32,16 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { egressRules, fenceCommand, installRootOf, NETFENCE_UID, netFenceSecretLines, netKeyNames, toolReadPaths } from "./g6/sandbox-profile.mjs";
 
 /** Repo root — the directory this harness lives in, i.e. what a blind run must not read. */
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** First hit for `name` on PATH, so the fence can bind its install root by path. */
 function resolveOnPath(name) {
   if (path.isAbsolute(name)) return fs.existsSync(name) ? name : name;
-  for (const dir of (process.env.PATH ?? "").split(":")) {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (dir === "") continue;
     const candidate = path.join(dir, name);
     try {
@@ -1254,7 +1255,7 @@ function run(args) {
 
 // Importable for its pure helpers (the tests import `classifyLeak`): dispatching
 // on argv at import time would `process.exit(2)` inside a test runner.
-const invokedDirectly = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const invokedDirectly = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 
 const args = invokedDirectly ? parseArgs(process.argv.slice(2)) : { cmd: "imported" };
 // A signal skips `exit` handlers, and a REJECT left behind is a trap for the

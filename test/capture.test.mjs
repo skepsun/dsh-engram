@@ -62,7 +62,8 @@ test("failing npm test is captured as a test-tagged error memory", async () => {
     { isError: true, value: { stderr: "> dsh-engram@0.3.4 test\n/node --test ...\nnot ok 3 - recall ranks recency\n# fail 1\nAssertionError: expected 2 to equal 3" } },
   );
   await settle();
-  const m = domain.listMemories("/ws");
+  const { workspaceKey } = await import("../lib/util.js");
+  const m = domain.listMemories(workspaceKey("/ws"));
   assert.equal(m.length, 1);
   assert.equal(m[0].kind, "error");
   assert.ok(m[0].tags.includes("test"));
@@ -89,11 +90,13 @@ test("failing node --test and vitest are also captured; build failure is not", a
     { isError: true, value: { stderr: "tsc: error TS2304: cannot find name 'x'" } },
   );
   await settle();
-  const texts = domain.listMemories("/ws").map((m) => m.text);
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
+  const texts = domain.listMemories(ws).map((m) => m.text);
   assert.ok(texts.some((t) => t.startsWith("tests failed (node --test):")));
   assert.ok(texts.some((t) => t.startsWith("tests failed (npx vitest):") || t.startsWith("tests failed (npm vitest):")));
   assert.ok(texts.some((t) => t.startsWith("bash failed:") && !t.startsWith("tests failed")));
-  const testTags = domain.listMemories("/ws").filter((m) => m.tags.includes("test"));
+  const testTags = domain.listMemories(ws).filter((m) => m.tags.includes("test"));
   assert.equal(testTags.length, 2);
   await domain.close();
 });
@@ -118,7 +121,8 @@ test("failing test without a failure-y line still captured with the result head"
     { isError: true, value: { stderr: "some opaque crash without keywords" } },
   );
   await settle();
-  const m = domain.listMemories("/ws")[0];
+  const { workspaceKey } = await import("../lib/util.js");
+  const m = domain.listMemories(workspaceKey("/ws"))[0];
   assert.match(m.text, /^tests failed \(npm test\):/);
   assert.match(m.text, /some opaque crash/);
   await domain.close();

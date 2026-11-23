@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createJit } from "../lib/jit.js";
+import { workspaceKey } from "../lib/util.js";
 
 function session(id = "s1", cwd = "/ws") {
   return { id, header: { cwd } };
@@ -57,7 +58,7 @@ test("error recurrence: pushes only on the second failure, and only with prior k
   assert.match(text, /engram_detail abc12345/);
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0].kind, "error");
-  assert.equal(pushes[0].workspace, "/ws");
+  assert.equal(pushes[0].workspace, workspaceKey("/ws"));
 
   call();
   assert.equal(pushes.length, 1, "third failure does not re-push");

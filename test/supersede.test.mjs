@@ -48,17 +48,17 @@ function fakeFacility() {
   };
 }
 
-async function seed(domain) {
+async function seed(domain, workspace = "/ws") {
   const old = await domain.storeMemory(
-    { workspace: "/ws", kind: "fact", text: "the build pipeline uses webpack", entity: null, sessionId: "s", seq: 1, signal: 0.7 },
+    { workspace, kind: "fact", text: "the build pipeline uses webpack", entity: null, sessionId: "s", seq: 1, signal: 0.7 },
     CONFIG,
   );
   const newer = await domain.storeMemory(
-    { workspace: "/ws", kind: "fact", text: "the build pipeline uses vite now", entity: null, sessionId: "s", seq: 2, signal: 0.7, supersedes: old.id },
+    { workspace, kind: "fact", text: "the build pipeline uses vite now", entity: null, sessionId: "s", seq: 2, signal: 0.7, supersedes: old.id },
     CONFIG,
   );
   const rival = await domain.storeMemory(
-    { workspace: "/ws", kind: "fact", text: "the build pipeline is fine", entity: null, sessionId: "s", seq: 3, signal: 0.7, contradicts: old.id },
+    { workspace, kind: "fact", text: "the build pipeline is fine", entity: null, sessionId: "s", seq: 3, signal: 0.7, contradicts: old.id },
     CONFIG,
   );
   return { old: old.id, newer: newer.id, rival: rival.id };
@@ -109,8 +109,9 @@ test("selectIndexMemories excludes superseded memories from the [ENGRAM] block",
 });
 
 test("engram_recall output flags superseded and contradicted memories", async () => {
+  const { workspaceKey } = await import("../lib/util.js");
   const domain = await openEngramDomain(fakeFacility());
-  await seed(domain);
+  await seed(domain, workspaceKey("/ws"));
   const service = { config: CONFIG, getDomain: () => Promise.resolve(domain), openedDomain: () => domain, log: { warn: () => {} } };
   const tools = new Map();
   const ctx = { effect: (fn) => fn(), tools: { register: (tool) => { tools.set(tool.name, tool); return () => {}; } } };

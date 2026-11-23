@@ -96,7 +96,9 @@ test("integration: failing then passing npm test closes the loop (procedure + re
     { isError: true, value: { stderr: "not ok 3 - recall ranks recency\n# fail 1" } },
   );
   await settle();
-  const errors = domain.listMemories("/ws").filter((m) => m.kind === "error");
+  const { workspaceKey } = await import("../lib/util.js");
+  const ws = workspaceKey("/ws");
+  const errors = domain.listMemories(ws).filter((m) => m.kind === "error");
   assert.equal(errors.length, 1);
   assert.ok(errors[0].tags.includes("cmd:npm_test"), "failure carries the cmd signature");
 
@@ -105,7 +107,7 @@ test("integration: failing then passing npm test closes the loop (procedure + re
     { isError: false, value: { stdout: "pass 184\n# fail 0" } },
   );
   await settle();
-  const all = domain.listMemories("/ws");
+  const all = domain.listMemories(ws);
   const procedure = all.find((m) => m.kind === "procedure");
   assert.ok(procedure, "a procedure memory is sedimented");
   assert.match(procedure.text, /fixed: npm test/);
