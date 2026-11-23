@@ -69,18 +69,22 @@ test("status: a sibling instance in the same pid cannot overwrite a working snap
   const prev = process.env.DSH_HOME;
   process.env.DSH_HOME = dir;
   try {
-    await writeContextGcStatus({ pid: 4242, host: "context-gc", web: { action: "already", presets: [{ action: "already" }] }, boundaryPrune: { armed: true } });
-    await writeContextGcStatus({ pid: 4242, host: "unavailable", web: { action: "disabled", presets: [] }, boundaryPrune: { armed: false } });
+    // Use guaranteed-dead sentinel PIDs (low numbers like 4242 can collide with
+    // live OS processes on Windows runners, tripping isAlivePid).
+    const DEAD_PID_1 = 999_999_991;
+    const DEAD_PID_2 = 999_999_992;
+    await writeContextGcStatus({ pid: DEAD_PID_1, host: "context-gc", web: { action: "already", presets: [{ action: "already" }] }, boundaryPrune: { armed: true } });
+    await writeContextGcStatus({ pid: DEAD_PID_1, host: "unavailable", web: { action: "disabled", presets: [] }, boundaryPrune: { armed: false } });
     const kept = await readContextGcStatus();
     assert.equal(kept.host, "context-gc", "the better snapshot survives");
     assert.equal(kept.boundaryPrune.armed, true);
 
     // A different pid (a real restart) always wins, even when it is worse.
-    await writeContextGcStatus({ pid: 5151, host: "unavailable", web: { action: "disabled", presets: [] }, boundaryPrune: { armed: false } });
+    await writeContextGcStatus({ pid: DEAD_PID_2, host: "unavailable", web: { action: "disabled", presets: [] }, boundaryPrune: { armed: false } });
     assert.equal((await readContextGcStatus()).host, "unavailable", "a new boot rewrites the snapshot");
 
     // A later upgrade in the same pid still lands.
-    await writeContextGcStatus({ pid: 5151, host: "context-gc", web: { action: "already", presets: [] } });
+    await writeContextGcStatus({ pid: DEAD_PID_2, host: "context-gc", web: { action: "already", presets: [] } });
     assert.equal((await readContextGcStatus()).host, "context-gc");
   } finally {
     if (prev === void 0) delete process.env.DSH_HOME;
