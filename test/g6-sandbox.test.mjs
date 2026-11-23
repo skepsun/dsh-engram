@@ -25,15 +25,16 @@ import { spawnSync } from "node:child_process";
 
 import { buildBwrapArgs, fenceCommand } from "../eval/g6/sandbox-profile.mjs";
 
+const hasBwrap = process.platform === "linux" && (fs.existsSync("/usr/bin/bwrap") || fs.existsSync("/bin/bwrap"));
 const support =
   process.platform === "darwin"
     ? fs.existsSync("/usr/bin/sandbox-exec") || "sandbox-exec is missing"
     : process.platform === "linux"
-      ? fs.existsSync("/usr/bin/bwrap") || fs.existsSync("/bin/bwrap") || "bubblewrap (bwrap) is not installed"
+      ? hasBwrap || "bubblewrap (bwrap) is not installed"
       : `${process.platform} has no OS-level fence in this tool`;
 
 test("the fence hides the experiment tree and still lets the arm run", { skip: support === true ? false : support }, () => {
-  const root = fs.mkdtempSync("/tmp/g6-fence-");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "g6-fence-"));
   // The layout a run really has: a neutral arm dir under the round root, the
   // sibling arm beside it, the artifact outside the run tree, one DSH_HOME for
   // both arms, and the credential file outside that home.
@@ -139,7 +140,7 @@ test("the fence hides the experiment tree and still lets the arm run", { skip: s
 test("the checkout is hidden explicitly, not by luck of being under $HOME", () => {
   // A checkout that exists (the tmpfs rule has to be able to name it) but does
   // not live under $HOME, which is the case the home tmpfs does not cover.
-  const checkout = fs.mkdtempSync("/tmp/g6-checkout-");
+  const checkout = fs.mkdtempSync(path.join(os.tmpdir(), "g6-checkout-"));
   try {
     const dims = {
       home: "/home/tester",
@@ -197,11 +198,11 @@ test("the egress plan denies first and opens exactly two holes, all scoped to th
   assert.ok(!rules.some((rule) => /--dport 53|icmp|--sport/.test(rule.add.join(" "))));
 });
 
-test("the net fence mounts one arm at a neutral root and drops the uid", async () => {
+test("the net fence mounts one arm at a neutral root and drops the uid", { skip: hasBwrap ? false : "requires Linux bubblewrap (bwrap)" }, async () => {
   const { fenceCommand, NEUTRAL_ROOT, NETFENCE_UID } = await import("../eval/g6/sandbox-profile.mjs");
   // A real directory for the toolchain: the plan refuses to bind a source that
   // does not exist, and a test that faked it would not catch that.
-  const toolchain = fs.mkdtempSync("/tmp/g6-tc-");
+  const toolchain = fs.mkdtempSync(path.join(os.tmpdir(), "g6-tc-"));
   fs.mkdirSync(path.join(toolchain, "bin"));
   fs.writeFileSync(path.join(toolchain, "bin", "dsh"), "#!/bin/sh\n");
   const envFile = path.join(toolchain, "netenv");

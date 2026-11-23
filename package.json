@@ -32,6 +32,7 @@
     "eval/gate-audit.mjs",
     "eval/recall-bench.mjs",
     "eval/ledger-bench.mjs",
+    "eval/scale-bench.mjs",
     "eval/playbook-audit.mjs",
     "eval/skill-export-check.mjs",
     "cordis.patch.yml",
@@ -45,6 +46,7 @@
   },
   "scripts": {
     "bench:ledger": "node eval/ledger-bench.mjs",
+    "bench:scale": "node eval/scale-bench.mjs",
     "build:client": "node client/build.mjs && node client/build-model.mjs",
     "dsh-engram": "node scripts/dsh-engram.mjs",
     "dsh-engram:doctor": "node scripts/dsh-engram.mjs doctor",
