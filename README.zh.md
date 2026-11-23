@@ -745,6 +745,19 @@ v0.6 增加按事件**推送**：三个确定性事件，命中才推、每次�
 - 设置键：`episodeEnabled`、`resumeBriefEnabled`（均默认开），
   `episodeMaxPerWorkspace` / `resumeBriefMaxAgeDays` / `resumeBriefMaxChars` 可调。
 
+> **宿主前提（静默休眠说明）。** episode、恢复简报、`[RECALL]` 与会话结束 todo 自动沉淀
+> 均依赖读取会话事件日志。在 ≥0.2.x 宿主上，插件依次通过 `ctx.sessionQuery.live()`、
+> `session.snapshotEvents()` 或保底的 `session.seq` + `session.eventAt(seq)` 读取日志。
+> 若宿主**全都不暴露**，上述能力会保持休眠：记忆写入、`engram_recall` 与 `engram_detail`
+> 仍正常工作，但会话开始不会注入、结束也不会写 episode。插件每个会话会打一条
+> `engram: this host exposes no readable session event log … Session surface: …` 警告，
+> 列出 session 对象实际暴露的方法——报障时贴上这一行即可（已知案例见 issue #9）。
+>
+> `dsh-engram status` 同时会打印一行**推送腿**状态——`推送腿：事件日志读法
+> snapshotEvents · 最近 …`——记录实机进程实际走到的读法（落盘于
+> `$DSH_HOME/engram/push-legs.jsonl`）。休眠宿主会显示
+> `事件日志不可读（none）… 休眠中`，无需翻启动日志即可确认状态。
+
 ### 实体页 + 实体卡（v0.7-B）
 
 `esr_node` 从「图上的点」升级成**可读的页**：对一个实体（package / repo / 服务 / bug…）
