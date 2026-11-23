@@ -413,6 +413,20 @@ export class EngramApi {
     );
   }
 
+  async dropTask(
+    workspace: string,
+    id: string,
+    force = false,
+  ): Promise<{ ok: boolean; id: string; state: string; archived: boolean }> {
+    return readJson(
+      await fetch(`${API_PREFIX}/tasks/drop`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspace, id, force }),
+      }),
+    );
+  }
+
   async links(workspace: string): Promise<{ items: LinkRecord[] }> {
     return readJson(await fetch(`${API_PREFIX}/links${query({ workspace })}`));
   }

@@ -304,3 +304,41 @@ test("sinkPendingTodos does not resurrect a recently-closed draft on next sessio
   assert.deepEqual(third.created, [name]);
   await domain.close();
 });
+
+test("dropping/archiving an auto-sunk draft frees cap and suppresses resurrection within window", async () => {
+  const DAY = 86_400_000;
+  const domain = await openEngramDomain(fakeFacility());
+
+  const first = await sinkPendingTodos(domain, "/w", ["临时排查项"], {
+    sessionId: "sess-1",
+    maxTasks: 1,
+  });
+  assert.deepEqual(first.created, ["临时排查项"]);
+  const [draft] = domain.listTasks("/w", { includeStable: false });
+  assert.equal(domain.activeTaskCount("/w"), 1);
+
+  // Drop the draft via archiveTask (no closure evidence needed)
+  assert.equal(await domain.archiveTask("/w", draft.id), true);
+  assert.equal(domain.activeTaskCount("/w"), 0, "dropped draft no longer counts toward cap");
+  assert.equal(domain.listTasks("/w", { includeStable: true }).length, 0, "archived draft stays off the board");
+  const archivedAt = domain.getTask("/w", draft.id).archivedAt;
+  assert.ok(Number.isFinite(archivedAt) && archivedAt > 0);
+
+  // Next session ends 2 days later with the same pending todo → suppressed, cap stays free for new items
+  const second = await sinkPendingTodos(domain, "/w", ["临时排查项", "真正的新任务"], {
+    sessionId: "sess-2",
+    maxTasks: 1,
+    now: archivedAt + 2 * DAY,
+  });
+  assert.deepEqual(second.existed, ["临时排查项"]);
+  assert.deepEqual(second.created, ["真正的新任务"]);
+
+  // After the dedupe window expires, it may sink again
+  const third = await sinkPendingTodos(domain, "/w", ["临时排查项"], {
+    sessionId: "sess-3",
+    maxTasks: 10,
+    now: archivedAt + (DEFAULT_STABLE_DEDUPE_DAYS + 1) * DAY,
+  });
+  assert.deepEqual(third.created, ["临时排查项"]);
+  await domain.close();
+});

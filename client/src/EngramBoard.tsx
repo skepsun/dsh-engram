@@ -30,6 +30,7 @@ export interface EngramBoardApi {
   model(workspace?: string): Promise<{ model: MentalModelRecord }>;
   createTask(workspace: string, name: string, description?: string): Promise<unknown>;
   closeTask(workspace: string, id: string, evidence: { artifact?: string; evaluation?: string; memoryRefs?: string[] }): Promise<{ ok: boolean; state: "active" | "stable"; gaps?: string[]; artifactReason?: string }>;
+  dropTask?(workspace: string, id: string, force?: boolean): Promise<{ ok: boolean; id: string; state: string; archived: boolean }>;
 }
 
 export interface EngramBoardProps {
@@ -335,6 +336,20 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
     }
   };
 
+  const submitDrop = async (t: TaskRecord) => {
+    if (!api.dropTask) return;
+    setBusy(true);
+    try {
+      await api.dropTask(t.workspace, t.id);
+      const tasks = await api.tasks(t.workspace, true);
+      setTasksByWs((prev) => ({ ...prev, [t.workspace]: tasks.items }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div data-engram-board="true" style={{ ...vars, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--dsw-alias-bg-layer-1, var(--dsh-color-surface, #fff))" }}>
       {/* Header */}
@@ -534,7 +549,14 @@ export function EngramBoard({ api, onRequestClose }: EngramBoardProps) {
                   </div>
 
                   {col.key === "draft" && (
-                    <div style={hb.cardHint}>{tr("草稿 · 用 esr_task 可将其推进为 active")}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 4 }}>
+                      <div style={{ ...hb.cardHint, marginTop: 0 }}>{tr("草稿 · 用 esr_task 可将其推进为 active")}</div>
+                      {api.dropTask && (
+                        <button type="button" style={hb.btn} disabled={busy} onClick={() => void submitDrop(t)}>
+                          {tr("丢弃草稿")}
+                        </button>
+                      )}
+                    </div>
                   )}
                   {(col.key === "gapped" || col.key === "ready") && closingFor === t.id ? (
                     <div style={{ ...hb.closeForm, borderColor: col.color }}>

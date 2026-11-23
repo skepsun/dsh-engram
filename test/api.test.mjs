@@ -317,6 +317,43 @@ test("api: GUI task create + close routes (evidence gates)", async () => {
   await domain.close();
 });
 
+test("api: POST /tasks/drop dismisses drafts without evidence and guards active tasks", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const service = { config: CONFIG, captureStats: { total: 0, git: 0, file: 0, error: 0 }, openedDomain: () => domain, getDomain: () => Promise.resolve(domain) };
+  const routes = makeEngramRoutes(service);
+
+  await domain.putTask({ id: "tsk_draft", workspace: "/w", name: "auto draft", description: "", state: "draft", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
+  await domain.putTask({ id: "tsk_act", workspace: "/w", name: "real active", description: "", state: "active", artifact: null, evaluation: null, memoryRefs: [], sessionId: "s", createdAt: 1, updatedAt: 1, stateChangedAt: 0, archivedAt: null, deps: [], assignee: null, claimedAt: null });
+
+  // draft drops cleanly
+  const d = res();
+  await route(routes, `${API_PREFIX}/tasks/drop`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/drop`, body: { workspace: "/w", id: "tsk_draft" } }),
+    d,
+  );
+  assert.equal(d._out.status, 200);
+  assert.equal(json(d).archived, true);
+  assert.equal(domain.listTasks("/w", { includeStable: true }).some((t) => t.id === "tsk_draft"), false);
+
+  // active refuses without force
+  const ref = res();
+  await route(routes, `${API_PREFIX}/tasks/drop`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/drop`, body: { workspace: "/w", id: "tsk_act" } }),
+    ref,
+  );
+  assert.equal(ref._out.status, 409);
+
+  // active with force:true archives
+  const forced = res();
+  await route(routes, `${API_PREFIX}/tasks/drop`, "POST").handler(
+    req({ method: "POST", url: `${API_PREFIX}/tasks/drop`, body: { workspace: "/w", id: "tsk_act", force: true } }),
+    forced,
+  );
+  assert.equal(forced._out.status, 200);
+  assert.equal(json(forced).archived, true);
+  await domain.close();
+});
+
 test("api: evidence gate verifies artifact exists on disk (verifyArtifact)", async () => {
   const os = await import("node:os");
   const fsp = await import("node:fs/promises");
