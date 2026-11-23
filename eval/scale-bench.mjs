@@ -20,8 +20,9 @@ import { performance } from "node:perf_hooks";
 
 import { openEngramDomain } from "../lib/store.js";
 import { renderIndex, renderStartRecall } from "../lib/index-block.js";
+import { workspaceKey } from "../lib/util.js";
 
-const WS = "/home/u/projs/scale-bench";
+const WS = workspaceKey("/home/u/projs/scale-bench");
 const DISTRACTORS = 1500;
 const DAY = 86_400_000;
 const NOW = Date.now();

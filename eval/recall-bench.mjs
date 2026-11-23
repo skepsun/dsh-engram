@@ -14,8 +14,9 @@
 
 import { openEngramDomain } from "../lib/store.js";
 import { makeCaptureHandler } from "../lib/capture.js";
+import { workspaceKey } from "../lib/util.js";
 
-const WS = "/home/u/projs/dsh-engram";
+const WS = workspaceKey("/home/u/projs/dsh-engram");
 
 const CONFIG = {
   indexMaxLines: 12,
