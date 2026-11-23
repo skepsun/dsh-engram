@@ -327,7 +327,7 @@ test("collectUsageStats reads v4 session logs (0.2.x) — failures and recall hi
   const root = makeRoot();
   seedSession(root, "--p--", "s4", USAGE_FIXTURE_V4);
   const r = collectUsageStats({ root, days: 14 });
-  const row = r.rows.find((x) => x.workspace === "/ws/v4");
+  const row = r.rows.find((x) => x.workspace === wk("/ws/v4"));
   assert.ok(row, "row for the v4 workspace");
   assert.equal(row.failures, 1, "v4 result carries isError on the message");
   assert.equal(row.recall.queries, 1);

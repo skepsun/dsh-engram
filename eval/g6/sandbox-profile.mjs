@@ -439,7 +439,7 @@ export function neutralizePath(target, { home = os.homedir(), props = {} } = {})
   for (const [from, to] of rules) {
     if (typeof from !== "string" || from === "") continue;
     if (target === from) return to;
-    if (target.startsWith(`${from}${path.sep}`)) return `${to}${target.slice(from.length)}`;
+    if (target.startsWith(`${from}/`) || target.startsWith(`${from}${path.sep}`)) return `${to}${target.slice(from.length)}`;
   }
   return target;
 }

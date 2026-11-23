@@ -451,18 +451,20 @@ test("conversion: esr_* within window converts the most recent hint", async (t) 
 
 test("conversion is per-workspace and once per (ws, session, kind)", () => {
   const rec = makeTriggerRecorder();
-  rec.emitHint("promote", "/a", "s1");
-  rec.emitHint("promote", "/a", "s1"); // same → not double counted
-  rec.emitHint("promote", "/a", "s2"); // fresh session, same ws
-  rec.emitHint("promote", "/b", "s1"); // other ws
+  const wa = wk("/a");
+  const wb = wk("/b");
+  rec.emitHint("promote", wa, "s1");
+  rec.emitHint("promote", wa, "s1"); // same → not double counted
+  rec.emitHint("promote", wa, "s2"); // fresh session, same ws
+  rec.emitHint("promote", wb, "s1"); // other ws
   rec.handle(execTool("esr_task", "/a", { name: "t" }, "s1"), {});
   const all = rec.conversionStats();
   assert.equal(all.byKind.promote.shown, 3);
   assert.equal(all.byKind.promote.converted, 1);
-  const a = rec.conversionStats("/a");
+  const a = rec.conversionStats(wa);
   assert.equal(a.byKind.promote.shown, 2);
   assert.equal(a.byKind.promote.converted, 1);
-  const b = rec.conversionStats("/b");
+  const b = rec.conversionStats(wb);
   assert.equal(b.byKind.promote.shown, 1);
   assert.equal(b.byKind.promote.converted, 0);
 });

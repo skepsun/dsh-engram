@@ -135,7 +135,7 @@ test("a manual procedure with no evidence fields keeps the hits-based path", asy
   const domain = await openEngramDomain(fakeFacility());
   const { stored } = await domain.storeMemory(
     {
-      workspace: "/ws",
+      workspace: WS,
       kind: "procedure",
       text: "release: bump version, npm test, npm pack, install into profile",
       tags: ["procedure", "release"],
@@ -145,7 +145,7 @@ test("a manual procedure with no evidence fields keeps the hits-based path", asy
     },
     CONFIG,
   );
-  for (let i = 0; i < 3; i += 1) await domain.touchMemory("/ws", stored.id);
+  for (let i = 0; i < 3; i += 1) await domain.touchMemory(WS, stored.id);
   const [row] = procedures(domain);
   assert.equal(isProvenProcedure(row, CONFIG), true, "hand-written procedures are not demoted by the new gate");
   await domain.close();
@@ -153,7 +153,7 @@ test("a manual procedure with no evidence fields keeps the hits-based path", asy
 
 test("procedureOutcome targets only the same command signature", async () => {
   const { domain } = await seeded();
-  const rows = domain.listMemories("/ws");
+  const rows = domain.listMemories(WS);
   assert.equal(procedureOutcome("bash", "npm test", { isError: false }, rows)?.ok, true);
   assert.equal(procedureOutcome("bash", "npm test", { isError: true }, rows)?.ok, false);
   assert.equal(procedureOutcome("bash", "npm run build", { isError: false }, rows), null, "different command");
