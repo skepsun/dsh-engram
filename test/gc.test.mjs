@@ -206,6 +206,87 @@ test("api: POST /gc returns a report and updates gcStats (except in dryRun)", as
   assert.ok(service.gcStats.archivedMemories >= 1);
 });
 
+test("storeMemory at cap: auto-evicts lowest-retention unprotected memory instead of deadlocking (issue #18)", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const ws = "/w";
+  const cfg = { ...CONFIG, maxMemoriesPerWorkspace: 5 };
+  const ids = [];
+  for (let i = 0; i < 5; i += 1) {
+    const res = await domain.storeMemory(
+      { workspace: ws, kind: "preference", text: `pref ${i}`, tags: [], sessionId: "s1" },
+      cfg,
+    );
+    await domain.markAccessed(ws, res.id, 1000 + i * 10);
+    ids.push(res.id);
+  }
+  // Pool sits exactly at cap with permanent (expiresAt = null) memories: GC
+  // keeps all 5 (<= cap), yet the next write must NOT deadlock.
+  const dry = await domain.gc(ws, cfg, { dryRun: true });
+  assert.equal(dry.archivedMemories.length, 0);
+
+  const sixth = await domain.storeMemory(
+    { workspace: ws, kind: "preference", text: "pref 5 (breaks the cap boundary)", tags: [], sessionId: "s1" },
+    cfg,
+  );
+  const active = domain.listMemories(ws, 200);
+  assert.equal(active.length, 5, "active count stays at the cap");
+  assert.ok(active.some((m) => m.id === sixth.id), "new memory is stored");
+  assert.ok(!active.some((m) => m.id === ids[0]), "oldest lowest-retention memory was evicted");
+  const archived = domain.searchMemories({ workspace: ws, status: "archived" });
+  assert.ok(archived.some((m) => m.id === ids[0]), "evicted memory is archived, never hard-deleted");
+  await domain.close();
+});
+
+test("storeMemory at cap: archives expired memory first before evicting live candidates", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const ws = "/w";
+  const cfg = { ...CONFIG, maxMemoriesPerWorkspace: 2 };
+  const live = await domain.storeMemory(
+    { workspace: ws, kind: "preference", text: "permanent pref", tags: [], sessionId: "s1" },
+    cfg,
+  );
+  const expired = await domain.storeMemory(
+    { workspace: ws, kind: "fact", text: "expired fact", tags: [], sessionId: "s1", expiresAt: Date.now() - 10 },
+    cfg,
+  );
+
+  const next = await domain.storeMemory(
+    { workspace: ws, kind: "preference", text: "new pref", tags: [], sessionId: "s1" },
+    cfg,
+  );
+  const activeIds = domain.listMemories(ws, 50).map((m) => m.id);
+  assert.equal(activeIds.length, 2);
+  assert.ok(activeIds.includes(live.id), "live memory survives because the expired one freed the slot");
+  assert.ok(activeIds.includes(next.id));
+  assert.ok(!activeIds.includes(expired.id));
+  await domain.close();
+});
+
+test("storeMemory at cap: never evicts protected working-set memories; throws actionable ENGRAM_CAP_EXCEEDED when all protected", async () => {
+  const domain = await openEngramDomain(fakeFacility());
+  const ws = "/w";
+  const cfg = { ...CONFIG, maxMemoriesPerWorkspace: 2, promoteHits: 2 };
+  const p1 = await domain.storeMemory({ workspace: ws, kind: "fact", text: "protected one", tags: [], sessionId: "s1" }, cfg);
+  const p2 = await domain.storeMemory({ workspace: ws, kind: "fact", text: "protected two", tags: [], sessionId: "s1" }, cfg);
+  await domain.touchMemory(ws, p1.id);
+  await domain.touchMemory(ws, p1.id);
+  await domain.touchMemory(ws, p2.id);
+  await domain.touchMemory(ws, p2.id);
+
+  await assert.rejects(
+    domain.storeMemory({ workspace: ws, kind: "fact", text: "blocked third", tags: [], sessionId: "s1" }, cfg),
+    (e) => e.code === "ENGRAM_CAP_EXCEEDED" && /protected/i.test(e.message),
+  );
+  assert.equal(domain.listMemories(ws, 50).length, 2, "both protected memories remain active");
+
+  // cap === 0 also rejects cleanly without attempting negative eviction
+  await assert.rejects(
+    domain.storeMemory({ workspace: "/zero", kind: "fact", text: "nope", tags: [], sessionId: "s1" }, { ...cfg, maxMemoriesPerWorkspace: 0 }),
+    (e) => e.code === "ENGRAM_CAP_EXCEEDED",
+  );
+  await domain.close();
+});
+
 function route(routes, path) {
   return routes.find((r) => r.path === path);
 }
